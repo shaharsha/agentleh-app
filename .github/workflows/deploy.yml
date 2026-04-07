@@ -24,7 +24,6 @@ jobs:
       - run: uv sync --frozen --all-extras
 
       - run: uv run pytest tests/ -x
-        continue-on-error: true  # No tests yet — remove when tests are added
 
   frontend:
     runs-on: ubuntu-latest
