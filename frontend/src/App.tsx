@@ -57,7 +57,8 @@ export default function App() {
   }
 
   if (!session) {
-    return <LandingPage />
+    const isSignup = window.location.pathname === '/signup'
+    return <LandingPage initialMode={isSignup ? 'signup' : 'login'} />
   }
 
   const status = user?.onboarding_status || 'pending'
