@@ -1,4 +1,4 @@
 supabase_url: "https://hizznfloknpqtznywwsj.supabase.co"
 supabase_anon_key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpenpuZmxva25wcXR6bnl3d3NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDcwOTQsImV4cCI6MjA5MTEyMzA5NH0.WBH7xyzxwjG_YaUhTgoPkxxmRNmmok8QQdO2MrAdvec"
 # JWT secret loaded from INFISICAL / env var APP_SUPABASE_JWT_SECRET
-cors_allowed_origins: "https://app.agentleh.shahar.sh"
+cors_allowed_origins: "https://app.agentiko.io,https://agentleh-app.onrender.com"
