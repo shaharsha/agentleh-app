@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: agentleh-app-dev
+    runtime: docker
+    repo: https://github.com/shaharsha/agentleh-app
+    branch: main
+    region: frankfurt
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_SUPABASE_JWT_SECRET
+        sync: false
+      - key: ENV_FOR_DYNACONF
+        value: development

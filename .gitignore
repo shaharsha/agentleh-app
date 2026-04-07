@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+.env
+.env.*
+!.env.example
+config/local.*.yml
+node_modules/
+frontend/dist/
+.DS_Store
+uv.lock
