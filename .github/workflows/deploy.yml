@@ -86,7 +86,11 @@ jobs:
               MAJOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f1)
               MINOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f2)
               PATCH=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f3)
-              NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+              NEXT=$((PATCH + 1))
+              while git rev-parse "v${MAJOR}.${MINOR}.${NEXT}" >/dev/null 2>&1; do
+                NEXT=$((NEXT + 1))
+              done
+              NEW_TAG="v${MAJOR}.${MINOR}.${NEXT}"
               echo "Auto patch bump: $LATEST → $NEW_TAG"
             fi
             git tag "$NEW_TAG"
