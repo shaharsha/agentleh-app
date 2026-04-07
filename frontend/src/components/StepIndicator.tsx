@@ -15,7 +15,7 @@ export default function StepIndicator({ steps, current }: StepIndicatorProps) {
                   ? 'bg-brand text-white shadow-[0_4px_12px_rgba(212,98,43,0.2)]'
                   : i === current
                     ? 'bg-brand text-white shadow-[0_8px_24px_rgba(212,98,43,0.25)] scale-110'
-                    : 'glass text-text-muted'
+                    : 'glass-card text-text-muted'
               }`}
             >
               {i < current ? (

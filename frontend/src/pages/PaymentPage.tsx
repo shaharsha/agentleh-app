@@ -62,7 +62,7 @@ export default function PaymentPage({ onComplete }: PaymentPageProps) {
               onClick={() => setSelected(plan.id)}
               className={`w-full text-right rounded-[22px] p-6 transition-all duration-300 cursor-pointer relative ${
                 active
-                  ? 'glass-elevated border-brand/20 shadow-[0_16px_48px_rgba(212,98,43,0.08)]'
+                  ? 'glass-card-elevated border-brand/20 shadow-[0_16px_48px_rgba(212,98,43,0.08)]'
                   : 'glass hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]'
               }`}
             >

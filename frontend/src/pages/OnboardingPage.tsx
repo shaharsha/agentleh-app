@@ -48,7 +48,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
 
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* User section */}
-        <section className="glass-elevated rounded-[22px] p-6 space-y-4">
+        <section className="glass-card-elevated rounded-[22px] p-6 space-y-4">
           <div className="flex items-center gap-2.5 mb-2">
             <div className="w-9 h-9 rounded-[12px] bg-brand-50 flex items-center justify-center">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4622B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -79,7 +79,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
         </section>
 
         {/* Agent section */}
-        <section className="glass-elevated rounded-[22px] p-6 space-y-4">
+        <section className="glass-card-elevated rounded-[22px] p-6 space-y-4">
           <div className="flex items-center gap-2.5 mb-2">
             <div className="w-9 h-9 rounded-[12px] bg-brand-50 flex items-center justify-center">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4622B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -7,8 +7,8 @@ interface LayoutProps {
 
 export default function Layout({ children, onLogout }: LayoutProps) {
   return (
-    <div className="min-h-screen mesh-bg">
-      <header className="glass sticky top-0 z-50 px-6 py-3">
+    <div className="min-h-screen section-gradient">
+      <header className="glass-nav sticky top-0 z-50 px-6 py-3">
         <div className="max-w-[640px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-[10px] bg-brand flex items-center justify-center shadow-sm">

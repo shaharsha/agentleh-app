@@ -10,7 +10,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen mesh-bg flex flex-col items-center justify-center px-5 py-16">
+    <div className="min-h-screen section-gradient-hero flex flex-col items-center justify-center px-5 py-16">
       {/* Logo & headline */}
       <div className="text-center mb-12">
         <div className="inline-flex items-center justify-center w-[72px] h-[72px] rounded-[22px] bg-brand shadow-[0_12px_32px_rgba(212,98,43,0.15)] mb-6">
@@ -25,10 +25,10 @@ export default function LandingPage() {
       </div>
 
       {/* Auth card */}
-      <div className="glass-elevated rounded-[22px] p-8 w-full max-w-[400px]">
+      <div className="glass-card-elevated rounded-[22px] p-8 w-full max-w-[400px]">
         <button
           onClick={loginWithGoogle}
-          className="btn-secondary w-full rounded-[14px] px-5 py-3.5 flex items-center justify-center gap-3 text-[15px]"
+          className="btn-secondary w-full rounded-[14px] px-5 py-3.5 flex items-center justify-center gap-3 text-[15px] no-underline"
         >
           <svg width="20" height="20" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>

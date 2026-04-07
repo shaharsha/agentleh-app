@@ -38,7 +38,7 @@ export default function DashboardPage() {
 
       <div className="space-y-4">
         {data.agents.map((agent) => (
-          <div key={agent.agent_id} className="glass-elevated rounded-[22px] p-6 relative overflow-hidden">
+          <div key={agent.agent_id} className="glass-card-elevated rounded-[22px] p-6 relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-[3px] bg-brand rounded-t-[22px]" />
 
             <div className="flex items-start justify-between mb-5">
@@ -64,7 +64,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="glass rounded-[14px] p-4">
+            <div className="glass-card rounded-[14px] p-4">
               <div className="flex items-center justify-between text-[13px]">
                 <span className="font-mono text-text-muted" dir="ltr">{agent.agent_id}</span>
                 <span className="text-text-secondary">מזהה סוכן</span>
@@ -74,13 +74,13 @@ export default function DashboardPage() {
         ))}
 
         {data.agents.length === 0 && (
-          <div className="glass rounded-[22px] p-12 text-center">
+          <div className="glass-card rounded-[22px] p-12 text-center">
             <p className="text-text-muted text-[15px]">אין סוכנים עדיין</p>
           </div>
         )}
 
         {data.subscription && (
-          <div className="glass rounded-[22px] p-5">
+          <div className="glass-card rounded-[22px] p-5">
             <div className="flex items-center justify-between">
               <span className="text-[12px] font-semibold bg-success-light text-success px-3 py-1 rounded-full">
                 {data.subscription.status === 'mock_active' ? 'פעיל' : data.subscription.status}
