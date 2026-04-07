@@ -81,12 +81,12 @@ function EmailLoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-3.5">
       <input
-        name="email" type="email" placeholder="אימייל" required dir="ltr"
-        className="input-glass w-full px-4 py-3 text-[15px] placeholder:text-text-muted"
+        name="email" type="email" placeholder="אימייל" required
+        className="input-glass w-full px-4 py-3 text-[15px] placeholder:text-text-muted placeholder:text-right text-left"
       />
       <input
-        name="password" type="password" placeholder="סיסמה" required minLength={6} dir="ltr"
-        className="input-glass w-full px-4 py-3 text-[15px] placeholder:text-text-muted"
+        name="password" type="password" placeholder="סיסמה" required minLength={6}
+        className="input-glass w-full px-4 py-3 text-[15px] placeholder:text-text-muted placeholder:text-right text-left"
       />
 
       {error && (
