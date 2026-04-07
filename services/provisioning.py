@@ -35,7 +35,7 @@ class MockProvisioner:
         logger.info("MOCK: Provisioning agent %s for %s (phone: %s, name: %s)", agent_id, user_name, phone, agent_name)
 
         token = secrets.token_urlsafe(32)
-        gateway_url = f"wss://gw.agentleh.shahar.sh/{agent_id}/"
+        gateway_url = f"wss://gw.agentiko.io/{agent_id}/"
 
         # Insert into agents + phone_routes tables (same as create-agent.sh does)
         if self.db:
