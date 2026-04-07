@@ -42,7 +42,10 @@ async def lifespan(app: FastAPI):
         from services.provisioning import MockProvisioner
         from services.whatsapp import MockWhatsApp
 
-        app.state.provisioner = MockProvisioner(db=db)
+        app.state.provisioner = MockProvisioner(
+            db=db,
+            gateway_base_url=str(getattr(settings, "gateway_base_url", "")),
+        )
         app.state.payment = MockPayment()
         app.state.whatsapp = MockWhatsApp()
         logger.info("Using MOCK services")

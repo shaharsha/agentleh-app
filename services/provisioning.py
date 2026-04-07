@@ -28,14 +28,15 @@ class AgentProvisioner(Protocol):
 class MockProvisioner:
     """Logs provisioning requests, inserts into DB, returns fake data."""
 
-    def __init__(self, db=None):
+    def __init__(self, db=None, gateway_base_url: str = ""):
         self.db = db
+        self.gateway_base_url = gateway_base_url
 
     def provision(self, agent_id: str, phone: str, agent_name: str, user_name: str) -> ProvisionResult:
         logger.info("MOCK: Provisioning agent %s for %s (phone: %s, name: %s)", agent_id, user_name, phone, agent_name)
 
         token = secrets.token_urlsafe(32)
-        gateway_url = f"wss://gw.agentiko.io/{agent_id}/"
+        gateway_url = f"{self.gateway_base_url}/{agent_id}/"
 
         # Insert into agents + phone_routes tables (same as create-agent.sh does)
         if self.db:
