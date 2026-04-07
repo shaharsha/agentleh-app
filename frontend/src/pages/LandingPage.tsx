@@ -57,9 +57,9 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
 
       <p className="text-center text-[13px] text-text-muted mt-8 max-w-[340px] leading-relaxed">
         בהרשמה את/ה מסכימ/ה ל
-        <a href="https://agentiko.io/terms" className="text-brand hover:underline">תנאי השימוש</a>
+        <a href={`${import.meta.env.VITE_LANDING_URL || 'https://agentiko.io'}/terms`} className="text-brand hover:underline">תנאי השימוש</a>
         {' '}ול
-        <a href="https://agentiko.io/privacy" className="text-brand hover:underline">מדיניות הפרטיות</a>
+        <a href={`${import.meta.env.VITE_LANDING_URL || 'https://agentiko.io'}/privacy`} className="text-brand hover:underline">מדיניות הפרטיות</a>
       </p>
     </div>
   )
