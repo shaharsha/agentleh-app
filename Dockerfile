@@ -22,7 +22,10 @@ RUN uv pip install --system fastapi uvicorn 'psycopg[binary]' 'python-jose[crypt
 COPY frontend/package.json frontend/package-lock.json* ./frontend/
 RUN cd frontend && npm ci --production=false 2>/dev/null || cd frontend && npm install
 
-# Build frontend
+# Build frontend (VITE_ vars must be available at build time)
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_LANDING_URL
 COPY frontend/ ./frontend/
 RUN cd frontend && npm run build
 
