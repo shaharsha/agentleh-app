@@ -4,11 +4,96 @@
   --color-brand: #D4622B;
   --color-brand-light: #E8854F;
   --color-brand-dark: #B34E1F;
+  --color-brand-50: #FEF3EC;
+  --color-brand-100: #FCE0CC;
+  --color-surface: #FFFFFF;
+  --color-surface-secondary: #F5F5F7;
+  --color-border: #E5E7EB;
+  --color-border-light: #F0F0F0;
+  --color-text-primary: #1D1D1F;
+  --color-text-secondary: #6E6E73;
+  --color-text-muted: #AEAEB2;
+  --color-success: #30D158;
+  --color-success-light: #D1FAE5;
   --font-family-sans: "Rubik", system-ui, sans-serif;
 }
 
 body {
   font-family: var(--font-family-sans);
-  background-color: #fafafa;
   margin: 0;
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+input, button, select, textarea {
+  font-family: inherit;
+}
+
+::selection {
+  background-color: var(--color-brand-100);
+  color: var(--color-brand-dark);
+}
+
+/* Liquid Glass base */
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.04),
+    0 2px 8px rgba(0, 0, 0, 0.04),
+    0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.glass-elevated {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.05),
+    0 4px 12px rgba(0, 0, 0, 0.06),
+    0 12px 40px rgba(0, 0, 0, 0.08);
+}
+
+.glass-subtle {
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Gradient mesh background */
+.mesh-bg {
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(212, 98, 43, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(232, 133, 79, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(179, 78, 31, 0.04) 0%, transparent 50%),
+    #F5F5F7;
+}
+
+/* Input styling */
+.input-glass {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  transition: all 0.2s ease;
+}
+
+.input-glass:focus {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(212, 98, 43, 0.12);
+  outline: none;
+}
+
+/* Button press effect */
+.btn-press {
+  transition: all 0.15s ease;
+}
+.btn-press:active {
+  transform: scale(0.97);
 }
