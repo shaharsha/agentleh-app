@@ -75,22 +75,29 @@ jobs:
       - name: Determine version
         id: tag
         run: |
-          COMMIT_MSG=$(git log -1 --format=%B)
-          EXPLICIT=$(echo "$COMMIT_MSG" | grep -oP '(?i)release:\s*v?\K[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-          if [ -n "$EXPLICIT" ]; then
-            NEW_TAG="v${EXPLICIT}"
-            echo "Explicit version from commit: $NEW_TAG"
+          LATEST=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "v0.0.0")
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            COMMIT_MSG=$(git log -1 --format=%B)
+            EXPLICIT=$(echo "$COMMIT_MSG" | grep -oP '(?i)release:\s*v?\K[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            if [ -n "$EXPLICIT" ]; then
+              NEW_TAG="v${EXPLICIT}"
+              echo "Explicit version from commit: $NEW_TAG"
+            else
+              MAJOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f1)
+              MINOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f2)
+              PATCH=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f3)
+              NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+              echo "Auto patch bump: $LATEST → $NEW_TAG"
+            fi
+            git tag "$NEW_TAG"
+            git push origin "$NEW_TAG"
+            echo "new_version=${NEW_TAG#v}" >> "$GITHUB_OUTPUT"
           else
-            LATEST=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "v0.0.0")
-            MAJOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f1)
-            MINOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f2)
-            PATCH=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f3)
-            NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
-            echo "Auto patch bump: $LATEST → $NEW_TAG"
+            # develop: use latest tag + dev suffix, no new tag
+            VERSION="${LATEST#v}-dev.$(git rev-parse --short HEAD)"
+            echo "Dev version: $VERSION"
+            echo "new_version=$VERSION" >> "$GITHUB_OUTPUT"
           fi
-          git tag "$NEW_TAG"
-          git push origin "$NEW_TAG"
-          echo "new_version=${NEW_TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Set APP_VERSION on Render
         run: |
