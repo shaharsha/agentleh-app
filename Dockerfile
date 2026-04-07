@@ -15,8 +15,8 @@ ENV UV_PROJECT_ENVIRONMENT=/usr/local
 WORKDIR /app
 
 # Python deps
-COPY pyproject.toml ./
-RUN uv sync --no-dev --no-editable --frozen --no-install-project 2>/dev/null || uv pip install --system fastapi uvicorn 'psycopg[binary]' 'python-jose[cryptography]' python-multipart dynaconf httpx
+COPY pyproject.toml uv.lock* ./
+RUN uv pip install --system fastapi uvicorn 'psycopg[binary]' 'python-jose[cryptography]' python-multipart dynaconf httpx
 
 # Frontend deps
 COPY frontend/package.json frontend/package-lock.json* ./frontend/

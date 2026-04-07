@@ -10,4 +10,4 @@ config/local.*.yml
 node_modules/
 frontend/dist/
 .DS_Store
-uv.lock
+*.tsbuildinfo
