@@ -149,12 +149,20 @@ input, button, select, textarea {
     inset 0 1px 0 rgba(255,255,255,0.15);
 }
 .btn-brand:active { transform: translateY(-1px); }
-.btn-brand:disabled { opacity: 0.5; transform: none; box-shadow: 0 2px 8px rgba(212,98,43,0.15); }
+.btn-brand:disabled { opacity: 0.5; transform: none; box-shadow: 0 2px 8px rgba(212,98,43,0.15); cursor: default; }
+.btn-brand:disabled:hover { transform: none; }
+.btn-brand:disabled::after { display: none; }
+
+/* Size variants */
+.btn-sm { padding: 8px 20px; font-size: 13px; }
+.btn-md { padding: 12px 28px; font-size: 15px; }
+/* default (no class) = 16px 40px / 17px */
 
 .btn-secondary {
-  display: inline-flex; align-items: center; justify-content: center;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   background: var(--color-surface); color: var(--color-text-primary);
   border: 1px solid var(--color-border); border-radius: 100px;
+  padding: 12px 28px; font-size: 15px;
   font-weight: 500; font-family: inherit; cursor: pointer;
   transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
