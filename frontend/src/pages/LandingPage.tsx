@@ -13,11 +13,6 @@ export default function LandingPage() {
     <div className="min-h-screen section-gradient-hero flex flex-col items-center justify-center px-5 py-16">
       {/* Logo */}
       <div className="text-center mb-12">
-        <div className="inline-flex items-center justify-center w-[72px] h-[72px] rounded-[22px] bg-brand shadow-[0_12px_32px_rgba(212,98,43,0.15)] mb-6">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-        </div>
         <h1 className="text-[36px] font-extrabold tracking-[-1px] text-text-primary mb-3">Agentiko</h1>
         <p className="text-[17px] text-text-secondary leading-relaxed">
           העוזר החכם שלך בוואטסאפ
