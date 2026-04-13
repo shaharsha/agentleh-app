@@ -49,6 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
     concurrency:
       group: deploy-${{ github.ref_name }}
     env:
@@ -62,13 +63,19 @@ jobs:
         id: env
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "service_id=${{ secrets.RENDER_SERVICE_ID_PROD }}" >> "$GITHUB_OUTPUT"
-            echo "health_url=${{ secrets.HEALTH_URL_PROD }}" >> "$GITHUB_OUTPUT"
+            echo "service=agentleh-app" >> "$GITHUB_OUTPUT"
+            echo "health_url=https://app.agentiko.io/health" >> "$GITHUB_OUTPUT"
             echo "env_name=production" >> "$GITHUB_OUTPUT"
+            echo "vite_supabase_url=https://hizznfloknpqtznywwsj.supabase.co" >> "$GITHUB_OUTPUT"
+            echo "vite_supabase_anon_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpenpuZmxva25wcXR6bnl3d3NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDcwOTQsImV4cCI6MjA5MTEyMzA5NH0.WBH7xyzxwjG_YaUhTgoPkxxmRNmmok8QQdO2MrAdvec" >> "$GITHUB_OUTPUT"
+            echo "vite_landing_url=https://agentiko.io" >> "$GITHUB_OUTPUT"
           else
-            echo "service_id=${{ secrets.RENDER_SERVICE_ID_DEV }}" >> "$GITHUB_OUTPUT"
-            echo "health_url=${{ secrets.HEALTH_URL_DEV }}" >> "$GITHUB_OUTPUT"
+            echo "service=agentleh-app-dev" >> "$GITHUB_OUTPUT"
+            echo "health_url=https://app-dev.agentiko.io/health" >> "$GITHUB_OUTPUT"
             echo "env_name=development" >> "$GITHUB_OUTPUT"
+            echo "vite_supabase_url=https://mnetqtjwcdunznvvfaob.supabase.co" >> "$GITHUB_OUTPUT"
+            echo "vite_supabase_anon_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1uZXRxdGp3Y2R1bnpudnZmYW9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDc0NTMsImV4cCI6MjA5MTEyMzQ1M30.QdtX_YczXzokSS6vfqDcMFGQcZFPCmgT4Arspvb8I8c" >> "$GITHUB_OUTPUT"
+            echo "vite_landing_url=https://dev.agentiko.io" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Determine version
@@ -80,7 +87,6 @@ jobs:
             EXPLICIT=$(echo "$COMMIT_MSG" | grep -oP '(?i)release:\s*v?\K[0-9]+\.[0-9]+\.[0-9]+' | head -1)
             if [ -n "$EXPLICIT" ]; then
               NEW_TAG="v${EXPLICIT}"
-              echo "Explicit version from commit: $NEW_TAG"
             else
               MAJOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f1)
               MINOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f2)
@@ -90,84 +96,47 @@ jobs:
                 NEXT=$((NEXT + 1))
               done
               NEW_TAG="v${MAJOR}.${MINOR}.${NEXT}"
-              echo "Auto patch bump: $LATEST → $NEW_TAG"
             fi
             git tag "$NEW_TAG"
             git push origin "$NEW_TAG"
-            echo "new_version=${NEW_TAG#v}" >> "$GITHUB_OUTPUT"
+            echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
           else
-            # develop: use latest tag + dev suffix, no new tag
-            VERSION="${LATEST#v}-dev.$(git rev-parse --short HEAD)"
-            echo "Dev version: $VERSION"
-            echo "new_version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=${LATEST}-dev.$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Set APP_VERSION on Render
-        run: |
-          SERVICE_ID="${{ steps.env.outputs.service_id }}"
-          if [ "$SERVICE_ID" = "PLACEHOLDER" ] || [ -z "$SERVICE_ID" ]; then
-            echo "No Render service configured for ${{ steps.env.outputs.env_name }}, skipping"
-            exit 0
-          fi
-          CURRENT=$(curl -s "https://api.render.com/v1/services/$SERVICE_ID/env-vars" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}")
-          UPDATED=$(echo "$CURRENT" | jq --arg ver "${{ steps.tag.outputs.new_version }}" \
-            '[.[] | .envVar | select(.key != "APP_VERSION")] + [{"key":"APP_VERSION","value":$ver}]')
-          curl -s -X PUT "https://api.render.com/v1/services/$SERVICE_ID/env-vars" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d "$UPDATED" > /dev/null
+      - name: Auth to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
 
-      - name: Trigger Render deploy
-        id: trigger
-        run: |
-          SERVICE_ID="${{ steps.env.outputs.service_id }}"
-          if [ "$SERVICE_ID" = "PLACEHOLDER" ] || [ -z "$SERVICE_ID" ]; then
-            echo "No Render service configured for ${{ steps.env.outputs.env_name }}, skipping deploy"
-            echo "deploy_id=skip" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          DEPLOY=$(curl -s -X POST "https://api.render.com/v1/services/$SERVICE_ID/deploys" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{"clearCache":"do_not_clear"}')
-          DEPLOY_ID=$(echo "$DEPLOY" | jq -r '.deploy.id // .id // empty')
-          if [ -z "$DEPLOY_ID" ]; then
-            echo "POST returned no deploy ID, fetching latest deploy..."
-            sleep 2
-            DEPLOY_ID=$(curl -s "https://api.render.com/v1/services/${{ steps.env.outputs.service_id }}/deploys?limit=1" \
-              -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" | jq -r '.[0].deploy.id // .[0].id')
-          fi
-          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
-          echo "Deploying ${{ steps.tag.outputs.new_version }} to ${{ steps.env.outputs.env_name }} (deploy: $DEPLOY_ID)"
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
 
-      - name: Wait for deploy
-        if: steps.trigger.outputs.deploy_id != 'skip'
+      - name: Build image via Cloud Build
         run: |
-          for i in $(seq 1 60); do
-            STATUS=$(curl -s "https://api.render.com/v1/services/${{ steps.env.outputs.service_id }}/deploys/${{ steps.trigger.outputs.deploy_id }}" \
-              -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" | jq -r '.deploy.status // .status // empty')
-            echo "Attempt $i/60: $STATUS"
-            case "$STATUS" in
-              live) echo "Deploy successful!"; exit 0 ;;
-              deactivated|build_failed|update_failed|canceled|pre_deploy_failed) echo "Deploy failed: $STATUS"; exit 1 ;;
-            esac
-            sleep 15
-          done
-          echo "Timed out waiting for deploy"; exit 1
+          gcloud builds submit \
+            --config=cloudbuild.yaml \
+            --region=europe-west3 \
+            --substitutions=_TAG="${{ steps.tag.outputs.tag }}",_SERVICE="${{ steps.env.outputs.service }}",_VITE_SUPABASE_URL="${{ steps.env.outputs.vite_supabase_url }}",_VITE_SUPABASE_ANON_KEY="${{ steps.env.outputs.vite_supabase_anon_key }}",_VITE_LANDING_URL="${{ steps.env.outputs.vite_landing_url }}" \
+            .
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ steps.env.outputs.service }} \
+            --image=europe-west3-docker.pkg.dev/agentleh/images/${{ steps.env.outputs.service }}:${{ steps.tag.outputs.tag }} \
+            --region=europe-west3 \
+            --quiet
 
       - name: Verify health
-        if: success() && steps.trigger.outputs.deploy_id != 'skip'
         run: |
-          HEALTH_URL="${{ steps.env.outputs.health_url }}"
-          if [ -n "$HEALTH_URL" ]; then
-            HEALTH=$(curl -s "$HEALTH_URL")
-            echo "$HEALTH" | jq .
-            OK=$(echo "$HEALTH" | jq -r '.ok')
-            if [ "$OK" != "true" ]; then
-              echo "Health check failed"; exit 1
+          for i in $(seq 1 20); do
+            HEALTH=$(curl -sS "${{ steps.env.outputs.health_url }}" 2>&1 || echo "{}")
+            OK=$(echo "$HEALTH" | jq -r '.ok // "false"')
+            if [ "$OK" = "true" ]; then
+              echo "App healthy on ${{ steps.env.outputs.env_name }}"
+              exit 0
             fi
-            echo "App healthy on ${{ steps.env.outputs.env_name }}"
-          else
-            echo "No health URL configured, skipping"
-          fi
+            sleep 5
+          done
+          echo "Health check failed"; exit 1

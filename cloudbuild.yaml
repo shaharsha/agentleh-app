@@ -1,0 +1,21 @@
+substitutions:
+  _TAG: v1
+  _SERVICE: agentleh-app
+  _VITE_SUPABASE_URL: https://hizznfloknpqtznywwsj.supabase.co
+  _VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpenpuZmxva25wcXR6bnl3d3NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDcwOTQsImV4cCI6MjA5MTEyMzA5NH0.WBH7xyzxwjG_YaUhTgoPkxxmRNmmok8QQdO2MrAdvec
+  _VITE_LANDING_URL: https://agentiko.io
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - --build-arg
+      - VITE_SUPABASE_URL=${_VITE_SUPABASE_URL}
+      - --build-arg
+      - VITE_SUPABASE_ANON_KEY=${_VITE_SUPABASE_ANON_KEY}
+      - --build-arg
+      - VITE_LANDING_URL=${_VITE_LANDING_URL}
+      - -t
+      - europe-west3-docker.pkg.dev/agentleh/images/${_SERVICE}:${_TAG}
+      - .
+images:
+  - europe-west3-docker.pkg.dev/agentleh/images/${_SERVICE}:${_TAG}
