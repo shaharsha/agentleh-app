@@ -163,3 +163,110 @@ async def admin_upsert_subscription(
     payload = dict(body)
     payload["agent_id"] = agent_id
     return await _meter_post("/admin/subscriptions", payload)
+
+
+# ─── VM stats (for scaling decisions) ────────────────────────────────
+
+
+def _vm_stats_url() -> str:
+    """URL of the vm-stats HTTP daemon on openclaw-prod (VPC-internal)."""
+    return os.environ.get("APP_VM_STATS_URL", "http://10.10.0.2:9100/stats")
+
+
+def _vm_stats_token() -> str:
+    return os.environ.get("APP_VM_STATS_TOKEN", "")
+
+
+@router.get("/vm-stats")
+async def admin_vm_stats(
+    request: Request,
+    _: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    """Live VM snapshot + last 24h of history for the admin Stats tab.
+
+    Returns {live: {...}, history: [{ts, cpu_percent, ...}, ...]}.
+    The live payload comes from the vm-stats.py HTTP daemon on the VM
+    (reachable via VPC direct egress); history comes from Cloud SQL
+    vm_metrics_samples populated by the systemd timer every 60s.
+    """
+    live: dict[str, Any] | None = None
+    live_error: str | None = None
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            headers: dict[str, str] = {}
+            token = _vm_stats_token()
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            resp = await client.get(_vm_stats_url(), headers=headers)
+        if resp.status_code == 200:
+            live = resp.json()
+        else:
+            live_error = f"vm_stats_{resp.status_code}: {resp.text[:120]}"
+    except Exception as exc:  # noqa: BLE001
+        live_error = f"vm_stats_unreachable: {exc}"
+        logger.warning("vm-stats fetch failed: %s", exc)
+
+    db = request.app.state.db
+    history = db._fetch_all(
+        """
+        SELECT
+            ts,
+            cpu_percent, memory_percent,
+            disk_root_pct, disk_data_pct,
+            containers_run, load_avg_1m
+        FROM vm_metrics_samples
+        WHERE ts > now() - interval '24 hours'
+        ORDER BY ts ASC
+        """,
+    )
+
+    # DB-sourced "nerd stats" that are free since they live next to our data:
+    # usage events per hour for the last 24h
+    events_per_hour = db._fetch_all(
+        """
+        SELECT
+            date_trunc('hour', ts) AS hour,
+            COUNT(*)                  AS events,
+            SUM(cost_micros)          AS cost_micros,
+            AVG(latency_ms)::int      AS avg_latency_ms
+        FROM usage_events
+        WHERE ts > now() - interval '24 hours'
+        GROUP BY hour
+        ORDER BY hour ASC
+        """,
+    )
+    top_agents = db._fetch_all(
+        """
+        SELECT
+            agent_id,
+            SUM(cost_micros)               AS cost_micros,
+            COUNT(*)                       AS events,
+            SUM(input_tokens + output_tokens) AS total_tokens
+        FROM usage_events
+        WHERE ts > now() - interval '30 days'
+        GROUP BY agent_id
+        ORDER BY cost_micros DESC
+        LIMIT 5
+        """,
+    )
+    meter_latency = db._fetch_one(
+        """
+        SELECT
+            COUNT(*) AS n,
+            percentile_disc(0.5)  WITHIN GROUP (ORDER BY latency_ms) AS p50,
+            percentile_disc(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95,
+            percentile_disc(0.99) WITHIN GROUP (ORDER BY latency_ms) AS p99
+        FROM usage_events
+        WHERE ts > now() - interval '1 hour'
+          AND upstream_status = 200
+        """,
+    )
+
+    return {
+        "live": live,
+        "live_error": live_error,
+        "history": history,
+        "events_per_hour": events_per_hour,
+        "top_agents": top_agents,
+        "meter_latency_1h": meter_latency,
+    }

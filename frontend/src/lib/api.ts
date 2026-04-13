@@ -91,6 +91,12 @@ export async function getAdminOverview() {
   return res.json()
 }
 
+export async function getAdminVmStats() {
+  const res = await authFetch('/api/admin/vm-stats')
+  if (!res.ok) throw new Error('VM stats failed')
+  return res.json()
+}
+
 export async function getAdminAgentDetail(agentId: string) {
   const res = await authFetch(`/api/admin/agents/${encodeURIComponent(agentId)}`)
   if (!res.ok) throw new Error('Agent detail failed')
