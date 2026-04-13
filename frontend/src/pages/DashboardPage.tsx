@@ -106,13 +106,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="glass-card rounded-[14px] p-4">
-              <div className="flex items-center justify-between text-[13px]">
-                <span className="font-mono text-text-muted" dir="ltr">{agent.agent_id}</span>
-                <span className="text-text-secondary">מזהה סוכן</span>
-              </div>
-            </div>
-
             {/* Plan + usage section */}
             {agent.spend?.subscription ? (
               <div className="mt-4 space-y-3">
