@@ -58,8 +58,14 @@ class AppDatabase:
                         phone TEXT NOT NULL DEFAULT '',
                         gender TEXT NOT NULL DEFAULT '',
                         onboarding_status TEXT NOT NULL DEFAULT 'pending',
+                        role TEXT NOT NULL DEFAULT 'user',
                         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                     )
+                """)
+                # Backfill role column on existing installations
+                cur.execute("""
+                    ALTER TABLE app_users
+                    ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'
                 """)
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS app_subscriptions (
@@ -182,3 +188,119 @@ class AppDatabase:
                ORDER BY ua.created_at DESC""",
             (user_id,),
         )
+
+    # ── Admin (superadmin panel) ──────────────────────────────────────
+    # Read-through helpers that join across app_users, app_user_agents,
+    # agents, agent_subscriptions, and billing_plans. The meter owns writes
+    # to agent_subscriptions + usage_events — these methods are READ ONLY.
+
+    def list_all_users_with_agent_counts(self) -> list[dict[str, Any]]:
+        return self._fetch_all(
+            """
+            SELECT
+                u.id, u.email, u.full_name, u.phone, u.role,
+                u.onboarding_status, u.created_at,
+                COUNT(DISTINCT ua.agent_id) AS agent_count
+            FROM app_users u
+            LEFT JOIN app_user_agents ua ON ua.user_id = u.id
+            GROUP BY u.id
+            ORDER BY u.created_at DESC
+            """
+        )
+
+    def list_all_agents_with_owner_and_plan(self) -> list[dict[str, Any]]:
+        return self._fetch_all(
+            """
+            SELECT
+                a.agent_id,
+                a.gateway_url,
+                a.session_scope,
+                ua.agent_name,
+                ua.agent_gender,
+                ua.status AS link_status,
+                u.id        AS user_id,
+                u.email     AS user_email,
+                u.full_name AS user_full_name,
+                u.role      AS user_role,
+                s.id                     AS subscription_id,
+                s.plan_id,
+                s.status                 AS subscription_status,
+                s.period_start,
+                s.period_end,
+                s.base_allowance_micros,
+                s.used_micros,
+                s.overage_enabled,
+                s.overage_cap_micros,
+                s.overage_used_micros,
+                s.wallet_balance_micros,
+                p.name_he                AS plan_name_he,
+                p.billing_mode,
+                p.price_ils_cents
+            FROM agents a
+            LEFT JOIN app_user_agents ua ON ua.agent_id = a.agent_id
+            LEFT JOIN app_users       u  ON u.id = ua.user_id
+            LEFT JOIN LATERAL (
+                SELECT *
+                FROM agent_subscriptions s
+                WHERE s.agent_id = a.agent_id
+                  AND s.status = 'active'
+                  AND now() BETWEEN s.period_start AND s.period_end
+                ORDER BY s.period_start DESC
+                LIMIT 1
+            ) s ON TRUE
+            LEFT JOIN billing_plans p ON p.plan_id = s.plan_id
+            ORDER BY u.created_at DESC NULLS LAST, a.agent_id
+            """
+        )
+
+    def get_agent_details(self, agent_id: str) -> dict[str, Any] | None:
+        return self._fetch_one(
+            """
+            SELECT
+                a.agent_id, a.gateway_url, a.session_scope,
+                ua.agent_name, ua.agent_gender, ua.status AS link_status,
+                u.id AS user_id, u.email AS user_email,
+                u.full_name AS user_full_name, u.role AS user_role
+            FROM agents a
+            LEFT JOIN app_user_agents ua ON ua.agent_id = a.agent_id
+            LEFT JOIN app_users       u  ON u.id = ua.user_id
+            WHERE a.agent_id = %s
+            """,
+            (agent_id,),
+        )
+
+    def list_recent_usage_events(
+        self, agent_id: str, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        return self._fetch_all(
+            """
+            SELECT
+                event_id, ts, kind, upstream, model,
+                input_tokens, output_tokens, cached_tokens, search_queries,
+                cost_micros, notional_cost_micros, is_overage,
+                upstream_status, latency_ms
+            FROM usage_events
+            WHERE agent_id = %s
+            ORDER BY ts DESC
+            LIMIT %s
+            """,
+            (agent_id, limit),
+        )
+
+    def list_billing_plans(self) -> list[dict[str, Any]]:
+        return self._fetch_all(
+            """
+            SELECT
+                plan_id, name_he, price_ils_cents, billing_mode,
+                base_allowance_micros, allows_overage, default_overage_cap_micros,
+                default_overage_markup_bps, rate_limit_rpm, active
+            FROM billing_plans
+            WHERE active
+            ORDER BY price_ils_cents
+            """
+        )
+
+    def set_user_role(self, user_id: int, role: str) -> dict[str, Any] | None:
+        """Superadmin-only: promote/demote a user."""
+        self._execute("UPDATE app_users SET role = %s WHERE id = %s", (role, user_id))
+        return self.get_user_by_id(user_id)

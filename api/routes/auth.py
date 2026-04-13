@@ -18,6 +18,7 @@ async def me(user: dict = Depends(get_current_user)):
         "phone": user["phone"],
         "gender": user["gender"],
         "onboarding_status": user["onboarding_status"],
+        "role": user.get("role", "user"),
     }
 
 

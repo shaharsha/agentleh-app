@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from api.routes.admin import router as admin_router
 from api.routes.auth import router as auth_router
 from api.routes.dashboard import router as dashboard_router
 from api.routes.onboarding import router as onboarding_router
@@ -72,6 +73,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(payment_router, prefix="/api")
 app.include_router(onboarding_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
 
 
 @app.get("/health")

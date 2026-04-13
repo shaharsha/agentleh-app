@@ -3,10 +3,52 @@ import { getDashboard } from '../lib/api'
 import StepIndicator from '../components/StepIndicator'
 import type { Agent, AppUser, Subscription } from '../lib/types'
 
+interface AgentSpend {
+  agent_id: string
+  subscription?: {
+    plan_id: string
+    plan_name?: string
+    billing_mode?: string
+    status: string
+    period_start: string
+    period_end: string
+    base_allowance_micros: number
+    used_micros: number
+    overage_enabled: boolean
+    overage_cap_micros: number | null
+    overage_used_micros: number
+    wallet_balance_micros: number
+  }
+  totals?: {
+    llm_micros: number
+    search_micros: number
+    llm_input_tokens: number
+    llm_output_tokens: number
+    search_queries: number
+    event_count: number
+  }
+}
+
+interface AgentWithSpend extends Agent {
+  spend: AgentSpend | null
+}
+
 interface DashboardData {
   user: AppUser
-  agents: Agent[]
+  agents: AgentWithSpend[]
   subscription: Subscription | null
+}
+
+const MICROS_PER_DOLLAR = 1_000_000
+
+function fmtUsd(micros: number | null | undefined): string {
+  if (micros == null) return '—'
+  return `$${(micros / MICROS_PER_DOLLAR).toFixed(3)}`
+}
+
+function usagePct(used: number, total: number): number {
+  if (total <= 0) return 0
+  return Math.min(100, Math.round((used / total) * 100))
 }
 
 export default function DashboardPage() {
@@ -70,6 +112,70 @@ export default function DashboardPage() {
                 <span className="text-text-secondary">מזהה סוכן</span>
               </div>
             </div>
+
+            {/* Plan + usage section */}
+            {agent.spend?.subscription ? (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between text-[13px]">
+                  <span className="text-text-muted">
+                    {agent.spend.subscription.plan_name || agent.spend.subscription.plan_id}
+                  </span>
+                  <span className="text-text-secondary">תוכנית</span>
+                </div>
+                {agent.spend.subscription.billing_mode !== 'wallet' && (
+                  <UsageBar
+                    used={agent.spend.subscription.used_micros}
+                    total={
+                      agent.spend.subscription.base_allowance_micros +
+                      (agent.spend.subscription.overage_enabled
+                        ? agent.spend.subscription.overage_cap_micros || 0
+                        : 0)
+                    }
+                  />
+                )}
+                {agent.spend.subscription.billing_mode === 'wallet' && (
+                  <div className="flex items-center justify-between text-[13px]">
+                    <span className="font-mono text-text-primary" dir="ltr">
+                      {fmtUsd(agent.spend.subscription.wallet_balance_micros)}
+                    </span>
+                    <span className="text-text-secondary">יתרת ארנק</span>
+                  </div>
+                )}
+                {agent.spend.totals && (
+                  <div className="grid grid-cols-2 gap-2 text-[12px] text-text-muted">
+                    <div className="flex items-center justify-between">
+                      <span dir="ltr">{fmtUsd(agent.spend.totals.llm_micros)}</span>
+                      <span>LLM</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span dir="ltr">{fmtUsd(agent.spend.totals.search_micros)}</span>
+                      <span>חיפוש</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span dir="ltr">
+                        {agent.spend.totals.llm_input_tokens.toLocaleString()}
+                      </span>
+                      <span>טוקנים (in)</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span dir="ltr">
+                        {agent.spend.totals.llm_output_tokens.toLocaleString()}
+                      </span>
+                      <span>טוקנים (out)</span>
+                    </div>
+                  </div>
+                )}
+                {agent.spend.subscription.status === 'exhausted' && (
+                  <div className="rounded-[14px] bg-red-50 text-red-700 px-3 py-2 text-[13px] text-center">
+                    נגמרה הקצבה החודשית. לשדרוג — צור קשר.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-[14px] bg-yellow-50 text-yellow-700 px-3 py-2 text-[12px] text-center">
+                מנוי לא מוגדר — צור קשר לקבלת תוכנית.
+              </div>
+            )}
           </div>
         ))}
 
@@ -79,26 +185,28 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {data.subscription && (
-          <div className="glass-card rounded-[22px] p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-semibold bg-success-light text-success px-3 py-1 rounded-full">
-                {data.subscription.status === 'mock_active' ? 'פעיל' : data.subscription.status}
-              </span>
-              <div className="flex items-center gap-3">
-                <div className="text-left">
-                  <p className="text-[15px] font-semibold">{data.subscription.plan}</p>
-                  <p className="text-[12px] text-text-muted">מנוי</p>
-                </div>
-                <div className="w-9 h-9 rounded-[12px] bg-success-light flex items-center justify-center">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#30D158" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+      </div>
+    </div>
+  )
+}
+
+function UsageBar({ used, total }: { used: number; total: number }) {
+  const pct = usagePct(used, total)
+  const color =
+    pct >= 95 ? 'bg-red-500' : pct >= 75 ? 'bg-yellow-500' : 'bg-success'
+  return (
+    <div>
+      <div className="flex items-center justify-between text-[12px] text-text-muted mb-1">
+        <span dir="ltr">
+          {fmtUsd(used)} / {fmtUsd(total)}
+        </span>
+        <span>שימוש ({pct}%)</span>
+      </div>
+      <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+        <div
+          className={`h-full ${color} transition-all`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   )

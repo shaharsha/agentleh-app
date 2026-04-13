@@ -7,6 +7,7 @@ import LandingPage from './pages/LandingPage'
 import PaymentPage from './pages/PaymentPage'
 import OnboardingPage from './pages/OnboardingPage'
 import DashboardPage from './pages/DashboardPage'
+import AdminPage from './pages/AdminPage'
 import Layout from './components/Layout'
 
 export default function App() {
@@ -62,12 +63,22 @@ export default function App() {
   }
 
   const status = user?.onboarding_status || 'pending'
+  const isAdminRoute = window.location.pathname.startsWith('/admin')
+  const isSuperadmin = user?.role === 'superadmin'
 
   return (
-    <Layout onLogout={() => supabase.auth.signOut()}>
-      {status === 'pending' && <PaymentPage onComplete={refreshUser} />}
-      {status === 'payment_done' && <OnboardingPage user={user!} onComplete={refreshUser} />}
-      {status === 'complete' && <DashboardPage />}
+    <Layout onLogout={() => supabase.auth.signOut()} user={user}>
+      {isAdminRoute && isSuperadmin && <AdminPage />}
+      {isAdminRoute && !isSuperadmin && (
+        <div className="p-8 text-red-600">
+          403 — superadmin access required.
+        </div>
+      )}
+      {!isAdminRoute && status === 'pending' && <PaymentPage onComplete={refreshUser} />}
+      {!isAdminRoute && status === 'payment_done' && (
+        <OnboardingPage user={user!} onComplete={refreshUser} />
+      )}
+      {!isAdminRoute && status === 'complete' && <DashboardPage />}
     </Layout>
   )
 }

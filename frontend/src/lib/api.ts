@@ -82,3 +82,56 @@ export async function getDashboard() {
   if (!res.ok) throw new Error('Dashboard failed')
   return res.json()
 }
+
+// ─── Superadmin ──────────────────────────────────────────────────────
+
+export async function getAdminOverview() {
+  const res = await authFetch('/api/admin/overview')
+  if (!res.ok) throw new Error('Admin overview failed')
+  return res.json()
+}
+
+export async function getAdminAgentDetail(agentId: string) {
+  const res = await authFetch(`/api/admin/agents/${encodeURIComponent(agentId)}`)
+  if (!res.ok) throw new Error('Agent detail failed')
+  return res.json()
+}
+
+export async function rotateMeterKey(agentId: string) {
+  const res = await authFetch(
+    `/api/admin/agents/${encodeURIComponent(agentId)}/keys/rotate`,
+    { method: 'POST' },
+  )
+  if (!res.ok) throw new Error('Key rotation failed')
+  return res.json()
+}
+
+export async function setUserRole(userId: number, role: 'user' | 'superadmin') {
+  const res = await authFetch(`/api/admin/users/${userId}/role`, {
+    method: 'POST',
+    body: JSON.stringify({ role }),
+  })
+  if (!res.ok) throw new Error('Role update failed')
+  return res.json()
+}
+
+export async function upsertAgentSubscription(
+  agentId: string,
+  body: {
+    user_id: number
+    plan_id: string
+    period_start: string
+    period_end: string
+    base_allowance_micros?: number
+    overage_enabled?: boolean
+    overage_cap_micros?: number | null
+    wallet_balance_micros?: number
+  },
+) {
+  const res = await authFetch(
+    `/api/admin/agents/${encodeURIComponent(agentId)}/subscription`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+  if (!res.ok) throw new Error('Subscription upsert failed')
+  return res.json()
+}
