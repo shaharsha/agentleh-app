@@ -118,6 +118,7 @@ jobs:
           gcloud builds submit \
             --config=cloudbuild.yaml \
             --region=europe-west3 \
+            --suppress-logs \
             --substitutions=_TAG="${{ steps.tag.outputs.tag }}",_SERVICE="${{ steps.env.outputs.service }}",_VITE_SUPABASE_URL="${{ steps.env.outputs.vite_supabase_url }}",_VITE_SUPABASE_ANON_KEY="${{ steps.env.outputs.vite_supabase_anon_key }}",_VITE_LANDING_URL="${{ steps.env.outputs.vite_landing_url }}" \
             .
 
