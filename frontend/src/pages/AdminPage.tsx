@@ -527,6 +527,61 @@ function StatsTab() {
   )
 }
 
+// Tiny self-positioning tooltip used by chart headers and metric tiles. Pure
+// React + Tailwind, no portal, no lib. Shows instantly on hover and toggles on
+// click so it also works on touch. Placement defaults to "right" — the bubble
+// hangs off the right side of the ⓘ so it doesn't clip against card edges.
+function InfoTip({
+  text,
+  placement = 'right',
+}: {
+  text: string
+  placement?: 'left' | 'right'
+}) {
+  const [open, setOpen] = useState(false)
+  const bubbleSide =
+    placement === 'right' ? 'left-0 ml-0' : 'right-0 mr-0'
+  const arrowSide = placement === 'right' ? 'left-3' : 'right-3'
+  return (
+    <span className="relative inline-block align-middle">
+      <span
+        role="button"
+        tabIndex={0}
+        aria-label={text}
+        className="cursor-help opacity-60 hover:opacity-100 focus:opacity-100 focus:outline-none select-none text-gray-400 text-[12px] leading-none"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen((v) => !v)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setOpen((v) => !v)
+          }
+          if (e.key === 'Escape') setOpen(false)
+        }}
+      >
+        ⓘ
+      </span>
+      {open && (
+        <span
+          role="tooltip"
+          className={`absolute z-50 top-full mt-2 ${bubbleSide} w-64 max-w-[80vw] rounded-lg bg-gray-900 text-white text-xs font-normal normal-case leading-relaxed px-3 py-2 shadow-xl pointer-events-none`}
+        >
+          <span
+            className={`absolute -top-1 ${arrowSide} w-2 h-2 bg-gray-900 rotate-45`}
+          />
+          {text}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function colorForPct(pct: number, yellow: number, red: number): string {
   if (pct >= red) return 'text-red-600 bg-red-50'
   if (pct >= yellow) return 'text-yellow-600 bg-yellow-50'
@@ -562,17 +617,9 @@ function MetricTile({
   const bar = barColor(pct, yellow, red)
   return (
     <div className={`rounded-xl p-4 ${color}`}>
-      <div className="text-xs font-semibold uppercase tracking-wide opacity-70 flex items-center gap-1">
+      <div className="text-xs font-semibold uppercase tracking-wide opacity-70 flex items-center gap-1.5">
         <span>{label}</span>
-        {info && (
-          <span
-            title={info}
-            aria-label={info}
-            className="cursor-help opacity-60 hover:opacity-100 select-none text-[10px] font-normal normal-case"
-          >
-            ⓘ
-          </span>
-        )}
+        {info && <InfoTip text={info} />}
       </div>
       <div className="text-2xl font-bold mt-1">
         {value}
@@ -751,17 +798,9 @@ function UsageTile({
 }) {
   return (
     <div className="rounded-xl p-4 bg-white border border-gray-100 shadow-sm">
-      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1">
+      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
         <span>{label}</span>
-        {info && (
-          <span
-            title={info}
-            aria-label={info}
-            className="cursor-help opacity-60 hover:opacity-100 select-none text-[10px] font-normal normal-case"
-          >
-            ⓘ
-          </span>
-        )}
+        {info && <InfoTip text={info} />}
       </div>
       <div className="text-2xl font-bold mt-1" style={{ color: accent }}>
         {value}
@@ -853,12 +892,7 @@ function CostByKindChart({ hours }: { hours: VmStatsResponse['cost_by_kind_per_h
       <div className="flex items-baseline justify-between mb-3">
         <div className="flex items-baseline gap-2">
           <h3 className="text-base font-semibold">Cost by kind — last 24h</h3>
-          <span
-            className="text-xs text-gray-400 cursor-help"
-            title="Per-hour stacked cost split between LLM (chat completions, billed per token) and grounding search (billed per query at $14/1k for Gemini 3). The most actionable cost lever you have."
-          >
-            ⓘ
-          </span>
+          <InfoTip text="Per-hour stacked cost split between LLM (chat completions, billed per token) and grounding search (billed per query at $14/1k for Gemini 3). The most actionable cost lever you have." />
         </div>
         <div className="text-xs text-gray-600">
           <span className="font-mono font-semibold" style={{ color: CHART_COLORS.llm }}>${totalLlm.toFixed(4)}</span>
@@ -917,12 +951,7 @@ function TokensThroughputChart({ hours }: { hours: VmStatsResponse['tokens_per_h
       <div className="flex items-baseline justify-between mb-3">
         <div className="flex items-baseline gap-2">
           <h3 className="text-base font-semibold">Token throughput — last 24h</h3>
-          <span
-            className="text-xs text-gray-400 cursor-help"
-            title="Per-hour input vs output tokens for LLM calls. Watch the gap — input climbing without output climbing means context bloat (compaction failing or runaway memory)."
-          >
-            ⓘ
-          </span>
+          <InfoTip text="Per-hour input vs output tokens for LLM calls. Watch the gap — input climbing without output climbing means context bloat (compaction failing or runaway memory)." />
         </div>
         <div className="text-xs text-gray-600">
           ratio in/out <span className="font-mono font-semibold">{ratio}x</span>
@@ -996,12 +1025,7 @@ function ModelBreakdownCard({ rows }: { rows: VmStatsResponse['model_breakdown_7
       <div className="flex items-baseline justify-between mb-3">
         <div className="flex items-baseline gap-2">
           <h3 className="text-base font-semibold">Cost by model — last 7 days</h3>
-          <span
-            className="text-xs text-gray-400 cursor-help"
-            title="Per-(model, kind) spend over the last 7 days. Bar color encodes kind: blue = LLM/chat, green = grounding search. Any unexpected model at the top means an accidental fallback — fix it before it compounds."
-          >
-            ⓘ
-          </span>
+          <InfoTip text="Per-(model, kind) spend over the last 7 days. Bar color encodes kind: blue = LLM/chat, green = grounding search. Any unexpected model at the top means an accidental fallback — fix it before it compounds." />
         </div>
         <div className="text-xs text-gray-500">
           <span className="inline-block w-2 h-2 rounded-full mr-1 align-middle" style={{ background: CHART_COLORS.llm }} />LLM
@@ -1196,12 +1220,7 @@ function TrafficChart({ events }: { events: VmStatsResponse['events_per_hour'] }
       <div className="flex items-baseline justify-between mb-3">
         <div className="flex items-baseline gap-2">
           <h3 className="text-base font-semibold">Meter traffic — last 24h</h3>
-          <span
-            className="text-xs text-gray-400 cursor-help"
-            title="Total request volume (bars, left axis) and total cost (line, right axis) per hour. Volume is the dominant signal; the line shows whether the cost is correlated."
-          >
-            ⓘ
-          </span>
+          <InfoTip text="Total request volume (bars, left axis) and total cost (line, right axis) per hour. Volume is the dominant signal; the line shows whether the cost is correlated." />
         </div>
         <div className="text-xs text-gray-600">
           <span className="font-mono font-semibold">{fmtCompactNumber(totalEvents)}</span> events ·{' '}
@@ -1269,12 +1288,7 @@ function MeterLatencyCard({ latency }: { latency: VmStatsResponse['meter_latency
       <div className="flex items-baseline justify-between mb-3">
         <div className="flex items-baseline gap-2">
           <h3 className="text-base font-semibold">Meter latency — last 1h</h3>
-          <span
-            className="text-xs text-gray-400 cursor-help"
-            title="Round-trip latency through agentleh-meter for successful upstream calls (status 200) over the last hour. p50 = median, p99 = tail. Sustained p99 above 5s usually means the upstream Google API is degraded."
-          >
-            ⓘ
-          </span>
+          <InfoTip text="Round-trip latency through agentleh-meter for successful upstream calls (status 200) over the last hour. p50 = median, p99 = tail. Sustained p99 above 5s usually means the upstream Google API is degraded." />
         </div>
         <div className="text-xs text-gray-500">
           n = <span className="font-mono font-semibold">{latency.n.toLocaleString()}</span>
@@ -1345,12 +1359,7 @@ function TopAgentsCard({ agents }: { agents: VmStatsResponse['top_agents'] }) {
       <div className="flex items-baseline justify-between mb-3">
         <div className="flex items-baseline gap-2">
           <h3 className="text-base font-semibold">Top agents — last 30 days</h3>
-          <span
-            className="text-xs text-gray-400 cursor-help"
-            title="Top 5 agents by total cost over the last 30 days. The bar shows $ spend; the table below has events and tokens for each."
-          >
-            ⓘ
-          </span>
+          <InfoTip text="Top 5 agents by total cost over the last 30 days. The bar shows $ spend; the table below has events and tokens for each." />
         </div>
         <div className="text-xs text-gray-500">by spend</div>
       </div>
