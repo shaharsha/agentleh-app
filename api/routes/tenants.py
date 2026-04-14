@@ -412,7 +412,91 @@ async def list_agents(
     }
 
 
-# Note: POST /tenants/{id}/agents (provision new agent) lives separately
-# in routes/tenant_agent_provisioning.py — it needs to call out to the
-# VM daemon and manage async job state, so it's kept out of this CRUD
-# file to avoid bloat.
+class AgentCreate(BaseModel):
+    # agent_name is the agent's display name (Hebrew or otherwise).
+    # We slug it + tenant_id into the DB agent_id to guarantee uniqueness.
+    agent_name: str = Field(..., min_length=1, max_length=40)
+    agent_gender: str = Field("", max_length=20)
+    phone: str = Field(..., min_length=6, max_length=30)
+    user_name: str = Field("", max_length=60)
+    tts_voice_name: str | None = None
+
+
+@router.post("/{tenant_id}/agents", status_code=201)
+async def provision_agent(
+    tenant_id: int,
+    body: AgentCreate,
+    request: Request,
+    ctx: TenantContext = Depends(require_tenant_role("admin")),
+) -> dict[str, Any]:
+    """Spawn a real OpenClaw container in an existing tenant.
+
+    Calls the provisioner (MockProvisioner locally, VmHttpProvisioner on
+    Cloud Run), which shells out to the VM's create-agent.sh via the
+    provision-api.py daemon. The agent_id is derived from the tenant +
+    a slug of the agent name so collisions across tenants are impossible.
+    """
+    import re
+    import secrets as _secrets
+
+    db = request.app.state.db
+
+    # Build a DB-safe agent_id: slugged agent_name + short random suffix
+    # keyed to tenant so different tenants can reuse "barber" / "reception"
+    # without colliding.
+    slug = re.sub(r"[^a-z0-9-]+", "-", body.agent_name.lower()).strip("-") or "agent"
+    suffix = _secrets.token_hex(2)
+    agent_id = f"t{tenant_id}-{slug}-{suffix}"
+
+    provisioner = request.app.state.provisioner
+    result = provisioner.provision(
+        agent_id=agent_id,
+        phone=body.phone,
+        agent_name=body.agent_name,
+        user_name=body.user_name or ctx.user.get("full_name") or "",
+        tenant_id=tenant_id,
+    )
+    if not result.success:
+        raise HTTPException(
+            status_code=502,
+            detail={"error": "provision_failed", "message": result.error},
+        )
+
+    # Stamp optional fields that the provisioner doesn't thread through
+    # the Protocol (tts_voice_name, agent_gender). Same pattern the
+    # onboarding flow uses — done as a plain UPDATE after the row exists.
+    if body.tts_voice_name:
+        db._execute(  # noqa: SLF001 — private helper on the same repo
+            "UPDATE agents SET tts_voice_name = %s WHERE agent_id = %s",
+            (body.tts_voice_name, result.agent_id),
+        )
+    if body.agent_gender:
+        db._execute(  # noqa: SLF001
+            """
+            UPDATE app_user_agents_legacy SET agent_gender = %s
+             WHERE agent_id = %s
+            """,
+            (body.agent_gender, result.agent_id),
+        )
+
+    # Register the user→agent legacy link via the compat view so the
+    # existing admin panel joins keep working. The INSTEAD OF INSERT
+    # trigger redirects this to app_user_agents_legacy.
+    try:
+        db.create_user_agent(
+            user_id=ctx.user_id,
+            agent_id=result.agent_id,
+            agent_name=body.agent_name,
+            agent_gender=body.agent_gender,
+        )
+    except Exception:  # noqa: BLE001
+        # Non-fatal — the real agent exists, the legacy link is just
+        # metadata for admin reads during the Phase 3 transition.
+        logger.warning("create_user_agent link failed for %s", result.agent_id)
+
+    return {
+        "agent_id": result.agent_id,
+        "gateway_url": result.gateway_url,
+        "port": result.port,
+        "status": "active",
+    }

@@ -10,6 +10,7 @@ import {
   updateTenant,
   deleteTenant,
   transferTenantOwner,
+  provisionTenantAgent,
 } from '../lib/api'
 
 interface Props {
@@ -98,7 +99,13 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
       </div>
 
       {activeTab === 'dashboard' && (
-        <DashboardTab dashboard={dashboard} agents={agents} />
+        <DashboardTab
+          tenantId={tenantId}
+          dashboard={dashboard}
+          agents={agents}
+          isAdminOrOwner={isAdminOrOwner}
+          onChanged={reload}
+        />
       )}
       {activeTab === 'members' && (
         <MembersTab
@@ -130,9 +137,49 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
 
 // ─── Dashboard tab ────────────────────────────────────────────────────
 
-function DashboardTab({ dashboard, agents }: { dashboard: any; agents: any[] }) {
+function DashboardTab({
+  tenantId,
+  dashboard,
+  agents,
+  isAdminOrOwner,
+  onChanged,
+}: {
+  tenantId: number
+  dashboard: any
+  agents: any[]
+  isAdminOrOwner: boolean
+  onChanged: () => void
+}) {
   const subscription = dashboard?.subscription
   const totals = dashboard?.totals
+
+  const [showNewAgent, setShowNewAgent] = useState(false)
+  const [newAgentName, setNewAgentName] = useState('')
+  const [newAgentGender, setNewAgentGender] = useState<'female' | 'male'>('female')
+  const [newAgentPhone, setNewAgentPhone] = useState('')
+  const [provisioning, setProvisioning] = useState(false)
+  const [provisionError, setProvisionError] = useState<string | null>(null)
+
+  async function handleProvision() {
+    if (!newAgentName.trim() || !newAgentPhone.trim()) return
+    setProvisioning(true)
+    setProvisionError(null)
+    try {
+      await provisionTenantAgent(tenantId, {
+        agent_name: newAgentName.trim(),
+        agent_gender: newAgentGender,
+        phone: newAgentPhone.trim(),
+      })
+      setNewAgentName('')
+      setNewAgentPhone('')
+      setShowNewAgent(false)
+      onChanged()
+    } catch (err) {
+      setProvisionError((err as Error).message)
+    } finally {
+      setProvisioning(false)
+    }
+  }
 
   const microsToUsd = (m: number | null | undefined) => {
     if (m == null) return '—'
@@ -173,9 +220,91 @@ function DashboardTab({ dashboard, agents }: { dashboard: any; agents: any[] }) 
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Agents ({agents.length})
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Agents ({agents.length})
+          </h2>
+          {isAdminOrOwner && (
+            <button
+              onClick={() => setShowNewAgent(!showNewAgent)}
+              className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+            >
+              New agent
+            </button>
+          )}
+        </div>
+
+        {showNewAgent && isAdminOrOwner && (
+          <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Agent name
+                </label>
+                <input
+                  type="text"
+                  value={newAgentName}
+                  onChange={(e) => setNewAgentName(e.target.value)}
+                  placeholder="שולי / barber"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Gender
+                </label>
+                <select
+                  value={newAgentGender}
+                  onChange={(e) =>
+                    setNewAgentGender(e.target.value as 'female' | 'male')
+                  }
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                >
+                  <option value="female">נקבה / female</option>
+                  <option value="male">זכר / male</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                WhatsApp phone (E.164, e.g. +972501234567)
+              </label>
+              <input
+                type="tel"
+                value={newAgentPhone}
+                onChange={(e) => setNewAgentPhone(e.target.value)}
+                placeholder="+972501234567"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            {provisionError && (
+              <div className="text-sm text-red-700 bg-red-50 p-3 rounded">
+                {provisionError}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={handleProvision}
+                disabled={
+                  provisioning || !newAgentName.trim() || !newAgentPhone.trim()
+                }
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {provisioning
+                  ? 'Provisioning... (30–60s)'
+                  : 'Create agent'}
+              </button>
+              <button
+                onClick={() => setShowNewAgent(false)}
+                disabled={provisioning}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         {agents.length === 0 ? (
           <p className="text-sm text-gray-500">No agents yet.</p>
         ) : (

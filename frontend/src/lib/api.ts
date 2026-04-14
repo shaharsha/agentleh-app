@@ -292,6 +292,33 @@ export async function getTenantDashboard(tenantId: number) {
   return res.json()
 }
 
+export async function provisionTenantAgent(
+  tenantId: number,
+  body: {
+    agent_name: string
+    agent_gender?: string
+    phone: string
+    user_name?: string
+    tts_voice_name?: string
+  },
+) {
+  // Long-running — provisioning a real OpenClaw container on the VM
+  // takes 30–60s. The browser fetch doesn't need its own timeout (the
+  // backend's httpx Client already caps at 150s) but the user sees a
+  // spinner.
+  const res = await authFetch(`/api/tenants/${tenantId}/agents`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}))
+    throw new Error(
+      errBody?.detail?.message || errBody?.detail?.error || 'Provision failed',
+    )
+  }
+  return res.json()
+}
+
 // ─── Superadmin ──────────────────────────────────────────────────────
 
 export async function upsertAgentSubscription(
