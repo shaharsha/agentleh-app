@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { submitOnboarding } from '../lib/api'
 import StepIndicator from '../components/StepIndicator'
+import VoicePicker from '../components/VoicePicker'
 import type { AppUser } from '../lib/types'
 
 interface OnboardingPageProps {
@@ -16,6 +17,10 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
     gender: '',
     agent_name: '',
     agent_gender: '',
+    // Voice picker default — VoicePicker writes the manifest's default_voice
+    // ('Kore') here once the manifest loads, so isValid still flips true once
+    // the user fills the other required fields.
+    tts_voice_name: '',
   })
 
   function update(field: string, value: string) {
@@ -35,7 +40,13 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
     }
   }
 
-  const isValid = form.full_name && form.phone && form.gender && form.agent_name && form.agent_gender
+  const isValid =
+    form.full_name &&
+    form.phone &&
+    form.gender &&
+    form.agent_name &&
+    form.agent_gender &&
+    form.tts_voice_name
 
   return (
     <div>
@@ -99,6 +110,19 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
             <label className="block text-[13px] font-medium text-text-secondary mb-1.5">מגדר הסוכן</label>
             <TogglePair value={form.agent_gender} onChange={(v) => update('agent_gender', v)}
               options={[['male', 'זכר'], ['female', 'נקבה']]} />
+          </div>
+
+          <div>
+            <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
+              הקול של הסוכן בהודעות קוליות
+            </label>
+            <p className="text-[12px] text-text-secondary mb-2">
+              לחץ על קול כדי לשמוע אותו ולבחור אותו. הסוכן ישתמש בקול הזה כאשר ישלח הודעות קוליות בוואטסאפ.
+            </p>
+            <VoicePicker
+              value={form.tts_voice_name}
+              onChange={(v) => update('tts_voice_name', v)}
+            />
           </div>
         </section>
 

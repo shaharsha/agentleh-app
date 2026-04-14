@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { getDashboard } from '../lib/api'
+import { getDashboard, updateAgentVoice } from '../lib/api'
 import StepIndicator from '../components/StepIndicator'
+import VoicePicker from '../components/VoicePicker'
 import type { Agent, AppUser, Subscription } from '../lib/types'
 
 interface AgentSpend {
@@ -169,6 +170,15 @@ export default function DashboardPage() {
                 מנוי לא מוגדר — צור קשר לקבלת תוכנית.
               </div>
             )}
+
+            {/* Voice row — current Gemini-TTS voice used for voice messages */}
+            {agent.tenant_id != null && (
+              <VoiceRow
+                tenantId={agent.tenant_id}
+                agentId={agent.agent_id}
+                currentVoice={agent.tts_voice_name || 'Kore'}
+              />
+            )}
           </div>
         ))}
 
@@ -201,6 +211,95 @@ function UsageBar({ used, total }: { used: number; total: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
+    </div>
+  )
+}
+
+/**
+ * VoiceRow — collapsible voice-edit control rendered on each agent card.
+ *
+ * Starts collapsed showing the current voice name + a "change" link.
+ * Expanding reveals the full VoicePicker; saving fires the tenant-scoped
+ * PATCH endpoint and shows a toast about the container restart window.
+ */
+function VoiceRow({
+  tenantId,
+  agentId,
+  currentVoice,
+}: {
+  tenantId: number
+  agentId: string
+  currentVoice: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [selected, setSelected] = useState(currentVoice)
+  const [saving, setSaving] = useState(false)
+  const [savedVoice, setSavedVoice] = useState(currentVoice)
+  const [note, setNote] = useState<string | null>(null)
+
+  async function handleSave() {
+    if (selected === savedVoice) {
+      setOpen(false)
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await updateAgentVoice(tenantId, agentId, selected)
+      setSavedVoice(res.tts_voice_name)
+      setNote(res.note)
+      setOpen(false)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Update voice failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-white/40 pt-3">
+      <div className="flex items-center justify-between text-[13px]">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="text-brand-500 font-medium hover:underline"
+        >
+          {open ? 'סגור' : 'שינוי'}
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-text-primary">{savedVoice}</span>
+          <span className="text-text-secondary">קול הסוכן</span>
+        </div>
+      </div>
+
+      {note && !open && (
+        <p className="mt-2 text-[11px] text-text-muted text-center">{note}</p>
+      )}
+
+      {open && (
+        <div className="mt-3 space-y-3">
+          <VoicePicker value={selected} onChange={setSelected} fallbackDefault={savedVoice} />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-brand btn-sm flex-1"
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? 'שומר...' : 'שמור'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => {
+                setSelected(savedVoice)
+                setOpen(false)
+              }}
+            >
+              ביטול
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

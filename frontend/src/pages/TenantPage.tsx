@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { TenantDetail, TenantRole } from '../lib/types'
+import type { TenantDetail } from '../lib/types'
 import {
   getTenantDashboard,
   getTenantDetail,
