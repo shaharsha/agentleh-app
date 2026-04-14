@@ -1,5 +1,20 @@
 import { useEffect, useState } from 'react'
 import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import {
   getAdminOverview,
   getAdminAgentDetail,
   getAdminVmStats,
@@ -13,6 +28,15 @@ import type {
   AdminAgentDetail,
   UsageEvent,
 } from '../lib/types'
+
+type AdminTab = 'agents' | 'users' | 'plans' | 'stats'
+const VALID_TABS: readonly AdminTab[] = ['agents', 'users', 'plans', 'stats']
+
+function readTabFromUrl(): AdminTab {
+  if (typeof window === 'undefined') return 'agents'
+  const p = new URLSearchParams(window.location.search).get('tab')
+  return (VALID_TABS as readonly string[]).includes(p ?? '') ? (p as AdminTab) : 'agents'
+}
 
 const MICROS_PER_DOLLAR = 1_000_000
 
@@ -37,7 +61,16 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [agentDetail, setAgentDetail] = useState<AdminAgentDetail | null>(null)
-  const [tab, setTab] = useState<'agents' | 'users' | 'plans' | 'stats'>('agents')
+  const [tab, setTab] = useState<AdminTab>(readTabFromUrl)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (tab === 'agents') params.delete('tab')
+    else params.set('tab', tab)
+    const qs = params.toString()
+    const url = `${window.location.pathname}${qs ? '?' + qs : ''}${window.location.hash}`
+    window.history.replaceState(null, '', url)
+  }, [tab])
 
   async function reload() {
     setLoading(true)
@@ -592,46 +625,19 @@ function LiveCard({ data }: { data: VmStatsResponse }) {
   )
 }
 
-// Simple inline SVG sparkline. No chart library.
-function Sparkline({
-  points,
-  color = '#3b82f6',
-  label,
-  max = 100,
-}: {
-  points: number[]
-  color?: string
-  label?: string
-  max?: number
-}) {
-  const width = 300
-  const height = 60
-  if (points.length === 0) {
-    return <div className="text-xs text-gray-400 h-[60px] flex items-center">no data</div>
-  }
-  const step = width / Math.max(1, points.length - 1)
-  const path = points
-    .map((v, i) => {
-      const x = i * step
-      const y = height - (Math.min(max, Math.max(0, v)) / max) * height
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
-    })
-    .join(' ')
-  const last = points[points.length - 1]
-  return (
-    <div>
-      {label && (
-        <div className="text-xs text-gray-600 mb-1 flex items-center justify-between">
-          <span>{label}</span>
-          <span className="font-mono">{last.toFixed(1)}</span>
-        </div>
-      )}
-      <svg width={width} height={height} className="w-full">
-        <path d={path} fill="none" stroke={color} strokeWidth={1.8} />
-        <path d={`${path} L${width},${height} L0,${height} Z`} fill={color} opacity={0.08} />
-      </svg>
-    </div>
-  )
+const CHART_GRID = '#e5e7eb'
+const AXIS_TICK = { fill: '#6b7280', fontSize: 11 }
+
+const tooltipStyle = {
+  background: 'rgba(255,255,255,0.95)',
+  border: '1px solid #e5e7eb',
+  borderRadius: 8,
+  fontSize: 12,
+  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+}
+
+function fmtHourLabel(ts: string): string {
+  return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 }
 
 function HistoryCharts({ history }: { history: VmStatsResponse['history'] }) {
@@ -643,19 +649,51 @@ function HistoryCharts({ history }: { history: VmStatsResponse['history'] }) {
       </div>
     )
   }
-  const cpu = history.map((r) => Number(r.cpu_percent ?? 0))
-  const mem = history.map((r) => Number(r.memory_percent ?? 0))
-  const disk = history.map((r) => Number(r.disk_data_pct ?? r.disk_root_pct ?? 0))
-  const containers = history.map((r) => Number(r.containers_run ?? 0))
-  const maxContainers = Math.max(25, Math.max(...containers, 1))
+  const histData = history.map((r) => ({
+    time: fmtHourLabel(r.ts),
+    cpu: Number(r.cpu_percent ?? 0),
+    ram: Number(r.memory_percent ?? 0),
+    disk: Number(r.disk_data_pct ?? r.disk_root_pct ?? 0),
+    containers: Number(r.containers_run ?? 0),
+  }))
+  const maxContainers = Math.max(25, ...histData.map((r) => r.containers))
   return (
     <div className="glass-card p-6">
       <h3 className="text-base font-semibold mb-3">Last 24 hours</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Sparkline points={cpu} color="#3b82f6" label="CPU %" />
-        <Sparkline points={mem} color="#8b5cf6" label="RAM %" />
-        <Sparkline points={disk} color="#f59e0b" label="Disk %" />
-        <Sparkline points={containers} color="#10b981" label="Containers" max={maxContainers} />
+      <div className="space-y-6">
+        <div>
+          <div className="text-xs text-gray-600 mb-2">CPU · RAM · Disk (%)</div>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={histData} margin={{ top: 5, right: 12, left: -10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
+              <XAxis dataKey="time" tick={AXIS_TICK} minTickGap={32} />
+              <YAxis tick={AXIS_TICK} domain={[0, 100]} unit="%" />
+              <Tooltip contentStyle={tooltipStyle} formatter={(v) => `${Number(v).toFixed(1)}%`} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Line type="monotone" dataKey="cpu" name="CPU" stroke="#3b82f6" strokeWidth={2} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="ram" name="RAM" stroke="#8b5cf6" strokeWidth={2} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="disk" name="Disk" stroke="#f59e0b" strokeWidth={2} dot={false} isAnimationActive={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div>
+          <div className="text-xs text-gray-600 mb-2">Running containers</div>
+          <ResponsiveContainer width="100%" height={140}>
+            <AreaChart data={histData} margin={{ top: 5, right: 12, left: -10, bottom: 0 }}>
+              <defs>
+                <linearGradient id="containersFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.45} />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
+              <XAxis dataKey="time" tick={AXIS_TICK} minTickGap={32} />
+              <YAxis tick={AXIS_TICK} domain={[0, maxContainers]} allowDecimals={false} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Area type="monotone" dataKey="containers" name="Containers" stroke="#10b981" strokeWidth={2} fill="url(#containersFill)" isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </div>
   )
@@ -663,23 +701,44 @@ function HistoryCharts({ history }: { history: VmStatsResponse['history'] }) {
 
 function TrafficChart({ events }: { events: VmStatsResponse['events_per_hour'] }) {
   if (events.length === 0) return null
-  const counts = events.map((r) => Number(r.events))
-  const costs = events.map((r) => Number(r.cost_micros) / 1_000_000)
-  const maxCount = Math.max(...counts, 1)
-  const maxCost = Math.max(...costs, 0.001)
-  const totalCost = costs.reduce((a, b) => a + b, 0)
-  const totalEvents = counts.reduce((a, b) => a + b, 0)
+  const trafficData = events.map((r) => ({
+    hour: new Date(r.hour).toLocaleTimeString('en-GB', { hour: '2-digit' }) + ':00',
+    events: Number(r.events),
+    costUsd: Number(r.cost_micros) / 1_000_000,
+  }))
+  const totalEvents = trafficData.reduce((a, b) => a + b.events, 0)
+  const totalCost = trafficData.reduce((a, b) => a + b.costUsd, 0)
   return (
     <div className="glass-card p-6">
-      <h3 className="text-base font-semibold mb-3">Meter traffic — last 24h</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Sparkline points={counts} color="#0ea5e9" label="Events / hour" max={maxCount * 1.1} />
-        <Sparkline points={costs} color="#ef4444" label="Cost ($) / hour" max={maxCost * 1.1} />
+      <div className="flex items-baseline justify-between mb-3">
+        <h3 className="text-base font-semibold">Meter traffic — last 24h</h3>
+        <div className="text-xs text-gray-600">
+          <span className="font-mono">{totalEvents}</span> events ·{' '}
+          <span className="font-mono">${totalCost.toFixed(4)}</span>
+        </div>
       </div>
-      <div className="mt-3 text-xs text-gray-600">
-        24h totals: <span className="font-mono">{totalEvents}</span> events ·{' '}
-        <span className="font-mono">${totalCost.toFixed(4)}</span>
-      </div>
+      <ResponsiveContainer width="100%" height={260}>
+        <ComposedChart data={trafficData} margin={{ top: 5, right: 12, left: -10, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
+          <XAxis dataKey="hour" tick={AXIS_TICK} minTickGap={28} />
+          <YAxis yAxisId="left" tick={AXIS_TICK} allowDecimals={false} />
+          <YAxis
+            yAxisId="right"
+            orientation="right"
+            tick={AXIS_TICK}
+            tickFormatter={(v) => `$${Number(v).toFixed(2)}`}
+          />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            formatter={(v, name) =>
+              name === 'Cost' ? `$${Number(v).toFixed(4)}` : Number(v).toLocaleString()
+            }
+          />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Bar yAxisId="left" dataKey="events" name="Events" fill="#0ea5e9" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+          <Line yAxisId="right" type="monotone" dataKey="costUsd" name="Cost" stroke="#ef4444" strokeWidth={2} dot={false} isAnimationActive={false} />
+        </ComposedChart>
+      </ResponsiveContainer>
     </div>
   )
 }
@@ -692,55 +751,88 @@ function MeterLatencyCard({ latency }: { latency: VmStatsResponse['meter_latency
       </div>
     )
   }
+  const data = [
+    { name: 'p50', ms: latency.p50 ?? 0 },
+    { name: 'p95', ms: latency.p95 ?? 0 },
+    { name: 'p99', ms: latency.p99 ?? 0 },
+  ]
   return (
     <div className="glass-card p-6">
-      <h3 className="text-base font-semibold mb-3">Meter latency (last 1h)</h3>
-      <div className="space-y-1 text-sm font-mono">
-        <div className="flex justify-between">
-          <span className="text-gray-500">n</span>
-          <span>{latency.n}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-500">p50</span>
-          <span>{latency.p50 ?? '—'}ms</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-500">p95</span>
-          <span>{latency.p95 ?? '—'}ms</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-500">p99</span>
-          <span>{latency.p99 ?? '—'}ms</span>
+      <div className="flex items-baseline justify-between mb-3">
+        <h3 className="text-base font-semibold">Meter latency (last 1h)</h3>
+        <div className="text-xs text-gray-500">
+          n = <span className="font-mono">{latency.n}</span>
         </div>
       </div>
+      <ResponsiveContainer width="100%" height={140}>
+        <BarChart data={data} layout="vertical" margin={{ top: 5, right: 16, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} horizontal={false} />
+          <XAxis type="number" tick={AXIS_TICK} unit="ms" />
+          <YAxis type="category" dataKey="name" tick={AXIS_TICK} width={36} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(v) => `${v}ms`} />
+          <Bar dataKey="ms" fill="#6366f1" radius={[0, 4, 4, 0]} isAnimationActive={false} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   )
 }
 
 function TopAgentsCard({ agents }: { agents: VmStatsResponse['top_agents'] }) {
+  if (agents.length === 0) {
+    return (
+      <div className="glass-card p-6">
+        <h3 className="text-base font-semibold mb-3">Top agents — last 30 days ($ spend)</h3>
+        <div className="text-sm text-gray-500">No usage yet.</div>
+      </div>
+    )
+  }
+  const chartData = agents
+    .slice()
+    .sort((a, b) => b.cost_micros - a.cost_micros)
+    .map((a) => ({
+      agent: a.agent_id,
+      usd: a.cost_micros / 1_000_000,
+      events: a.events,
+      tokens: Number(a.total_tokens),
+    }))
+  const chartHeight = Math.max(120, chartData.length * 28 + 40)
   return (
     <div className="glass-card p-6">
       <h3 className="text-base font-semibold mb-3">Top agents — last 30 days ($ spend)</h3>
-      {agents.length === 0 ? (
-        <div className="text-sm text-gray-500">No usage yet.</div>
-      ) : (
-        <table className="w-full text-xs">
-          <tbody>
-            {agents.map((a) => (
-              <tr key={a.agent_id} className="border-t">
-                <td className="p-1 font-mono">{a.agent_id}</td>
-                <td className="p-1 text-right font-mono">
-                  ${(a.cost_micros / 1_000_000).toFixed(4)}
-                </td>
-                <td className="p-1 text-right text-gray-500">{a.events} evt</td>
-                <td className="p-1 text-right text-gray-500">
-                  {Number(a.total_tokens).toLocaleString()}t
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <ResponsiveContainer width="100%" height={chartHeight}>
+        <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 16, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} horizontal={false} />
+          <XAxis type="number" tick={AXIS_TICK} tickFormatter={(v) => `$${Number(v).toFixed(2)}`} />
+          <YAxis type="category" dataKey="agent" tick={{ ...AXIS_TICK, fontFamily: 'ui-monospace, monospace' }} width={120} />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            formatter={(v, name) =>
+              name === 'Spend' ? `$${Number(v).toFixed(4)}` : Number(v).toLocaleString()
+            }
+          />
+          <Bar dataKey="usd" name="Spend" fill="#0ea5e9" radius={[0, 4, 4, 0]} isAnimationActive={false} />
+        </BarChart>
+      </ResponsiveContainer>
+      <table className="w-full text-xs mt-3">
+        <thead className="text-gray-500">
+          <tr>
+            <th className="text-left p-1">Agent</th>
+            <th className="text-right p-1">Spend</th>
+            <th className="text-right p-1">Events</th>
+            <th className="text-right p-1">Tokens</th>
+          </tr>
+        </thead>
+        <tbody>
+          {chartData.map((a) => (
+            <tr key={a.agent} className="border-t">
+              <td className="p-1 font-mono">{a.agent}</td>
+              <td className="p-1 text-right font-mono">${a.usd.toFixed(4)}</td>
+              <td className="p-1 text-right text-gray-500">{a.events}</td>
+              <td className="p-1 text-right text-gray-500">{a.tokens.toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

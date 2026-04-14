@@ -11,7 +11,11 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "recharts": "^3.8.1"
+  },
+  "overrides": {
+    "react-is": "^19.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.0",
