@@ -5,7 +5,9 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ComposedChart,
+  LabelList,
   Legend,
   Line,
   LineChart,
@@ -448,6 +450,38 @@ interface VmStatsResponse {
     p95: number | null
     p99: number | null
   } | null
+  today_totals: {
+    requests: number
+    llm_requests: number
+    search_requests: number
+    input_tokens: number
+    output_tokens: number
+    cached_tokens: number
+    search_queries: number
+    cost_micros: number
+    llm_cost_micros: number
+    search_cost_micros: number
+  } | null
+  cost_by_kind_per_hour: Array<{
+    hour: string
+    llm_cost_micros: number
+    search_cost_micros: number
+    llm_events: number
+    search_events: number
+  }>
+  tokens_per_hour: Array<{
+    hour: string
+    input_tokens: number
+    output_tokens: number
+    cached_tokens: number
+  }>
+  model_breakdown_7d: Array<{
+    model: string
+    kind: 'llm' | 'search'
+    events: number
+    cost_micros: number
+    total_tokens: number
+  }>
 }
 
 function StatsTab() {
@@ -476,12 +510,18 @@ function StatsTab() {
   return (
     <div className="space-y-6">
       <LiveCard data={data} />
-      <HistoryCharts history={data.history} />
+      <TodayUsageTotals totals={data.today_totals} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <CostByKindChart hours={data.cost_by_kind_per_hour} />
+        <TokensThroughputChart hours={data.tokens_per_hour} />
+      </div>
       <TrafficChart events={data.events_per_hour} />
+      <HistoryCharts history={data.history} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <MeterLatencyCard latency={data.meter_latency_1h} />
         <TopAgentsCard agents={data.top_agents} />
       </div>
+      <ModelBreakdownCard rows={data.model_breakdown_7d} />
       <ContainersCard containers={data.live?.docker?.containers || []} />
     </div>
   )
@@ -507,6 +547,7 @@ function MetricTile({
   yellow,
   red,
   sub,
+  info,
 }: {
   label: string
   value: string | number
@@ -515,12 +556,24 @@ function MetricTile({
   yellow: number
   red: number
   sub?: string
+  info?: string
 }) {
   const color = colorForPct(pct, yellow, red)
   const bar = barColor(pct, yellow, red)
   return (
     <div className={`rounded-xl p-4 ${color}`}>
-      <div className="text-xs font-semibold uppercase tracking-wide opacity-70">{label}</div>
+      <div className="text-xs font-semibold uppercase tracking-wide opacity-70 flex items-center gap-1">
+        <span>{label}</span>
+        {info && (
+          <span
+            title={info}
+            aria-label={info}
+            className="cursor-help opacity-60 hover:opacity-100 select-none text-[10px] font-normal normal-case"
+          >
+            ⓘ
+          </span>
+        )}
+      </div>
       <div className="text-2xl font-bold mt-1">
         {value}
         {unit && <span className="text-sm font-normal opacity-70 ml-1">{unit}</span>}
@@ -574,6 +627,7 @@ function LiveCard({ data }: { data: VmStatsResponse }) {
             yellow={60}
             red={80}
             sub={`${cpu.cores} cores · load ${cpu.load_avg_1m}`}
+            info="VM-wide CPU utilisation across all cores. Load avg is the 1-minute run-queue length — values above core count mean processes are waiting."
           />
         )}
         {mem && (
@@ -585,6 +639,7 @@ function LiveCard({ data }: { data: VmStatsResponse }) {
             yellow={65}
             red={85}
             sub={`${(mem.used_mb / 1024).toFixed(1)}G / ${(mem.total_mb / 1024).toFixed(1)}G`}
+            info="Physical memory in use across the host (containers + system). High values increase the risk of OOM-killing OpenClaw containers."
           />
         )}
         {diskRoot && (
@@ -596,6 +651,7 @@ function LiveCard({ data }: { data: VmStatsResponse }) {
             yellow={60}
             red={80}
             sub={`${diskRoot.used_gb}G / ${diskRoot.total_gb}G`}
+            info="Boot disk: OS, /opt/agentleh (compose, scripts, plugins, .env), /opt/whisper-* (HF model cache ~1.5G), Docker images & layers. Filling it blocks deploys. 7-day snapshot retention."
           />
         )}
         {diskData && diskData.total_gb > 0 && (
@@ -607,6 +663,7 @@ function LiveCard({ data }: { data: VmStatsResponse }) {
             yellow={60}
             red={80}
             sub={`${diskData.used_gb}G / ${diskData.total_gb}G`}
+            info="Dedicated data PD: per-agent OpenClaw state under /data/agents/{id}/ — workspace, MEMORY.md, sessions. Grows with conversation history. 14-day daily snapshots via openclaw-data-daily."
           />
         )}
         {docker && (
@@ -618,6 +675,7 @@ function LiveCard({ data }: { data: VmStatsResponse }) {
             yellow={60}
             red={80}
             sub={`${docker.running} running`}
+            info="Docker containers on this VM (running / total). One per agent (OpenClaw) plus shared services like Vector. Bar is scaled against a soft cap of 25."
           />
         )}
       </div>
@@ -627,17 +685,407 @@ function LiveCard({ data }: { data: VmStatsResponse }) {
 
 const CHART_GRID = '#e5e7eb'
 const AXIS_TICK = { fill: '#6b7280', fontSize: 11 }
+const AXIS_LINE = { stroke: '#e5e7eb' }
+
+const CHART_COLORS = {
+  cpu: '#3b82f6',         // blue   — VM CPU
+  ram: '#8b5cf6',         // purple — VM RAM
+  disk: '#f59e0b',        // amber  — VM disk
+  containers: '#10b981',  // green  — VM containers
+  llm: '#3b82f6',         // blue   — LLM / chat / input tokens
+  search: '#10b981',      // green  — grounding search
+  output: '#8b5cf6',      // purple — output tokens
+  cached: '#f59e0b',      // amber  — cached tokens
+  events: '#0ea5e9',      // sky    — request volume
+  cost: '#ef4444',        // red    — money
+  latency: '#6366f1',     // indigo — latency
+  spend: '#0ea5e9',       // sky    — top-agents spend bars
+  model: '#6366f1',       // indigo — model breakdown bars
+} as const
+
+const CHART_MARGIN = { top: 10, right: 12, left: -10, bottom: 0 }
 
 const tooltipStyle = {
-  background: 'rgba(255,255,255,0.95)',
+  background: 'rgba(255,255,255,0.97)',
   border: '1px solid #e5e7eb',
-  borderRadius: 8,
+  borderRadius: 10,
   fontSize: 12,
-  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+  padding: '8px 10px',
+  boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
 }
+const tooltipLabelStyle = { color: '#374151', fontWeight: 600, marginBottom: 4 }
+const tooltipItemStyle = { padding: 0 }
+const tooltipCursor = { fill: '#6b7280', opacity: 0.06 }
+const legendStyle = { fontSize: 12, paddingTop: 8 }
 
 function fmtHourLabel(ts: string): string {
   return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+}
+
+function fmtHourOnly(ts: string): string {
+  return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit' }) + ':00'
+}
+
+function fmtCompactNumber(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return n.toLocaleString()
+}
+
+function fmtUsdMicros(micros: number, digits = 4): string {
+  return `$${(micros / 1_000_000).toFixed(digits)}`
+}
+
+function UsageTile({
+  label,
+  value,
+  sub,
+  accent,
+  info,
+}: {
+  label: string
+  value: string
+  sub?: string
+  accent: string
+  info?: string
+}) {
+  return (
+    <div className="rounded-xl p-4 bg-white border border-gray-100 shadow-sm">
+      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1">
+        <span>{label}</span>
+        {info && (
+          <span
+            title={info}
+            aria-label={info}
+            className="cursor-help opacity-60 hover:opacity-100 select-none text-[10px] font-normal normal-case"
+          >
+            ⓘ
+          </span>
+        )}
+      </div>
+      <div className="text-2xl font-bold mt-1" style={{ color: accent }}>
+        {value}
+      </div>
+      {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
+    </div>
+  )
+}
+
+function TodayUsageTotals({ totals }: { totals: VmStatsResponse['today_totals'] }) {
+  if (!totals || totals.requests === 0) {
+    return (
+      <div className="glass-card p-6 text-sm text-gray-500">
+        No LLM or search activity in the last 24 hours.
+      </div>
+    )
+  }
+  const llmShare = totals.cost_micros > 0
+    ? Math.round((totals.llm_cost_micros / totals.cost_micros) * 100)
+    : 0
+  return (
+    <div className="glass-card p-6">
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="text-xl font-bold">Usage — last 24 hours</h2>
+        <div className="text-xs text-gray-500">via agentleh-meter</div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <UsageTile
+          label="Requests"
+          value={fmtCompactNumber(totals.requests)}
+          sub={`${fmtCompactNumber(totals.llm_requests)} LLM · ${fmtCompactNumber(totals.search_requests)} search`}
+          accent="#0ea5e9"
+          info="Total upstream calls routed through agentleh-meter in the last 24 hours: chat completions (kind=llm) plus grounding-search queries (kind=search)."
+        />
+        <UsageTile
+          label="Input tokens"
+          value={fmtCompactNumber(totals.input_tokens)}
+          sub={
+            totals.cached_tokens > 0
+              ? `${fmtCompactNumber(totals.cached_tokens)} cached`
+              : 'sent to model'
+          }
+          accent="#3b82f6"
+          info="Prompt tokens billed by the upstream LLM in the last 24h. Sudden growth without matching output growth usually means context bloat (compaction failing or runaway memory)."
+        />
+        <UsageTile
+          label="Output tokens"
+          value={fmtCompactNumber(totals.output_tokens)}
+          sub="generated"
+          accent="#8b5cf6"
+          info="Completion tokens generated by the model in the last 24h. Reflects how much the agents are actually saying back to users."
+        />
+        <UsageTile
+          label="Search queries"
+          value={fmtCompactNumber(totals.search_queries)}
+          sub="grounding"
+          accent="#10b981"
+          info="Gemini grounding-search queries in the last 24h. Each query is billed at $14/1k (Gemini 3) — high volume here is the usual cost-spike culprit."
+        />
+        <UsageTile
+          label="Cost"
+          value={fmtUsdMicros(totals.cost_micros, 3)}
+          sub={`${fmtUsdMicros(totals.llm_cost_micros, 3)} LLM · ${fmtUsdMicros(totals.search_cost_micros, 3)} search · ${llmShare}% LLM`}
+          accent="#ef4444"
+          info="Total cost across all agents in the last 24h, billed by the upstream Google API and recorded by agentleh-meter. Split by kind in the sub-line."
+        />
+      </div>
+    </div>
+  )
+}
+
+function CostByKindChart({ hours }: { hours: VmStatsResponse['cost_by_kind_per_hour'] }) {
+  if (hours.length === 0) {
+    return (
+      <div className="glass-card p-6 text-sm text-gray-500">
+        No cost data in the last 24 hours.
+      </div>
+    )
+  }
+  const data = hours.map((h) => ({
+    hour: fmtHourOnly(h.hour),
+    llm: Number(h.llm_cost_micros) / 1_000_000,
+    search: Number(h.search_cost_micros) / 1_000_000,
+  }))
+  const totalLlm = data.reduce((a, b) => a + b.llm, 0)
+  const totalSearch = data.reduce((a, b) => a + b.search, 0)
+  return (
+    <div className="glass-card p-6">
+      <div className="flex items-baseline justify-between mb-3">
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-base font-semibold">Cost by kind — last 24h</h3>
+          <span
+            className="text-xs text-gray-400 cursor-help"
+            title="Per-hour stacked cost split between LLM (chat completions, billed per token) and grounding search (billed per query at $14/1k for Gemini 3). The most actionable cost lever you have."
+          >
+            ⓘ
+          </span>
+        </div>
+        <div className="text-xs text-gray-600">
+          <span className="font-mono font-semibold" style={{ color: CHART_COLORS.llm }}>${totalLlm.toFixed(4)}</span>
+          {' '}LLM ·{' '}
+          <span className="font-mono font-semibold" style={{ color: CHART_COLORS.search }}>${totalSearch.toFixed(4)}</span>
+          {' '}search
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={260}>
+        <BarChart data={data} margin={CHART_MARGIN} barCategoryGap="20%">
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+          <XAxis dataKey="hour" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} minTickGap={28} />
+          <YAxis
+            tick={AXIS_TICK}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={(v) => `$${Number(v).toFixed(3)}`}
+            width={56}
+            padding={{ top: 8 }}
+          />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            labelStyle={tooltipLabelStyle}
+            itemStyle={tooltipItemStyle}
+            cursor={tooltipCursor}
+            formatter={(v) => `$${Number(v).toFixed(4)}`}
+          />
+          <Legend wrapperStyle={legendStyle} iconType="circle" />
+          <Bar dataKey="llm" name="LLM" stackId="cost" fill={CHART_COLORS.llm} maxBarSize={48} isAnimationActive={false} />
+          <Bar dataKey="search" name="Search" stackId="cost" fill={CHART_COLORS.search} radius={[4, 4, 0, 0]} maxBarSize={48} isAnimationActive={false} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+function TokensThroughputChart({ hours }: { hours: VmStatsResponse['tokens_per_hour'] }) {
+  if (hours.length === 0) {
+    return (
+      <div className="glass-card p-6 text-sm text-gray-500">
+        No token data in the last 24 hours.
+      </div>
+    )
+  }
+  const data = hours.map((h) => ({
+    hour: fmtHourOnly(h.hour),
+    input: Number(h.input_tokens),
+    output: Number(h.output_tokens),
+    cached: Number(h.cached_tokens),
+  }))
+  const totalInput = data.reduce((a, b) => a + b.input, 0)
+  const totalOutput = data.reduce((a, b) => a + b.output, 0)
+  const ratio = totalOutput > 0 ? (totalInput / totalOutput).toFixed(1) : '∞'
+  return (
+    <div className="glass-card p-6">
+      <div className="flex items-baseline justify-between mb-3">
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-base font-semibold">Token throughput — last 24h</h3>
+          <span
+            className="text-xs text-gray-400 cursor-help"
+            title="Per-hour input vs output tokens for LLM calls. Watch the gap — input climbing without output climbing means context bloat (compaction failing or runaway memory)."
+          >
+            ⓘ
+          </span>
+        </div>
+        <div className="text-xs text-gray-600">
+          ratio in/out <span className="font-mono font-semibold">{ratio}x</span>
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={260}>
+        <AreaChart data={data} margin={CHART_MARGIN}>
+          <defs>
+            <linearGradient id="inputFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={CHART_COLORS.llm} stopOpacity={0.45} />
+              <stop offset="100%" stopColor={CHART_COLORS.llm} stopOpacity={0.02} />
+            </linearGradient>
+            <linearGradient id="outputFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={CHART_COLORS.output} stopOpacity={0.45} />
+              <stop offset="100%" stopColor={CHART_COLORS.output} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+          <XAxis dataKey="hour" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} minTickGap={28} />
+          <YAxis
+            tick={AXIS_TICK}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={(v) => fmtCompactNumber(Number(v))}
+            width={48}
+            padding={{ top: 8 }}
+          />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            labelStyle={tooltipLabelStyle}
+            itemStyle={tooltipItemStyle}
+            cursor={{ stroke: '#9ca3af', strokeWidth: 1, strokeDasharray: '3 3' }}
+            formatter={(v) => Number(v).toLocaleString()}
+          />
+          <Legend wrapperStyle={legendStyle} iconType="circle" />
+          <Area type="monotone" dataKey="input" name="Input" stroke={CHART_COLORS.llm} strokeWidth={2} fill="url(#inputFill)" activeDot={{ r: 4 }} isAnimationActive={false} />
+          <Area type="monotone" dataKey="output" name="Output" stroke={CHART_COLORS.output} strokeWidth={2} fill="url(#outputFill)" activeDot={{ r: 4 }} isAnimationActive={false} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+function ModelBreakdownCard({ rows }: { rows: VmStatsResponse['model_breakdown_7d'] }) {
+  if (rows.length === 0) {
+    return (
+      <div className="glass-card p-6">
+        <h3 className="text-base font-semibold mb-3">Cost by model — last 7 days</h3>
+        <div className="text-sm text-gray-500">No model usage in the last 7 days.</div>
+      </div>
+    )
+  }
+  // One bar per (model, kind) so the kind is honest in the chart, not buried
+  // in a footnote. Most models have one kind so this collapses to one bar each.
+  const chartData = rows
+    .slice()
+    .sort((a, b) => Number(b.cost_micros) - Number(a.cost_micros))
+    .map((r) => ({
+      model: r.model,
+      kind: r.kind,
+      usd: Number(r.cost_micros) / 1_000_000,
+      events: Number(r.events),
+      tokens: Number(r.total_tokens),
+      // include kind in the y-axis label only if a model has both
+      label: r.model,
+    }))
+  const maxUsd = Math.max(...chartData.map((d) => d.usd), 0.001)
+  const chartHeight = Math.max(160, chartData.length * 36 + 30)
+  return (
+    <div className="glass-card p-6">
+      <div className="flex items-baseline justify-between mb-3">
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-base font-semibold">Cost by model — last 7 days</h3>
+          <span
+            className="text-xs text-gray-400 cursor-help"
+            title="Per-(model, kind) spend over the last 7 days. Bar color encodes kind: blue = LLM/chat, green = grounding search. Any unexpected model at the top means an accidental fallback — fix it before it compounds."
+          >
+            ⓘ
+          </span>
+        </div>
+        <div className="text-xs text-gray-500">
+          <span className="inline-block w-2 h-2 rounded-full mr-1 align-middle" style={{ background: CHART_COLORS.llm }} />LLM
+          <span className="inline-block w-2 h-2 rounded-full mr-1 ml-2 align-middle" style={{ background: CHART_COLORS.search }} />Search
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={chartHeight}>
+        <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 80, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} horizontal={false} />
+          <XAxis
+            type="number"
+            tick={AXIS_TICK}
+            axisLine={false}
+            tickLine={false}
+            domain={[0, Math.ceil(maxUsd * 1.15 * 100) / 100]}
+            tickFormatter={(v) => `$${Number(v).toFixed(2)}`}
+          />
+          <YAxis
+            type="category"
+            dataKey="label"
+            tick={{ ...AXIS_TICK, fontFamily: 'ui-monospace, monospace', fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            width={210}
+          />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            labelStyle={tooltipLabelStyle}
+            itemStyle={tooltipItemStyle}
+            cursor={tooltipCursor}
+            formatter={(v, name) =>
+              name === 'Spend' ? `$${Number(v).toFixed(4)}` : Number(v).toLocaleString()
+            }
+          />
+          <Bar dataKey="usd" name="Spend" radius={[0, 6, 6, 0]} maxBarSize={26} isAnimationActive={false}>
+            {chartData.map((row, i) => (
+              <Cell
+                key={`${row.model}-${row.kind}-${i}`}
+                fill={row.kind === 'search' ? CHART_COLORS.search : CHART_COLORS.llm}
+              />
+            ))}
+            <LabelList
+              dataKey="usd"
+              position="right"
+              formatter={(v: unknown) => `$${Number(v).toFixed(4)}`}
+              style={{ fill: '#374151', fontSize: 11, fontWeight: 600 }}
+            />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+      <table className="w-full text-xs mt-3">
+        <thead className="text-gray-500">
+          <tr>
+            <th className="text-left p-1">Model</th>
+            <th className="text-left p-1">Kind</th>
+            <th className="text-right p-1">Spend</th>
+            <th className="text-right p-1">Events</th>
+            <th className="text-right p-1">Tokens</th>
+          </tr>
+        </thead>
+        <tbody>
+          {chartData.map((m, i) => (
+            <tr key={`${m.model}-${m.kind}-${i}`} className="border-t">
+              <td className="p-1 font-mono">{m.model}</td>
+              <td className="p-1">
+                <span
+                  className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide"
+                  style={{
+                    background: m.kind === 'search' ? '#dcfce7' : '#dbeafe',
+                    color: m.kind === 'search' ? '#166534' : '#1e40af',
+                  }}
+                >
+                  {m.kind}
+                </span>
+              </td>
+              <td className="p-1 text-right font-mono">${m.usd.toFixed(4)}</td>
+              <td className="p-1 text-right text-gray-500">{m.events.toLocaleString()}</td>
+              <td className="p-1 text-right text-gray-500">{m.tokens.toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 function HistoryCharts({ history }: { history: VmStatsResponse['history'] }) {
@@ -656,41 +1104,70 @@ function HistoryCharts({ history }: { history: VmStatsResponse['history'] }) {
     disk: Number(r.disk_data_pct ?? r.disk_root_pct ?? 0),
     containers: Number(r.containers_run ?? 0),
   }))
-  const maxContainers = Math.max(25, ...histData.map((r) => r.containers))
+  const maxContainers = Math.max(5, ...histData.map((r) => r.containers))
   return (
     <div className="glass-card p-6">
-      <h3 className="text-base font-semibold mb-3">Last 24 hours</h3>
+      <div className="flex items-baseline justify-between mb-3">
+        <h3 className="text-base font-semibold">VM history — last 24 hours</h3>
+        <span className="text-xs text-gray-500">{history.length} samples · 60s cadence</span>
+      </div>
       <div className="space-y-6">
         <div>
           <div className="text-xs text-gray-600 mb-2">CPU · RAM · Disk (%)</div>
           <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={histData} margin={{ top: 5, right: 12, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-              <XAxis dataKey="time" tick={AXIS_TICK} minTickGap={32} />
-              <YAxis tick={AXIS_TICK} domain={[0, 100]} unit="%" />
-              <Tooltip contentStyle={tooltipStyle} formatter={(v) => `${Number(v).toFixed(1)}%`} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="cpu" name="CPU" stroke="#3b82f6" strokeWidth={2} dot={false} isAnimationActive={false} />
-              <Line type="monotone" dataKey="ram" name="RAM" stroke="#8b5cf6" strokeWidth={2} dot={false} isAnimationActive={false} />
-              <Line type="monotone" dataKey="disk" name="Disk" stroke="#f59e0b" strokeWidth={2} dot={false} isAnimationActive={false} />
+            <LineChart data={histData} margin={CHART_MARGIN}>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+              <XAxis dataKey="time" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} minTickGap={32} />
+              <YAxis
+                tick={AXIS_TICK}
+                axisLine={false}
+                tickLine={false}
+                domain={[0, 100]}
+                ticks={[0, 25, 50, 75, 100]}
+                tickFormatter={(v) => `${v}%`}
+                width={40}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                labelStyle={tooltipLabelStyle}
+                itemStyle={tooltipItemStyle}
+                cursor={{ stroke: '#9ca3af', strokeWidth: 1, strokeDasharray: '3 3' }}
+                formatter={(v) => `${Number(v).toFixed(1)}%`}
+              />
+              <Legend wrapperStyle={legendStyle} iconType="circle" />
+              <Line type="monotone" dataKey="cpu" name="CPU" stroke={CHART_COLORS.cpu} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+              <Line type="monotone" dataKey="ram" name="RAM" stroke={CHART_COLORS.ram} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+              <Line type="monotone" dataKey="disk" name="Disk" stroke={CHART_COLORS.disk} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
         <div>
-          <div className="text-xs text-gray-600 mb-2">Running containers</div>
+          <div className="text-xs text-gray-600 mb-2">Running containers (agents only)</div>
           <ResponsiveContainer width="100%" height={140}>
-            <AreaChart data={histData} margin={{ top: 5, right: 12, left: -10, bottom: 0 }}>
+            <AreaChart data={histData} margin={CHART_MARGIN}>
               <defs>
                 <linearGradient id="containersFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.45} />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+                  <stop offset="0%" stopColor={CHART_COLORS.containers} stopOpacity={0.45} />
+                  <stop offset="100%" stopColor={CHART_COLORS.containers} stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-              <XAxis dataKey="time" tick={AXIS_TICK} minTickGap={32} />
-              <YAxis tick={AXIS_TICK} domain={[0, maxContainers]} allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Area type="monotone" dataKey="containers" name="Containers" stroke="#10b981" strokeWidth={2} fill="url(#containersFill)" isAnimationActive={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+              <XAxis dataKey="time" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} minTickGap={32} />
+              <YAxis
+                tick={AXIS_TICK}
+                axisLine={false}
+                tickLine={false}
+                domain={[0, maxContainers]}
+                allowDecimals={false}
+                width={40}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                labelStyle={tooltipLabelStyle}
+                itemStyle={tooltipItemStyle}
+                cursor={{ stroke: '#9ca3af', strokeWidth: 1, strokeDasharray: '3 3' }}
+              />
+              <Area type="monotone" dataKey="containers" name="Containers" stroke={CHART_COLORS.containers} strokeWidth={2} fill="url(#containersFill)" activeDot={{ r: 4 }} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -700,9 +1177,15 @@ function HistoryCharts({ history }: { history: VmStatsResponse['history'] }) {
 }
 
 function TrafficChart({ events }: { events: VmStatsResponse['events_per_hour'] }) {
-  if (events.length === 0) return null
+  if (events.length === 0) {
+    return (
+      <div className="glass-card p-6 text-sm text-gray-500">
+        No meter traffic in the last 24 hours.
+      </div>
+    )
+  }
   const trafficData = events.map((r) => ({
-    hour: new Date(r.hour).toLocaleTimeString('en-GB', { hour: '2-digit' }) + ':00',
+    hour: fmtHourOnly(r.hour),
     events: Number(r.events),
     costUsd: Number(r.cost_micros) / 1_000_000,
   }))
@@ -711,32 +1194,56 @@ function TrafficChart({ events }: { events: VmStatsResponse['events_per_hour'] }
   return (
     <div className="glass-card p-6">
       <div className="flex items-baseline justify-between mb-3">
-        <h3 className="text-base font-semibold">Meter traffic — last 24h</h3>
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-base font-semibold">Meter traffic — last 24h</h3>
+          <span
+            className="text-xs text-gray-400 cursor-help"
+            title="Total request volume (bars, left axis) and total cost (line, right axis) per hour. Volume is the dominant signal; the line shows whether the cost is correlated."
+          >
+            ⓘ
+          </span>
+        </div>
         <div className="text-xs text-gray-600">
-          <span className="font-mono">{totalEvents}</span> events ·{' '}
-          <span className="font-mono">${totalCost.toFixed(4)}</span>
+          <span className="font-mono font-semibold">{fmtCompactNumber(totalEvents)}</span> events ·{' '}
+          <span className="font-mono font-semibold">${totalCost.toFixed(4)}</span>
         </div>
       </div>
       <ResponsiveContainer width="100%" height={260}>
-        <ComposedChart data={trafficData} margin={{ top: 5, right: 12, left: -10, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-          <XAxis dataKey="hour" tick={AXIS_TICK} minTickGap={28} />
-          <YAxis yAxisId="left" tick={AXIS_TICK} allowDecimals={false} />
+        <ComposedChart data={trafficData} margin={CHART_MARGIN} barCategoryGap="20%">
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+          <XAxis dataKey="hour" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} minTickGap={28} />
+          <YAxis
+            yAxisId="left"
+            tick={AXIS_TICK}
+            axisLine={false}
+            tickLine={false}
+            allowDecimals={false}
+            tickFormatter={(v) => fmtCompactNumber(Number(v))}
+            width={44}
+            padding={{ top: 8 }}
+          />
           <YAxis
             yAxisId="right"
             orientation="right"
             tick={AXIS_TICK}
+            axisLine={false}
+            tickLine={false}
             tickFormatter={(v) => `$${Number(v).toFixed(2)}`}
+            width={56}
+            padding={{ top: 8 }}
           />
           <Tooltip
             contentStyle={tooltipStyle}
+            labelStyle={tooltipLabelStyle}
+            itemStyle={tooltipItemStyle}
+            cursor={tooltipCursor}
             formatter={(v, name) =>
               name === 'Cost' ? `$${Number(v).toFixed(4)}` : Number(v).toLocaleString()
             }
           />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Bar yAxisId="left" dataKey="events" name="Events" fill="#0ea5e9" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-          <Line yAxisId="right" type="monotone" dataKey="costUsd" name="Cost" stroke="#ef4444" strokeWidth={2} dot={false} isAnimationActive={false} />
+          <Legend wrapperStyle={legendStyle} iconType="circle" />
+          <Bar yAxisId="left" dataKey="events" name="Events" fill={CHART_COLORS.events} radius={[4, 4, 0, 0]} maxBarSize={48} isAnimationActive={false} />
+          <Line yAxisId="right" type="monotone" dataKey="costUsd" name="Cost" stroke={CHART_COLORS.cost} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -756,21 +1263,57 @@ function MeterLatencyCard({ latency }: { latency: VmStatsResponse['meter_latency
     { name: 'p95', ms: latency.p95 ?? 0 },
     { name: 'p99', ms: latency.p99 ?? 0 },
   ]
+  const maxMs = Math.max(...data.map((d) => d.ms), 1)
   return (
     <div className="glass-card p-6">
       <div className="flex items-baseline justify-between mb-3">
-        <h3 className="text-base font-semibold">Meter latency (last 1h)</h3>
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-base font-semibold">Meter latency — last 1h</h3>
+          <span
+            className="text-xs text-gray-400 cursor-help"
+            title="Round-trip latency through agentleh-meter for successful upstream calls (status 200) over the last hour. p50 = median, p99 = tail. Sustained p99 above 5s usually means the upstream Google API is degraded."
+          >
+            ⓘ
+          </span>
+        </div>
         <div className="text-xs text-gray-500">
-          n = <span className="font-mono">{latency.n}</span>
+          n = <span className="font-mono font-semibold">{latency.n.toLocaleString()}</span>
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={140}>
-        <BarChart data={data} layout="vertical" margin={{ top: 5, right: 16, left: 0, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={150}>
+        <BarChart data={data} layout="vertical" margin={{ top: 5, right: 60, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} horizontal={false} />
-          <XAxis type="number" tick={AXIS_TICK} unit="ms" />
-          <YAxis type="category" dataKey="name" tick={AXIS_TICK} width={36} />
-          <Tooltip contentStyle={tooltipStyle} formatter={(v) => `${v}ms`} />
-          <Bar dataKey="ms" fill="#6366f1" radius={[0, 4, 4, 0]} isAnimationActive={false} />
+          <XAxis
+            type="number"
+            tick={AXIS_TICK}
+            axisLine={false}
+            tickLine={false}
+            domain={[0, Math.ceil(maxMs * 1.15)]}
+            tickFormatter={(v) => `${v}ms`}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            tick={{ ...AXIS_TICK, fontWeight: 600 }}
+            axisLine={false}
+            tickLine={false}
+            width={44}
+          />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            labelStyle={tooltipLabelStyle}
+            itemStyle={tooltipItemStyle}
+            cursor={tooltipCursor}
+            formatter={(v) => `${Number(v).toLocaleString()}ms`}
+          />
+          <Bar dataKey="ms" fill={CHART_COLORS.latency} radius={[0, 6, 6, 0]} maxBarSize={28} isAnimationActive={false}>
+            <LabelList
+              dataKey="ms"
+              position="right"
+              formatter={(v: unknown) => `${Number(v).toLocaleString()}ms`}
+              style={{ fill: '#374151', fontSize: 11, fontWeight: 600 }}
+            />
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -781,7 +1324,7 @@ function TopAgentsCard({ agents }: { agents: VmStatsResponse['top_agents'] }) {
   if (agents.length === 0) {
     return (
       <div className="glass-card p-6">
-        <h3 className="text-base font-semibold mb-3">Top agents — last 30 days ($ spend)</h3>
+        <h3 className="text-base font-semibold mb-3">Top agents — last 30 days</h3>
         <div className="text-sm text-gray-500">No usage yet.</div>
       </div>
     )
@@ -795,22 +1338,58 @@ function TopAgentsCard({ agents }: { agents: VmStatsResponse['top_agents'] }) {
       events: a.events,
       tokens: Number(a.total_tokens),
     }))
-  const chartHeight = Math.max(120, chartData.length * 28 + 40)
+  const maxUsd = Math.max(...chartData.map((d) => d.usd), 0.001)
+  const chartHeight = Math.max(140, chartData.length * 36 + 30)
   return (
     <div className="glass-card p-6">
-      <h3 className="text-base font-semibold mb-3">Top agents — last 30 days ($ spend)</h3>
+      <div className="flex items-baseline justify-between mb-3">
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-base font-semibold">Top agents — last 30 days</h3>
+          <span
+            className="text-xs text-gray-400 cursor-help"
+            title="Top 5 agents by total cost over the last 30 days. The bar shows $ spend; the table below has events and tokens for each."
+          >
+            ⓘ
+          </span>
+        </div>
+        <div className="text-xs text-gray-500">by spend</div>
+      </div>
       <ResponsiveContainer width="100%" height={chartHeight}>
-        <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 16, left: 0, bottom: 0 }}>
+        <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 72, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} horizontal={false} />
-          <XAxis type="number" tick={AXIS_TICK} tickFormatter={(v) => `$${Number(v).toFixed(2)}`} />
-          <YAxis type="category" dataKey="agent" tick={{ ...AXIS_TICK, fontFamily: 'ui-monospace, monospace' }} width={120} />
+          <XAxis
+            type="number"
+            tick={AXIS_TICK}
+            axisLine={false}
+            tickLine={false}
+            domain={[0, Math.ceil(maxUsd * 1.15 * 100) / 100]}
+            tickFormatter={(v) => `$${Number(v).toFixed(2)}`}
+          />
+          <YAxis
+            type="category"
+            dataKey="agent"
+            tick={{ ...AXIS_TICK, fontFamily: 'ui-monospace, monospace', fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            width={140}
+          />
           <Tooltip
             contentStyle={tooltipStyle}
+            labelStyle={tooltipLabelStyle}
+            itemStyle={tooltipItemStyle}
+            cursor={tooltipCursor}
             formatter={(v, name) =>
               name === 'Spend' ? `$${Number(v).toFixed(4)}` : Number(v).toLocaleString()
             }
           />
-          <Bar dataKey="usd" name="Spend" fill="#0ea5e9" radius={[0, 4, 4, 0]} isAnimationActive={false} />
+          <Bar dataKey="usd" name="Spend" fill={CHART_COLORS.spend} radius={[0, 6, 6, 0]} maxBarSize={26} isAnimationActive={false}>
+            <LabelList
+              dataKey="usd"
+              position="right"
+              formatter={(v: unknown) => `$${Number(v).toFixed(4)}`}
+              style={{ fill: '#374151', fontSize: 11, fontWeight: 600 }}
+            />
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
       <table className="w-full text-xs mt-3">
