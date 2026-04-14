@@ -25,11 +25,38 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import {
-  getVoiceManifest,
-  type VoiceManifest,
-  type VoiceManifestEntry,
-} from '../lib/api'
+
+/* ───────────────────────────────────────────────────────────
+ * Types + fetch are inlined here rather than imported from
+ * lib/api so this component is self-contained and doesn't
+ * depend on the multi-tenancy helpers being merged first.
+ * When lib/api gains the voice helpers they can be imported
+ * here as a one-line refactor.
+ * ─────────────────────────────────────────────────────────── */
+
+interface VoiceManifestEntry {
+  name: string
+  gender: 'female' | 'male'
+  is_default: boolean
+  sample_path: string
+  size_bytes: number
+  url_prod: string
+  url_dev: string
+}
+
+interface VoiceManifest {
+  model: string
+  language_code: string
+  sample_text: string
+  default_voice: string
+  voices: VoiceManifestEntry[]
+}
+
+async function fetchVoiceManifest(): Promise<VoiceManifest> {
+  const res = await fetch('/api/voices/manifest')
+  if (!res.ok) throw new Error('Voice manifest fetch failed')
+  return res.json()
+}
 
 interface VoicePickerProps {
   value: string
@@ -53,8 +80,8 @@ export default function VoicePicker({
 
   useEffect(() => {
     let cancelled = false
-    getVoiceManifest()
-      .then((m) => {
+    fetchVoiceManifest()
+      .then((m: VoiceManifest) => {
         if (cancelled) return
         setManifest(m)
         // If the caller didn't pre-select a voice, default to the manifest's
@@ -65,7 +92,7 @@ export default function VoicePicker({
           onChange(fallbackDefault)
         }
       })
-      .catch((e) => {
+      .catch((e: Error) => {
         if (cancelled) return
         setError(e.message || 'Failed to load voices')
       })
@@ -127,7 +154,7 @@ export default function VoicePicker({
     )
   }
 
-  const filtered = manifest.voices.filter((v) => {
+  const filtered = manifest.voices.filter((v: VoiceManifestEntry) => {
     if (filter === 'all') return true
     return v.gender === filter
   })
@@ -143,10 +170,10 @@ export default function VoicePicker({
           active={filter === 'female'}
           onClick={() => setFilter('female')}
         >
-          נשיים ({manifest.voices.filter((v) => v.gender === 'female').length})
+          נשיים ({manifest.voices.filter((v: VoiceManifestEntry) => v.gender === 'female').length})
         </FilterButton>
         <FilterButton active={filter === 'male'} onClick={() => setFilter('male')}>
-          גבריים ({manifest.voices.filter((v) => v.gender === 'male').length})
+          גבריים ({manifest.voices.filter((v: VoiceManifestEntry) => v.gender === 'male').length})
         </FilterButton>
       </div>
 
@@ -157,7 +184,7 @@ export default function VoicePicker({
 
       {/* Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[360px] overflow-y-auto">
-        {filtered.map((voice) => {
+        {filtered.map((voice: VoiceManifestEntry) => {
           const isSelected = voice.name === value
           const isPlaying = playing === voice.name
           return (
