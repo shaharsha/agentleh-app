@@ -206,6 +206,20 @@ async def admin_vm_stats(
         live_error = f"vm_stats_unreachable: {exc}"
         logger.warning("vm-stats fetch failed: %s", exc)
 
+    # Filter the docker container list down to OpenClaw agent containers only.
+    # Vector (log shipper) and any other support containers are interesting to
+    # ops but noise on the admin dashboard, which is meant to surface agents.
+    if live and isinstance(live.get("docker"), dict):
+        docker = live["docker"]
+        all_containers = docker.get("containers") or []
+        agent_containers = [
+            c for c in all_containers
+            if "openclaw/openclaw" in (c.get("image") or "")
+        ]
+        docker["containers"] = agent_containers
+        docker["total"] = len(agent_containers)
+        docker["running"] = sum(1 for c in agent_containers if c.get("state") == "running")
+
     db = request.app.state.db
     history = db._fetch_all(
         """
@@ -262,6 +276,75 @@ async def admin_vm_stats(
         """,
     )
 
+    # 24h totals: requests, tokens, search queries, cost — split by kind so the
+    # frontend can show "LLM vs Search" without re-aggregating.
+    today_totals = db._fetch_one(
+        """
+        SELECT
+            COUNT(*)                                                          AS requests,
+            COUNT(*) FILTER (WHERE kind = 'llm')                              AS llm_requests,
+            COUNT(*) FILTER (WHERE kind = 'search')                           AS search_requests,
+            COALESCE(SUM(input_tokens), 0)::bigint                            AS input_tokens,
+            COALESCE(SUM(output_tokens), 0)::bigint                           AS output_tokens,
+            COALESCE(SUM(cached_tokens), 0)::bigint                           AS cached_tokens,
+            COALESCE(SUM(search_queries), 0)::bigint                          AS search_queries,
+            COALESCE(SUM(cost_micros), 0)::bigint                             AS cost_micros,
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'llm'), 0)::bigint AS llm_cost_micros,
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'search'), 0)::bigint AS search_cost_micros
+        FROM usage_events
+        WHERE ts > now() - interval '24 hours'
+        """,
+    )
+
+    # Per-hour cost split by kind — pivoted server-side so each row is one hour.
+    cost_by_kind_per_hour = db._fetch_all(
+        """
+        SELECT
+            date_trunc('hour', ts) AS hour,
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'llm'),    0)::bigint AS llm_cost_micros,
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'search'), 0)::bigint AS search_cost_micros,
+            COUNT(*) FILTER (WHERE kind = 'llm')                                 AS llm_events,
+            COUNT(*) FILTER (WHERE kind = 'search')                              AS search_events
+        FROM usage_events
+        WHERE ts > now() - interval '24 hours'
+        GROUP BY hour
+        ORDER BY hour ASC
+        """,
+    )
+
+    # Token throughput per hour (LLM only — search has no input/output tokens).
+    tokens_per_hour = db._fetch_all(
+        """
+        SELECT
+            date_trunc('hour', ts) AS hour,
+            COALESCE(SUM(input_tokens),  0)::bigint AS input_tokens,
+            COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
+            COALESCE(SUM(cached_tokens), 0)::bigint AS cached_tokens
+        FROM usage_events
+        WHERE ts > now() - interval '24 hours'
+          AND kind = 'llm'
+        GROUP BY hour
+        ORDER BY hour ASC
+        """,
+    )
+
+    # 7-day cost breakdown by model — catches accidental fallback to a more
+    # expensive model. One row per (model, kind).
+    model_breakdown_7d = db._fetch_all(
+        """
+        SELECT
+            model,
+            kind,
+            COUNT(*)                                       AS events,
+            COALESCE(SUM(cost_micros), 0)::bigint          AS cost_micros,
+            COALESCE(SUM(input_tokens + output_tokens), 0)::bigint AS total_tokens
+        FROM usage_events
+        WHERE ts > now() - interval '7 days'
+        GROUP BY model, kind
+        ORDER BY cost_micros DESC
+        """,
+    )
+
     return {
         "live": live,
         "live_error": live_error,
@@ -269,4 +352,8 @@ async def admin_vm_stats(
         "events_per_hour": events_per_hour,
         "top_agents": top_agents,
         "meter_latency_1h": meter_latency,
+        "today_totals": today_totals,
+        "cost_by_kind_per_hour": cost_by_kind_per_hour,
+        "tokens_per_hour": tokens_per_hour,
+        "model_breakdown_7d": model_breakdown_7d,
     }
