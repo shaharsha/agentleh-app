@@ -181,7 +181,7 @@ class AppDatabase:
 
     def get_user_agents(self, user_id: int) -> list[dict[str, Any]]:
         return self._fetch_all(
-            """SELECT ua.*, a.gateway_url
+            """SELECT ua.*, a.gateway_url, a.tenant_id, a.tts_voice_name
                FROM app_user_agents ua
                JOIN agents a ON a.agent_id = ua.agent_id
                WHERE ua.user_id = %s
@@ -304,3 +304,419 @@ class AppDatabase:
         """Superadmin-only: promote/demote a user."""
         self._execute("UPDATE app_users SET role = %s WHERE id = %s", (role, user_id))
         return self.get_user_by_id(user_id)
+
+    # ── Tenants ───────────────────────────────────────────────────────
+    # Multi-tenancy layer: a tenant is the billing boundary; one user can
+    # belong to many tenants with per-tenant roles ('owner' | 'admin' |
+    # 'member'). Every real (non-stub) user gets a default tenant at
+    # onboarding time via ensure_default_tenant(). All meter hot-path state
+    # lives in `agent_subscriptions` keyed on tenant_id — the tenant holds
+    # one shared pool across all its agents.
+
+    def ensure_default_tenant(self, user_id: int) -> dict[str, Any]:
+        """Return the user's default tenant, creating it on first call.
+
+        Idempotent: if the user already owns a tenant, returns their
+        oldest-owned one. Otherwise creates a fresh tenant + owner
+        membership in one transaction and returns the new row.
+
+        Called from onboarding submit so every new user gets a working
+        workspace before their first agent is provisioned.
+        """
+        existing = self._fetch_one(
+            """
+            SELECT t.*
+              FROM tenants t
+              JOIN tenant_memberships tm
+                ON tm.tenant_id = t.id
+               AND tm.user_id   = %s
+               AND tm.role      = 'owner'
+             WHERE t.deleted_at IS NULL
+             ORDER BY t.created_at ASC
+             LIMIT 1
+            """,
+            (user_id,),
+        )
+        if existing:
+            return existing
+
+        user = self.get_user_by_id(user_id)
+        if user is None:
+            raise ValueError(f"user {user_id} not found")
+
+        email_local = (user["email"] or "user").split("@", 1)[0].lower()
+        slug = f"{email_local}-{user_id}"
+        name_base = user["full_name"] or email_local
+        name = f"{name_base}'s workspace"
+        billing_email = user["email"] or ""
+
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO tenants (slug, name, owner_user_id, billing_email)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING *
+                    """,
+                    (slug, name, user_id, billing_email),
+                )
+                tenant = cur.fetchone()
+                cur.execute(
+                    """
+                    INSERT INTO tenant_memberships (tenant_id, user_id, role)
+                    VALUES (%s, %s, 'owner')
+                    ON CONFLICT DO NOTHING
+                    """,
+                    (tenant["id"], user_id),
+                )
+            conn.commit()
+        return dict(tenant)
+
+    def create_tenant(
+        self,
+        *,
+        name: str,
+        owner_user_id: int,
+        billing_email: str = "",
+    ) -> dict[str, Any]:
+        """Create a new tenant owned by owner_user_id. Used for the
+        'create additional workspace' flow after the default tenant exists.
+
+        Generates a URL-safe slug from the tenant name with a random 4-char
+        suffix to avoid collisions with existing tenants (including the
+        default `<email>-<user_id>` slug).
+        """
+        import re
+        import secrets
+
+        base = re.sub(r"[^a-z0-9-]+", "-", name.strip().lower()).strip("-") or "workspace"
+        suffix = secrets.token_hex(2)
+        slug = f"{base}-{suffix}"
+
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO tenants (slug, name, owner_user_id, billing_email)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING *
+                    """,
+                    (slug, name.strip(), owner_user_id, billing_email),
+                )
+                tenant = cur.fetchone()
+                cur.execute(
+                    """
+                    INSERT INTO tenant_memberships (tenant_id, user_id, role)
+                    VALUES (%s, %s, 'owner')
+                    """,
+                    (tenant["id"], owner_user_id),
+                )
+            conn.commit()
+        return dict(tenant)
+
+    def get_tenant_by_id(self, tenant_id: int) -> dict[str, Any] | None:
+        return self._fetch_one(
+            "SELECT * FROM tenants WHERE id = %s AND deleted_at IS NULL",
+            (tenant_id,),
+        )
+
+    def get_tenant_by_slug(self, slug: str) -> dict[str, Any] | None:
+        return self._fetch_one(
+            "SELECT * FROM tenants WHERE slug = %s AND deleted_at IS NULL",
+            (slug,),
+        )
+
+    def list_user_tenants(self, user_id: int) -> list[dict[str, Any]]:
+        """List every tenant the user is a member of with their role."""
+        return self._fetch_all(
+            """
+            SELECT t.id, t.slug, t.name, t.owner_user_id, t.billing_email,
+                   t.created_at, tm.role
+              FROM tenants t
+              JOIN tenant_memberships tm ON tm.tenant_id = t.id
+             WHERE tm.user_id = %s AND t.deleted_at IS NULL
+             ORDER BY t.created_at ASC
+            """,
+            (user_id,),
+        )
+
+    def get_tenant_membership(self, tenant_id: int, user_id: int) -> dict[str, Any] | None:
+        """Used by get_active_tenant_member dep — returns None for non-members."""
+        return self._fetch_one(
+            """
+            SELECT tm.tenant_id, tm.user_id, tm.role, tm.joined_at
+              FROM tenant_memberships tm
+              JOIN tenants t ON t.id = tm.tenant_id
+             WHERE tm.tenant_id = %s AND tm.user_id = %s AND t.deleted_at IS NULL
+            """,
+            (tenant_id, user_id),
+        )
+
+    def list_tenant_members(self, tenant_id: int) -> list[dict[str, Any]]:
+        """Members of a tenant with their user profile for the UI."""
+        return self._fetch_all(
+            """
+            SELECT u.id AS user_id, u.email, u.full_name,
+                   tm.role, tm.joined_at
+              FROM tenant_memberships tm
+              JOIN app_users u ON u.id = tm.user_id
+             WHERE tm.tenant_id = %s
+             ORDER BY CASE tm.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+                      tm.joined_at ASC
+            """,
+            (tenant_id,),
+        )
+
+    def update_tenant(self, tenant_id: int, **fields) -> dict[str, Any] | None:
+        """Rename / update billing_email. Only whitelisted columns."""
+        allowed = {"name", "billing_email"}
+        sets = []
+        params: list[Any] = []
+        for k, v in fields.items():
+            if k in allowed:
+                sets.append(f"{k} = %s")
+                params.append(v)
+        if not sets:
+            return self.get_tenant_by_id(tenant_id)
+        params.append(tenant_id)
+        self._execute(
+            f"UPDATE tenants SET {', '.join(sets)} WHERE id = %s AND deleted_at IS NULL",
+            tuple(params),
+        )
+        return self.get_tenant_by_id(tenant_id)
+
+    def count_user_owned_tenants(self, user_id: int) -> int:
+        """For the last-tenant-delete guard: a user must always own at least
+        one non-deleted tenant so downstream code can assume a default exists."""
+        row = self._fetch_one(
+            """
+            SELECT COUNT(*)::int AS n
+              FROM tenants
+             WHERE owner_user_id = %s AND deleted_at IS NULL
+            """,
+            (user_id,),
+        )
+        return int(row["n"]) if row else 0
+
+    def soft_delete_tenant(self, tenant_id: int) -> None:
+        self._execute(
+            "UPDATE tenants SET deleted_at = now() WHERE id = %s AND deleted_at IS NULL",
+            (tenant_id,),
+        )
+
+    def transfer_tenant_owner(self, tenant_id: int, new_owner_user_id: int) -> None:
+        """Atomic ownership transfer. The new owner must already be a member.
+        Demotes the old owner to 'admin'."""
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT owner_user_id FROM tenants WHERE id = %s AND deleted_at IS NULL FOR UPDATE",
+                    (tenant_id,),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    raise ValueError("tenant not found")
+                old_owner_id = row["owner_user_id"]
+                if old_owner_id == new_owner_user_id:
+                    return
+                # Verify new owner is a member
+                cur.execute(
+                    "SELECT 1 FROM tenant_memberships WHERE tenant_id = %s AND user_id = %s",
+                    (tenant_id, new_owner_user_id),
+                )
+                if cur.fetchone() is None:
+                    raise ValueError("new owner must already be a member")
+                # Demote old owner → admin first (the partial unique owner index
+                # allows this because we update to 'admin' before re-setting).
+                cur.execute(
+                    "UPDATE tenant_memberships SET role = 'admin' WHERE tenant_id = %s AND user_id = %s",
+                    (tenant_id, old_owner_id),
+                )
+                cur.execute(
+                    "UPDATE tenant_memberships SET role = 'owner' WHERE tenant_id = %s AND user_id = %s",
+                    (tenant_id, new_owner_user_id),
+                )
+                cur.execute(
+                    "UPDATE tenants SET owner_user_id = %s WHERE id = %s",
+                    (new_owner_user_id, tenant_id),
+                )
+            conn.commit()
+
+    def set_member_role(self, tenant_id: int, user_id: int, role: str) -> dict[str, Any] | None:
+        """Change a member's role. Blocked from promoting to 'owner' — use
+        transfer_tenant_owner() for that."""
+        if role not in ("admin", "member"):
+            raise ValueError("role must be 'admin' or 'member' (use transfer_tenant_owner for owner changes)")
+        self._execute(
+            "UPDATE tenant_memberships SET role = %s WHERE tenant_id = %s AND user_id = %s",
+            (role, tenant_id, user_id),
+        )
+        return self.get_tenant_membership(tenant_id, user_id)
+
+    def remove_tenant_member(self, tenant_id: int, user_id: int) -> None:
+        """Remove a member from the tenant. Caller must verify the target
+        is not the owner — the partial unique index on role='owner' would
+        allow this but we'd leave the tenant owner-less, breaking invariants."""
+        self._execute(
+            """
+            DELETE FROM tenant_memberships
+             WHERE tenant_id = %s
+               AND user_id   = %s
+               AND role     <> 'owner'
+            """,
+            (tenant_id, user_id),
+        )
+
+    def list_tenant_agents(self, tenant_id: int) -> list[dict[str, Any]]:
+        """All agents belonging to this tenant, joined with the compat view
+        so agent_name + agent_gender metadata comes along for free."""
+        return self._fetch_all(
+            """
+            SELECT a.agent_id,
+                   a.gateway_url,
+                   a.session_scope,
+                   a.tenant_id,
+                   COALESCE(ual.agent_name,   a.agent_id) AS agent_name,
+                   COALESCE(ual.agent_gender, '')         AS agent_gender,
+                   COALESCE(ual.status,       'active')   AS status,
+                   COALESCE(ual.created_at,   now())      AS created_at
+              FROM agents a
+              LEFT JOIN app_user_agents_legacy ual ON ual.agent_id = a.agent_id
+             WHERE a.tenant_id = %s
+             ORDER BY created_at DESC
+            """,
+            (tenant_id,),
+        )
+
+    # ── Tenant invites ────────────────────────────────────────────────
+
+    def create_invite(
+        self,
+        *,
+        tenant_id: int,
+        email: str,
+        role: str,
+        invited_by: int,
+        expires_at,
+    ) -> tuple[dict[str, Any], str]:
+        """Create a pending invite. Returns (invite_row, raw_token).
+
+        The raw token is the only copy that ever leaves the server — it
+        goes in the email link. The DB stores sha256(token) only, so
+        leaking the DB doesn't leak valid invite links.
+        """
+        import hashlib
+        import secrets
+
+        if role not in ("admin", "member"):
+            raise ValueError("role must be 'admin' or 'member'")
+
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).digest()
+
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO tenant_invites
+                        (tenant_id, email, role, token_hash, invited_by, expires_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id, tenant_id, email, role, invited_by,
+                              created_at, expires_at, accepted_at, revoked_at
+                    """,
+                    (tenant_id, email.strip().lower(), role, token_hash, invited_by, expires_at),
+                )
+                row = cur.fetchone()
+            conn.commit()
+        return dict(row), raw_token
+
+    def get_invite_by_token(self, raw_token: str) -> dict[str, Any] | None:
+        """Look up an invite by its raw token. Returns the row (including
+        expiry + acceptance state) for the caller to validate."""
+        import hashlib
+
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).digest()
+        return self._fetch_one(
+            """
+            SELECT i.id, i.tenant_id, i.email, i.role, i.invited_by,
+                   i.created_at, i.expires_at, i.accepted_at, i.revoked_at,
+                   t.name AS tenant_name, t.slug AS tenant_slug,
+                   u.email AS inviter_email, u.full_name AS inviter_name
+              FROM tenant_invites i
+              JOIN tenants t ON t.id = i.tenant_id AND t.deleted_at IS NULL
+              JOIN app_users u ON u.id = i.invited_by
+             WHERE i.token_hash = %s
+            """,
+            (token_hash,),
+        )
+
+    def list_pending_invites(self, tenant_id: int) -> list[dict[str, Any]]:
+        return self._fetch_all(
+            """
+            SELECT id, email, role, invited_by, created_at, expires_at
+              FROM tenant_invites
+             WHERE tenant_id = %s
+               AND accepted_at IS NULL
+               AND revoked_at IS NULL
+               AND expires_at > now()
+             ORDER BY created_at DESC
+            """,
+            (tenant_id,),
+        )
+
+    def revoke_invite(self, invite_id: int) -> None:
+        self._execute(
+            "UPDATE tenant_invites SET revoked_at = now() WHERE id = %s AND accepted_at IS NULL",
+            (invite_id,),
+        )
+
+    def accept_invite(self, invite_id: int, accepted_by_user_id: int) -> dict[str, Any]:
+        """Atomic accept: mark invite accepted + create the membership.
+
+        Raises ValueError if the invite is already accepted, revoked, or
+        expired. Returns the newly-created (or existing) membership row.
+        """
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, tenant_id, role, accepted_at, revoked_at, expires_at
+                      FROM tenant_invites
+                     WHERE id = %s
+                     FOR UPDATE
+                    """,
+                    (invite_id,),
+                )
+                invite = cur.fetchone()
+                if invite is None:
+                    raise ValueError("invite not found")
+                if invite["revoked_at"] is not None:
+                    raise ValueError("invite revoked")
+                if invite["accepted_at"] is not None:
+                    raise ValueError("invite already accepted")
+
+                from datetime import datetime, timezone
+                if invite["expires_at"] < datetime.now(timezone.utc):
+                    raise ValueError("invite expired")
+
+                cur.execute(
+                    """
+                    INSERT INTO tenant_memberships (tenant_id, user_id, role)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = EXCLUDED.role
+                    RETURNING tenant_id, user_id, role, joined_at
+                    """,
+                    (invite["tenant_id"], accepted_by_user_id, invite["role"]),
+                )
+                membership = cur.fetchone()
+
+                cur.execute(
+                    """
+                    UPDATE tenant_invites
+                       SET accepted_at = now(), accepted_by = %s
+                     WHERE id = %s
+                    """,
+                    (accepted_by_user_id, invite_id),
+                )
+            conn.commit()
+        return dict(membership)

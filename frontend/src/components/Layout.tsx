@@ -1,16 +1,31 @@
 import type { ReactNode } from 'react'
-import type { AppUser } from '../lib/types'
+import type { AppUser, TenantMembership } from '../lib/types'
+import TenantSwitcher from './TenantSwitcher'
 
 interface LayoutProps {
   children: ReactNode
   onLogout: () => void
   user?: AppUser | null
+  activeTenantId?: number | null
+  onTenantSelect?: (tenantId: number) => void
+  onRefreshTenants?: () => void
 }
 
-export default function Layout({ children, onLogout, user }: LayoutProps) {
+export default function Layout({
+  children,
+  onLogout,
+  user,
+  activeTenantId,
+  onTenantSelect,
+  onRefreshTenants,
+}: LayoutProps) {
   const isAdminRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
+  const isTenantRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/tenants')
   const isSuperadmin = user?.role === 'superadmin'
-  const mainMaxWidth = isAdminRoute ? 'max-w-7xl' : 'max-w-[560px]'
+  // Tenant pages get a wider container than the onboarding wizard so
+  // the members table + agents list aren't cramped.
+  const mainMaxWidth = isAdminRoute ? 'max-w-7xl' : isTenantRoute ? 'max-w-5xl' : 'max-w-[560px]'
+  const tenants: TenantMembership[] = (user?.tenants as TenantMembership[]) || []
   return (
     <div className="min-h-screen section-gradient">
       <header className="glass-nav sticky top-0 z-50 px-6 py-3">
@@ -29,6 +44,14 @@ export default function Layout({ children, onLogout, user }: LayoutProps) {
             )}
           </div>
           <div className="flex items-center gap-4">
+            {tenants.length > 0 && onTenantSelect && onRefreshTenants && (
+              <TenantSwitcher
+                tenants={tenants}
+                activeTenantId={activeTenantId ?? null}
+                onSelect={onTenantSelect}
+                onRefresh={onRefreshTenants}
+              />
+            )}
             {isSuperadmin && (
               <a
                 href={isAdminRoute ? '/' : '/admin'}

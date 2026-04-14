@@ -62,12 +62,75 @@ export async function submitOnboarding(data: {
   gender: string
   agent_name: string
   agent_gender: string
+  tts_voice_name?: string
 }) {
   const res = await authFetch('/api/onboarding/submit', {
     method: 'POST',
     body: JSON.stringify(data),
   })
   if (!res.ok) throw new Error('Onboarding failed')
+  return res.json()
+}
+
+// ─── Voices (voice picker for onboarding + dashboard) ──────────────
+// The voice picker reads the manifest via our backend proxy so we
+// don't hardcode the GCS bucket URL on the client. Per-agent voice
+// updates flow through the tenant-scoped PATCH endpoint.
+
+export interface VoiceManifestEntry {
+  name: string
+  gender: 'female' | 'male'
+  is_default: boolean
+  sample_path: string
+  size_bytes: number
+  url_prod: string
+  url_dev: string
+}
+
+export interface VoiceManifest {
+  model: string
+  language_code: string
+  sample_text: string
+  default_voice: string
+  voices: VoiceManifestEntry[]
+}
+
+export async function getVoiceManifest(): Promise<VoiceManifest> {
+  // Public — no auth needed.
+  const res = await fetch('/api/voices/manifest')
+  if (!res.ok) throw new Error('Voice manifest fetch failed')
+  return res.json()
+}
+
+export async function getAgentVoice(
+  tenantId: number,
+  agentId: string,
+): Promise<{ agent_id: string; tts_voice_name: string }> {
+  const res = await authFetch(
+    `/api/tenants/${tenantId}/agents/${encodeURIComponent(agentId)}/voice`,
+  )
+  if (!res.ok) throw new Error('Get agent voice failed')
+  return res.json()
+}
+
+export async function updateAgentVoice(
+  tenantId: number,
+  agentId: string,
+  ttsVoiceName: string,
+): Promise<{ agent_id: string; tts_voice_name: string; note: string }> {
+  const res = await authFetch(
+    `/api/tenants/${tenantId}/agents/${encodeURIComponent(agentId)}/voice`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ tts_voice_name: ttsVoiceName }),
+    },
+  )
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as {
+      detail?: { error?: string }
+    }
+    throw new Error(body?.detail?.error || 'Update voice failed')
+  }
   return res.json()
 }
 
@@ -120,6 +183,116 @@ export async function setUserRole(userId: number, role: 'user' | 'superadmin') {
   if (!res.ok) throw new Error('Role update failed')
   return res.json()
 }
+
+// ─── Tenants ──────────────────────────────────────────────────────────
+
+export async function getMyTenants() {
+  const res = await authFetch('/api/tenants')
+  if (!res.ok) throw new Error('List tenants failed')
+  return res.json()
+}
+
+export async function createTenant(name: string, billing_email?: string) {
+  const res = await authFetch('/api/tenants', {
+    method: 'POST',
+    body: JSON.stringify({ name, billing_email: billing_email || '' }),
+  })
+  if (!res.ok) throw new Error('Create tenant failed')
+  return res.json()
+}
+
+export async function getTenantDetail(tenantId: number) {
+  const res = await authFetch(`/api/tenants/${tenantId}`)
+  if (!res.ok) throw new Error('Tenant detail failed')
+  return res.json()
+}
+
+export async function updateTenant(
+  tenantId: number,
+  body: { name?: string; billing_email?: string },
+) {
+  const res = await authFetch(`/api/tenants/${tenantId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error('Update tenant failed')
+  return res.json()
+}
+
+export async function deleteTenant(tenantId: number) {
+  const res = await authFetch(`/api/tenants/${tenantId}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.detail?.error || 'Delete tenant failed')
+  }
+}
+
+export async function transferTenantOwner(tenantId: number, newOwnerUserId: number) {
+  const res = await authFetch(`/api/tenants/${tenantId}/transfer-owner`, {
+    method: 'POST',
+    body: JSON.stringify({ new_owner_user_id: newOwnerUserId }),
+  })
+  if (!res.ok) throw new Error('Transfer ownership failed')
+  return res.json()
+}
+
+export async function changeMemberRole(tenantId: number, userId: number, role: 'admin' | 'member') {
+  const res = await authFetch(`/api/tenants/${tenantId}/members/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  })
+  if (!res.ok) throw new Error('Change role failed')
+  return res.json()
+}
+
+export async function removeMember(tenantId: number, userId: number) {
+  const res = await authFetch(`/api/tenants/${tenantId}/members/${userId}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) throw new Error('Remove member failed')
+}
+
+export async function createInvite(tenantId: number, email: string, role: 'admin' | 'member') {
+  const res = await authFetch(`/api/tenants/${tenantId}/invites`, {
+    method: 'POST',
+    body: JSON.stringify({ email, role }),
+  })
+  if (!res.ok) throw new Error('Create invite failed')
+  return res.json()
+}
+
+export async function revokeInvite(tenantId: number, inviteId: number) {
+  const res = await authFetch(`/api/tenants/${tenantId}/invites/${inviteId}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) throw new Error('Revoke invite failed')
+}
+
+export async function previewInvite(token: string) {
+  const res = await fetch(`/api/invites/preview?token=${encodeURIComponent(token)}`)
+  if (!res.ok) throw new Error('Invite preview failed')
+  return res.json()
+}
+
+export async function acceptInvite(token: string) {
+  const res = await authFetch('/api/invites/accept', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.detail?.error || 'Accept invite failed')
+  }
+  return res.json()
+}
+
+export async function getTenantDashboard(tenantId: number) {
+  const res = await authFetch(`/api/dashboard/tenants/${tenantId}`)
+  if (!res.ok) throw new Error('Tenant dashboard failed')
+  return res.json()
+}
+
+// ─── Superadmin ──────────────────────────────────────────────────────
 
 export async function upsertAgentSubscription(
   agentId: string,

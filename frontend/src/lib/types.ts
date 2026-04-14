@@ -6,6 +6,68 @@ export interface AppUser {
   gender: string
   onboarding_status: 'pending' | 'payment_done' | 'complete'
   role: 'user' | 'superadmin'
+  tenants?: TenantMembership[]
+  default_tenant_id?: number | null
+}
+
+export type TenantRole = 'owner' | 'admin' | 'member'
+
+export interface TenantMembership {
+  id: number
+  slug: string
+  name: string
+  role: TenantRole
+  owner_user_id: number
+}
+
+export interface TenantMember {
+  user_id: number
+  email: string
+  full_name: string
+  role: TenantRole
+  joined_at: string
+}
+
+export interface TenantAgent {
+  agent_id: string
+  agent_name: string
+  agent_gender: string
+  status: string
+  gateway_url?: string
+}
+
+export interface TenantInvite {
+  id: number
+  email: string
+  role: TenantRole
+  created_at?: string
+  expires_at: string
+}
+
+export interface TenantDetail {
+  tenant: {
+    id: number
+    slug: string
+    name: string
+    owner_user_id: number
+    billing_email: string
+    created_at: string | null
+    role: TenantRole
+  }
+  members: TenantMember[]
+  agents: TenantAgent[]
+  pending_invites: TenantInvite[]
+}
+
+export interface InvitePreview {
+  tenant_name: string
+  tenant_slug: string
+  inviter_name: string
+  inviter_email: string
+  email: string
+  role: TenantRole
+  status: 'pending' | 'accepted' | 'revoked' | 'expired'
+  expires_at: string | null
 }
 
 export interface AdminUserRow {
@@ -96,6 +158,10 @@ export interface Agent {
   status: string
   gateway_url: string
   created_at: string
+  // Added by db.get_user_agents JOIN on agents — populated on recent agents
+  // (created post-meter-migration-008) but may be absent for legacy rows.
+  tenant_id?: number
+  tts_voice_name?: string
 }
 
 export interface Subscription {
