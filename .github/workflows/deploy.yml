@@ -69,6 +69,8 @@ jobs:
             echo "vite_supabase_url=https://hizznfloknpqtznywwsj.supabase.co" >> "$GITHUB_OUTPUT"
             echo "vite_supabase_anon_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpenpuZmxva25wcXR6bnl3d3NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDcwOTQsImV4cCI6MjA5MTEyMzA5NH0.WBH7xyzxwjG_YaUhTgoPkxxmRNmmok8QQdO2MrAdvec" >> "$GITHUB_OUTPUT"
             echo "vite_landing_url=https://agentiko.io" >> "$GITHUB_OUTPUT"
+            echo "meter_base_url=https://agentleh-meter-110274053287.europe-west3.run.app" >> "$GITHUB_OUTPUT"
+            echo "vm_stats_url=http://10.10.0.2:9100/stats" >> "$GITHUB_OUTPUT"
           else
             echo "service=agentleh-app-dev" >> "$GITHUB_OUTPUT"
             echo "health_url=https://app-dev.agentiko.io/health" >> "$GITHUB_OUTPUT"
@@ -76,6 +78,8 @@ jobs:
             echo "vite_supabase_url=https://mnetqtjwcdunznvvfaob.supabase.co" >> "$GITHUB_OUTPUT"
             echo "vite_supabase_anon_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1uZXRxdGp3Y2R1bnpudnZmYW9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDc0NTMsImV4cCI6MjA5MTEyMzQ1M30.QdtX_YczXzokSS6vfqDcMFGQcZFPCmgT4Arspvb8I8c" >> "$GITHUB_OUTPUT"
             echo "vite_landing_url=https://dev.agentiko.io" >> "$GITHUB_OUTPUT"
+            echo "meter_base_url=https://agentleh-meter-dev-110274053287.europe-west3.run.app" >> "$GITHUB_OUTPUT"
+            echo "vm_stats_url=http://10.10.0.3:9100/stats" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Determine version
@@ -127,6 +131,7 @@ jobs:
           gcloud run deploy ${{ steps.env.outputs.service }} \
             --image=europe-west3-docker.pkg.dev/agentleh/images/${{ steps.env.outputs.service }}:${{ steps.tag.outputs.tag }} \
             --region=europe-west3 \
+            --update-env-vars=APP_METER_BASE_URL=${{ steps.env.outputs.meter_base_url }},APP_VM_STATS_URL=${{ steps.env.outputs.vm_stats_url }} \
             --quiet
 
       - name: Verify health
