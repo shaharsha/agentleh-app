@@ -65,11 +65,50 @@ const LS_KEY = 'agentleh.lang'
 
 const I18nContext = createContext<I18nContextValue | null>(null)
 
+/**
+ * Resolution order on first mount:
+ *   1. Explicit user choice from localStorage — if `setLang` has ever
+ *      run, we honor it forever (even if the browser language later
+ *      changes). The user clicked the switcher; we don't override.
+ *   2. Browser locale detection via navigator.languages (ordered
+ *      preference list). Walk the list, pick the first supported
+ *      primary tag. `iw` is the deprecated ISO 639-1 code for Hebrew —
+ *      Chrome on some builds still emits it, so we normalize.
+ *   3. Product-default fallback: Hebrew. Agentleh is Israeli-first and
+ *      any unsupported browser language (French, Arabic, etc.) is more
+ *      likely to belong to a user who can read Hebrew than random
+ *      English — we pick Hebrew over English as the "unknown" fallback.
+ *
+ * We deliberately do NOT write the detected language to localStorage.
+ * Only `setLang()` persists. That way a detected preference stays
+ * dynamic: a user whose browser language changes (new device, travel,
+ * OS language flip) re-detects on next visit. Once they explicitly
+ * pick via the switcher, that pin overrides detection forever.
+ *
+ * Must match the pre-React inline script in index.html — the script
+ * runs before this code mounts so there's no flash of the wrong
+ * direction on first paint, and the two detection paths need to agree.
+ */
 function pickInitialLang(): Lang {
   if (typeof window === 'undefined') return 'he'
+
+  // 1. Explicit saved choice
   const saved = window.localStorage.getItem(LS_KEY)
   if (saved === 'he' || saved === 'en') return saved
-  return 'he' // product default
+
+  // 2. Browser locale walk
+  const langs =
+    navigator.languages && navigator.languages.length
+      ? navigator.languages
+      : [navigator.language || 'he']
+  for (const raw of langs) {
+    const primary = String(raw).toLowerCase().split('-')[0]
+    if (primary === 'he' || primary === 'iw') return 'he'
+    if (primary === 'en') return 'en'
+  }
+
+  // 3. Product default
+  return 'he'
 }
 
 export function dirFor(lang: Lang): Dir {
