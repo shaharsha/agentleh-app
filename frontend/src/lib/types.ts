@@ -16,6 +16,11 @@ export interface TenantMembership {
   id: number
   slug: string
   name: string
+  /** Raw owner-name source for auto-generated tenants; NULL once the
+   *  user explicitly renames the workspace. Frontend's <TenantName />
+   *  uses this to render per-language default labels without
+   *  overwriting user renames. */
+  name_base: string | null
   role: TenantRole
   owner_user_id: number
 }
@@ -49,6 +54,7 @@ export interface TenantDetail {
     id: number
     slug: string
     name: string
+    name_base: string | null
     owner_user_id: number
     billing_email: string
     created_at: string | null

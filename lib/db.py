@@ -345,8 +345,13 @@ class AppDatabase:
         oldest-owned one. Otherwise creates a fresh tenant + owner
         membership in one transaction and returns the new row.
 
-        Called from onboarding submit so every new user gets a working
-        workspace before their first agent is provisioned.
+        Stores `name_base` (the raw owner name, e.g. "שחר שביט") so the
+        frontend can render the workspace label in the active display
+        language — Hebrew template in he mode, English template in en
+        mode — without ever mangling what the user stored. When the
+        user explicitly renames the tenant via update_tenant(),
+        name_base is nulled out and the literal `name` is shown from
+        then on.
         """
         existing = self._fetch_one(
             """
@@ -372,6 +377,11 @@ class AppDatabase:
         email_local = (user["email"] or "user").split("@", 1)[0].lower()
         slug = f"{email_local}-{user_id}"
         name_base = user["full_name"] or email_local
+        # `name` is the fallback display string used by admin tools,
+        # email templates, and any consumer that doesn't know about
+        # name_base. Built via _default_tenant_name so the stored form
+        # is always script-consistent (Hebrew template for Hebrew
+        # names, English for Latin).
         name = _default_tenant_name(name_base)
         billing_email = user["email"] or ""
 
@@ -379,11 +389,11 @@ class AppDatabase:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO tenants (slug, name, owner_user_id, billing_email)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO tenants (slug, name, name_base, owner_user_id, billing_email)
+                    VALUES (%s, %s, %s, %s, %s)
                     RETURNING *
                     """,
-                    (slug, name, user_id, billing_email),
+                    (slug, name, name_base, user_id, billing_email),
                 )
                 tenant = cur.fetchone()
                 cur.execute(
@@ -452,11 +462,16 @@ class AppDatabase:
         )
 
     def list_user_tenants(self, user_id: int) -> list[dict[str, Any]]:
-        """List every tenant the user is a member of with their role."""
+        """List every tenant the user is a member of with their role.
+
+        Returns name_base so the UI can render per-language default
+        tenant names. NULL name_base = user-renamed = render name
+        literally.
+        """
         return self._fetch_all(
             """
-            SELECT t.id, t.slug, t.name, t.owner_user_id, t.billing_email,
-                   t.created_at, tm.role
+            SELECT t.id, t.slug, t.name, t.name_base, t.owner_user_id,
+                   t.billing_email, t.created_at, tm.role
               FROM tenants t
               JOIN tenant_memberships tm ON tm.tenant_id = t.id
              WHERE tm.user_id = %s AND t.deleted_at IS NULL
@@ -493,7 +508,15 @@ class AppDatabase:
         )
 
     def update_tenant(self, tenant_id: int, **fields) -> dict[str, Any] | None:
-        """Rename / update billing_email. Only whitelisted columns."""
+        """Rename / update billing_email. Only whitelisted columns.
+
+        When the user changes `name`, we null out `name_base` in the
+        same UPDATE so the frontend stops treating it as a system
+        default and shows the literal value from then on. This is how
+        we distinguish "I accepted the auto-generated default" (where
+        we want per-language rendering) from "I typed my own name"
+        (where we must preserve what the user wrote byte-for-byte).
+        """
         allowed = {"name", "billing_email"}
         sets = []
         params: list[Any] = []
@@ -503,6 +526,8 @@ class AppDatabase:
                 params.append(v)
         if not sets:
             return self.get_tenant_by_id(tenant_id)
+        if "name" in fields:
+            sets.append("name_base = NULL")
         params.append(tenant_id)
         self._execute(
             f"UPDATE tenants SET {', '.join(sets)} WHERE id = %s AND deleted_at IS NULL",

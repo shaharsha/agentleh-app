@@ -33,6 +33,7 @@ async def me(request: Request, user: dict = Depends(get_current_user)):
                 "id": t["id"],
                 "slug": t["slug"],
                 "name": t["name"],
+                "name_base": t.get("name_base"),
                 "role": t["role"],
                 "owner_user_id": t["owner_user_id"],
             }

@@ -13,6 +13,8 @@ import {
   provisionTenantAgent,
 } from '../lib/api'
 import { useI18n, type Bilingual } from '../lib/i18n'
+import { planLabel, statusLabel } from '../lib/labels'
+import TenantName from '../components/TenantName'
 
 interface Props {
   tenantId: number
@@ -121,8 +123,8 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
   return (
     <div className="max-w-5xl mx-auto px-6 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900" dir="auto">
-          {tenant.name}
+        <h1 className="text-2xl font-bold text-gray-900">
+          <TenantName tenant={tenant} />
         </h1>
         <p className="text-sm text-gray-500 mt-1">
           {t({
@@ -246,11 +248,15 @@ function DashboardTab({
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <div className="text-gray-500">{t({ he: 'תכנית', en: 'Plan' })}</div>
-              <div className="font-medium text-gray-900">{subscription.plan_id || '—'}</div>
+              <div className="font-medium text-gray-900">
+                {t(planLabel(subscription.plan_id))}
+              </div>
             </div>
             <div>
               <div className="text-gray-500">{t({ he: 'סטטוס', en: 'Status' })}</div>
-              <div className="font-medium text-gray-900">{subscription.status || '—'}</div>
+              <div className="font-medium text-gray-900">
+                {t(statusLabel(subscription.status))}
+              </div>
             </div>
             <div>
               <div className="text-gray-500">
@@ -377,7 +383,7 @@ function DashboardTab({
                   </div>
                 </div>
                 <span className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded">
-                  {a.status}
+                  {t(statusLabel(a.status))}
                 </span>
               </div>
             ))}

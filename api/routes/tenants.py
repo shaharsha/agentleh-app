@@ -62,11 +62,19 @@ class TransferOwner(BaseModel):
 
 def _tenant_out(row: dict[str, Any], role: str | None = None) -> dict[str, Any]:
     """Shape a tenant row for the frontend. Role is included when we're
-    resolving from the caller's perspective (list / detail)."""
+    resolving from the caller's perspective (list / detail).
+
+    `name_base` is the raw owner-name source string when this tenant
+    was auto-generated at onboarding; NULL once the user renames it.
+    The frontend uses it to render per-language default names via the
+    <TenantName /> helper. See app/lib/db.py::update_tenant for how
+    it's nulled on user rename.
+    """
     out = {
         "id": row["id"],
         "slug": row["slug"],
         "name": row["name"],
+        "name_base": row.get("name_base"),
         "owner_user_id": row["owner_user_id"],
         "billing_email": row.get("billing_email", ""),
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,

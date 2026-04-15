@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { TenantMembership, TenantRole } from '../lib/types'
 import { createTenant } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import TenantName from './TenantName'
 
 interface Props {
   tenants: TenantMembership[]
@@ -89,8 +90,8 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
         onClick={() => setOpen(!open)}
         className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
       >
-        <span className="max-w-[180px] truncate" dir="auto">
-          {activeTenant.name}
+        <span className="max-w-[180px] truncate">
+          <TenantName tenant={activeTenant} />
         </span>
         {tenants.length > 1 && (
           <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -122,8 +123,8 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
                       : 'hover:bg-gray-50 text-gray-700'
                   }`}
                 >
-                  <span className="truncate flex-1 text-start" dir="auto">
-                    {tenant.name}
+                  <span className="truncate flex-1 text-start">
+                    <TenantName tenant={tenant} />
                   </span>
                   {roleBadge(tenant.role)}
                 </button>
