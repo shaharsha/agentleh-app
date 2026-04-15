@@ -83,6 +83,22 @@ export default function App() {
         if (!activeTenantId || !me.tenants?.some((t: any) => t.id === activeTenantId)) {
           setActiveTenantId(me.default_tenant_id)
         }
+        // Auto-redirect complete tenant users from / → /tenants/:id so the
+        // URL, the container width (Layout reads window.location), and the
+        // browser history all agree. Without this, TenantPage renders at /
+        // inside the narrow onboarding-style max-w-[560px] wrapper, and the
+        // first tab click visibly swaps the layout. Only redirect when the
+        // user is fully onboarded — payment_done / pending users need the
+        // root path to show PaymentPage / OnboardingPage.
+        if (
+          current.kind === 'root' &&
+          me.onboarding_status === 'complete' &&
+          me.default_tenant_id
+        ) {
+          const tid = activeTenantId || me.default_tenant_id
+          window.history.replaceState({}, '', `/tenants/${tid}`)
+          setRoute(parseRoute(`/tenants/${tid}`))
+        }
       }
     } catch {
       setUser(null)
@@ -154,21 +170,11 @@ export default function App() {
       {route.kind === 'root' && status === 'payment_done' && (
         <OnboardingPage user={user!} onComplete={refreshUser} />
       )}
-      {route.kind === 'root' && status === 'complete' && (
-        // Post-onboarding root: if the user has tenants, route them to
-        // the active (or default) one. DashboardPage is kept as a
-        // fallback in case something goes sideways with the tenant
-        // resolution logic.
-        user?.default_tenant_id ? (
-          <TenantPage
-            tenantId={activeTenantId || user.default_tenant_id}
-            subpage="dashboard"
-            onNavigate={navigate}
-            onTenantsChanged={refreshUser}
-          />
-        ) : (
-          <DashboardPage />
-        )
+      {route.kind === 'root' && status === 'complete' && !user?.default_tenant_id && (
+        // Complete user with no tenant — shouldn't happen after the
+        // loadUser auto-redirect, but keep a fallback so we don't blank
+        // the page if the backend returns an inconsistent me payload.
+        <DashboardPage />
       )}
     </Layout>
   )
