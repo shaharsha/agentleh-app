@@ -1,4 +1,9 @@
 import { supabase } from './supabase'
+import type {
+  IntegrationsResponse,
+  GoogleConnectStartResponse,
+  GoogleDisconnectResponse,
+} from './types'
 
 async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const { data: { session } } = await supabase.auth.getSession()
@@ -339,5 +344,49 @@ export async function upsertAgentSubscription(
     { method: 'POST', body: JSON.stringify(body) },
   )
   if (!res.ok) throw new Error('Subscription upsert failed')
+  return res.json()
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Integrations (per-agent Google Calendar + Gmail connection)
+// ─────────────────────────────────────────────────────────────────────────
+
+export async function getAgentIntegrations(
+  tenantId: number,
+  agentId: string,
+): Promise<IntegrationsResponse> {
+  const res = await authFetch(
+    `/api/tenants/${tenantId}/agents/${encodeURIComponent(agentId)}/integrations`,
+  )
+  if (!res.ok) throw new Error('Failed to load integrations')
+  return res.json()
+}
+
+export async function startGoogleConnect(
+  tenantId: number,
+  agentId: string,
+  opts: { login_hint?: string } = {},
+): Promise<GoogleConnectStartResponse> {
+  const res = await authFetch(
+    `/api/tenants/${tenantId}/agents/${encodeURIComponent(
+      agentId,
+    )}/integrations/google/connect`,
+    { method: 'POST', body: JSON.stringify(opts) },
+  )
+  if (!res.ok) throw new Error('Failed to start Google connect flow')
+  return res.json()
+}
+
+export async function disconnectGoogle(
+  tenantId: number,
+  agentId: string,
+): Promise<GoogleDisconnectResponse> {
+  const res = await authFetch(
+    `/api/tenants/${tenantId}/agents/${encodeURIComponent(
+      agentId,
+    )}/integrations/google`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) throw new Error('Failed to disconnect Google')
   return res.json()
 }

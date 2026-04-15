@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getDashboard, updateAgentVoice } from '../lib/api'
 import StepIndicator from '../components/StepIndicator'
 import VoicePicker from '../components/VoicePicker'
+import IntegrationsPanel from '../components/IntegrationsPanel'
 import type { Agent, AppUser, Subscription } from '../lib/types'
 
 interface AgentSpend {
@@ -55,8 +56,36 @@ function usagePct(used: number, total: number): number {
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
 
-  useEffect(() => {
+  const refreshDashboard = () => {
     getDashboard().then(setData).catch(console.error)
+  }
+
+  useEffect(() => {
+    refreshDashboard()
+  }, [])
+
+  // After the Google OAuth callback redirects us back with
+  // ?google=connected|denied|error, surface a toast-like alert, refresh
+  // dashboard data so integrations-panel reflects the new state, and
+  // clear the query param so a page refresh doesn't re-trigger.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const googleParam = params.get('google')
+    if (!googleParam) return
+
+    if (googleParam === 'connected') {
+      window.alert('חשבון גוגל חובר בהצלחה!')
+      refreshDashboard()
+    } else if (googleParam === 'denied') {
+      window.alert('החיבור לגוגל לא הושלם. ניתן לנסות שוב.')
+    } else if (googleParam === 'error') {
+      window.alert('שגיאה בחיבור לגוגל. נסה שוב.')
+    }
+
+    params.delete('google')
+    const newQuery = params.toString()
+    const newUrl = `${window.location.pathname}${newQuery ? '?' + newQuery : ''}`
+    window.history.replaceState({}, '', newUrl)
   }, [])
 
   if (!data) {
@@ -177,6 +206,16 @@ export default function DashboardPage() {
                 tenantId={agent.tenant_id}
                 agentId={agent.agent_id}
                 currentVoice={agent.tts_voice_name || 'Kore'}
+              />
+            )}
+
+            {/* Integrations panel — Google Calendar + Gmail, plus future
+                integrations. Only shown for tenant-migrated agents. */}
+            {agent.tenant_id != null && (
+              <IntegrationsPanel
+                tenantId={agent.tenant_id}
+                agentId={agent.agent_id}
+                onChange={refreshDashboard}
               />
             )}
           </div>

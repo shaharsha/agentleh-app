@@ -176,3 +176,50 @@ export interface Subscription {
   status: string
   created_at: string
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Integrations (per-agent Google Calendar + Gmail connection)
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface GoogleCapabilities {
+  /** Capability keys the agent currently has — e.g. `manage_calendar`,
+   *  `send_email`. Frontend maps to Hebrew labels. */
+  can: string[]
+  /** Capability keys explicitly NOT granted in the current scope set.
+   *  Surfaced in the UI as a trust-building "what the agent cannot do"
+   *  list — e.g. `read_email_bodies`. */
+  cannot: string[]
+}
+
+export type IntegrationEntry =
+  | {
+      name: string
+      connected: false
+    }
+  | {
+      name: string
+      connected: true
+      email: string
+      scopes: string[]
+      capabilities: GoogleCapabilities
+      granted_at: string | null
+      last_refreshed_at: string | null
+    }
+
+export interface IntegrationsResponse {
+  agent_id: string
+  tenant_id: number
+  integrations: {
+    google: IntegrationEntry
+  }
+}
+
+export interface GoogleConnectStartResponse {
+  connect_url: string
+  expires_in_seconds: number
+}
+
+export interface GoogleDisconnectResponse {
+  revoked: boolean
+  email: string | null
+}

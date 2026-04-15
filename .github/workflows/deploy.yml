@@ -75,6 +75,7 @@ jobs:
             echo "google_oauth_client_id_secret=google-oauth-client-id" >> "$GITHUB_OUTPUT"
             echo "google_oauth_client_secret_secret=google-oauth-client-secret" >> "$GITHUB_OUTPUT"
             echo "google_connect_jwt_secret=google-connect-jwt-secret" >> "$GITHUB_OUTPUT"
+            echo "meter_admin_token_secret=meter-admin-token" >> "$GITHUB_OUTPUT"
             echo "provision_api_url=http://10.10.0.2:9200" >> "$GITHUB_OUTPUT"
             echo "provision_api_token_secret=provision-api-token" >> "$GITHUB_OUTPUT"
             echo "resend_api_key_secret=resend-api-key" >> "$GITHUB_OUTPUT"
@@ -92,6 +93,7 @@ jobs:
             echo "google_oauth_client_id_secret=google-oauth-client-id-dev" >> "$GITHUB_OUTPUT"
             echo "google_oauth_client_secret_secret=google-oauth-client-secret-dev" >> "$GITHUB_OUTPUT"
             echo "google_connect_jwt_secret=google-connect-jwt-secret-dev" >> "$GITHUB_OUTPUT"
+            echo "meter_admin_token_secret=meter-admin-token-dev" >> "$GITHUB_OUTPUT"
             echo "bridge_google_connected_url=https://bridge.agentiko.io/internal/google-connected" >> "$GITHUB_OUTPUT"
             echo "bridge_internal_token_secret=bridge-internal-token" >> "$GITHUB_OUTPUT"
             echo "provision_api_url=http://10.10.0.3:9200" >> "$GITHUB_OUTPUT"
@@ -150,7 +152,7 @@ jobs:
             --image=europe-west3-docker.pkg.dev/agentleh/images/${{ steps.env.outputs.service }}:${{ steps.tag.outputs.tag }} \
             --region=europe-west3 \
             --update-env-vars=APP_METER_BASE_URL=${{ steps.env.outputs.meter_base_url }},APP_VM_STATS_URL=${{ steps.env.outputs.vm_stats_url }},APP_GCP_PROJECT=agentleh,APP_GOOGLE_OAUTH_REDIRECT_URI=${{ steps.env.outputs.google_oauth_redirect_uri }},AGENTLEH_PROVISIONER=vm,AGENTLEH_PROVISION_API_URL=${{ steps.env.outputs.provision_api_url }},APP_PUBLIC_URL=${{ steps.env.outputs.app_public_url }} \
-            --update-secrets=APP_GOOGLE_OAUTH_CLIENT_ID=${{ steps.env.outputs.google_oauth_client_id_secret }}:latest,APP_GOOGLE_OAUTH_CLIENT_SECRET=${{ steps.env.outputs.google_oauth_client_secret_secret }}:latest,APP_GOOGLE_CONNECT_JWT_SECRET=${{ steps.env.outputs.google_connect_jwt_secret }}:latest,AGENTLEH_PROVISION_API_TOKEN=${{ steps.env.outputs.provision_api_token_secret }}:latest,RESEND_API_KEY=${{ steps.env.outputs.resend_api_key_secret }}:latest \
+            --update-secrets=APP_GOOGLE_OAUTH_CLIENT_ID=${{ steps.env.outputs.google_oauth_client_id_secret }}:latest,APP_GOOGLE_OAUTH_CLIENT_SECRET=${{ steps.env.outputs.google_oauth_client_secret_secret }}:latest,APP_GOOGLE_CONNECT_JWT_SECRET=${{ steps.env.outputs.google_connect_jwt_secret }}:latest,APP_METER_ADMIN_TOKEN=${{ steps.env.outputs.meter_admin_token_secret }}:latest,AGENTLEH_PROVISION_API_TOKEN=${{ steps.env.outputs.provision_api_token_secret }}:latest,RESEND_API_KEY=${{ steps.env.outputs.resend_api_key_secret }}:latest \
             --quiet
 
       - name: Verify health

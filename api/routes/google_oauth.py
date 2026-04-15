@@ -1,38 +1,50 @@
 """Google OAuth connect flow (per-agent).
 
-End-user journey:
+Two entry points converge here via the same JWT/aud:
 
-1. Inside a running OpenClaw agent (WhatsApp), the agent decides the user
-   wants to connect Google. It asks the bridge for a connect URL; the
-   bridge mints a short-lived JWT (`sub=agent_id`, 15 minute TTL, HS256
-   with the shared secret) and hands back
-       https://app.agentiko.io/api/oauth/google/start?t=<jwt>
-2. The user taps that link on their phone. This route validates the JWT
-   and 302-redirects them to Google's OAuth consent screen.
-3. Google redirects them back to /api/oauth/google/callback with a code
-   and the same state token. We verify the token, exchange the code, and
-   KMS-encrypt + upsert the refresh_token into agent_google_credentials.
-4. We render a simple success page telling them to go back to WhatsApp.
+1. **WhatsApp path** — the OpenClaw agent mints a JWT (no ``redirect_to``)
+   via its ``google_get_connect_url`` tool, sends the URL to the user in
+   WhatsApp, user taps it, lands on ``/start``, is redirected to Google's
+   consent screen, approves, and comes back to ``/callback``. Post-consent
+   we render an inline Hebrew success HTML page because the user is in
+   a standalone browser tab with no dashboard context.
+
+2. **App UI path** — the logged-in user clicks "חבר חשבון גוגל" in the
+   dashboard's integrations panel. The app's
+   ``POST /api/tenants/{t}/agents/{a}/integrations/google/connect`` route
+   (see ``api/routes/integrations.py``) mints a JWT with
+   ``redirect_to=<APP_PUBLIC_URL>/dashboard?google=connected`` and hands
+   the URL to the frontend, which navigates the same tab to it. Same
+   ``/start`` → Google → ``/callback`` flow; post-consent we 302-redirect
+   back to the dashboard instead of rendering HTML.
+
+The callback body is shared between the two flows and branches only on
+``claims.redirect_to``.
+
+**Writes go through the meter.** The callback does NOT touch
+``agent_google_credentials`` directly — it POSTs the plaintext refresh
+token to the meter's ``/admin/google/store`` admin route (see
+``services/meter_client.py``). The meter KMS-encrypts, UPSERTs, and
+purges its in-memory access-token cache atomically. The app service has
+no KMS access and no direct write path, which fixes the stale-cache bug
+that would otherwise bite when reconnecting with a different Google
+account.
 
 No DB writes happen until the callback step, so abandoned consent flows
 leave zero state.
-
-Disconnect (POST /api/oauth/google/disconnect) is available from the
-signed-in dashboard UI; agent-initiated disconnect runs through the
-meter instead.
 """
 
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlencode, urlparse, urlunparse
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from pydantic import BaseModel
 
-from api.deps import get_current_user
-from fastapi import Depends
 from services import google_oauth
+from services.google_oauth import InvalidRedirectError
+from services.meter_client import MeterClientError, store_google_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -92,21 +104,62 @@ def _error_html(message: str) -> str:
 </html>"""
 
 
+def _append_query(url: str, key: str, value: str) -> str:
+    """Append (or replace) a query param on a redirect URL.
+
+    Used to tack on ``google=connected`` / ``google=denied`` etc. to the
+    dashboard redirect URL so the frontend can show the right toast.
+    """
+    parsed = urlparse(url)
+    existing = parsed.query
+    new_qs = f"{existing}&{key}={value}" if existing else f"{key}={value}"
+    return urlunparse(parsed._replace(query=new_qs))
+
+
+def _redirect_or_html_error(
+    claims_redirect_to: str | None, html_message: str, status_code: int, error_key: str
+):
+    """Branch: if the JWT had a ``redirect_to``, send the user back there
+    with ``?google=<error_key>``; otherwise render the inline Hebrew
+    error page (WhatsApp flow default).
+    """
+    if claims_redirect_to:
+        return RedirectResponse(
+            _append_query(claims_redirect_to, "google", error_key),
+            status_code=302,
+        )
+    return HTMLResponse(_error_html(html_message), status_code=status_code)
+
+
 @router.get("/start")
 async def oauth_start(t: str = Query(..., min_length=10, max_length=2048)):
     try:
         claims = google_oauth.verify_connect_jwt(t)
+    except InvalidRedirectError:
+        return HTMLResponse(
+            _error_html("הקישור אינו תקין (redirect לא מורשה)."),
+            status_code=400,
+        )
     except ValueError:
         return HTMLResponse(
             _error_html("הקישור פג תוקף או שאינו תקין."),
             status_code=400,
         )
 
-    logger.info("google-connect start: agent_id=%s", claims.agent_id)
-    # Pass the same JWT as the state parameter — callback re-validates and
-    # extracts agent_id from it. Google echoes state back untouched.
+    logger.info(
+        "google-connect start: agent_id=%s has_redirect=%s has_hint=%s",
+        claims.agent_id,
+        bool(claims.redirect_to),
+        bool(claims.login_hint),
+    )
+    # Pass the same JWT as the state parameter — callback re-validates
+    # and extracts agent_id + redirect_to from it. Google echoes state
+    # back untouched.
     return RedirectResponse(
-        url=google_oauth.build_authorization_url(state=t),
+        url=google_oauth.build_authorization_url(
+            state=t,
+            login_hint=claims.login_hint,
+        ),
         status_code=302,
     )
 
@@ -119,24 +172,37 @@ async def oauth_callback(
     error: str | None = None,
     error_description: str | None = None,
 ):
+    # Parse state first so we know whether to redirect-mode or HTML-mode
+    # on any subsequent error. If state itself is unparseable we fall back
+    # to HTML because we have nowhere else to send them.
+    claims = None
+    if state:
+        try:
+            claims = google_oauth.verify_connect_jwt(state)
+        except (ValueError, InvalidRedirectError):
+            claims = None
+
+    claims_redirect_to = claims.redirect_to if claims else None
+
     if error:
         logger.info("google-connect callback: user declined: %s", error)
-        return HTMLResponse(
-            _error_html("אישור לא ניתן. ניתן לנסות שוב מהוואטסאפ."),
-            status_code=400,
+        return _redirect_or_html_error(
+            claims_redirect_to,
+            "אישור לא ניתן. ניתן לנסות שוב מהוואטסאפ.",
+            400,
+            "denied",
         )
 
     if not code or not state:
-        return HTMLResponse(
-            _error_html("בקשה לא תקינה."),
-            status_code=400,
+        return _redirect_or_html_error(
+            claims_redirect_to, "בקשה לא תקינה.", 400, "error"
         )
 
-    try:
-        claims = google_oauth.verify_connect_jwt(state)
-    except ValueError:
+    if claims is None:
+        # state existed but didn't parse — we can't route back even if
+        # the user might have expected a redirect.
         return HTMLResponse(
-            _error_html("הקישור פג תוקף. חזור לוואטסאפ לקישור חדש."),
+            _error_html("הקישור פג תוקף. בקש קישור חדש."),
             status_code=400,
         )
 
@@ -144,9 +210,11 @@ async def oauth_callback(
         token_response = await google_oauth.exchange_code(code)
     except ValueError as exc:
         logger.warning("google-connect callback: exchange failed: %s", exc)
-        return HTMLResponse(
-            _error_html("לא הצלחנו לאשר את החיבור מול גוגל."),
-            status_code=502,
+        return _redirect_or_html_error(
+            claims_redirect_to,
+            "לא הצלחנו לאשר את החיבור מול גוגל.",
+            502,
+            "error",
         )
 
     refresh_token = token_response.get("refresh_token")
@@ -161,9 +229,11 @@ async def oauth_callback(
             "google-connect callback: no refresh_token in response; "
             "check that prompt=consent is set on the authorization URL"
         )
-        return HTMLResponse(
-            _error_html("גוגל לא החזירה אסימון חידוש. נסה שוב."),
-            status_code=502,
+        return _redirect_or_html_error(
+            claims_redirect_to,
+            "גוגל לא החזירה אסימון חידוש. נסה שוב.",
+            502,
+            "error",
         )
 
     try:
@@ -176,14 +246,27 @@ async def oauth_callback(
 
     scopes = [s for s in granted_scope.split() if s] or list(google_oauth.GOOGLE_SCOPES)
 
-    db = request.app.state.db
-    google_oauth.upsert_credentials(
-        db,
-        agent_id=claims.agent_id,
-        google_email=google_email,
-        refresh_token_plaintext=refresh_token,
-        scopes=scopes,
-    )
+    # Hand the plaintext refresh token to the meter — single writer for
+    # agent_google_credentials, atomic cache purge, no KMS in the app.
+    try:
+        await store_google_credentials(
+            agent_id=claims.agent_id,
+            google_email=google_email,
+            refresh_token=refresh_token,
+            scopes=scopes,
+        )
+    except MeterClientError as exc:
+        logger.error(
+            "google-connect callback: meter store failed for agent_id=%s: %s",
+            claims.agent_id,
+            exc,
+        )
+        return _redirect_or_html_error(
+            claims_redirect_to,
+            "לא הצלחנו לשמור את החיבור. נסה שוב.",
+            502,
+            "error",
+        )
 
     logger.info(
         "google-connect callback: stored credentials for agent_id=%s email=%s",
@@ -191,63 +274,11 @@ async def oauth_callback(
         google_email,
     )
 
-    # Notify the bridge so it can send a WhatsApp confirmation back to the user.
-    # Best-effort — the connection is already committed to the DB.
-    import httpx as _httpx
-    import os as _os
-
-    bridge_notify_url = _os.environ.get("APP_BRIDGE_GOOGLE_CONNECTED_URL", "")
-    bridge_notify_token = _os.environ.get("APP_BRIDGE_INTERNAL_TOKEN", "")
-    if bridge_notify_url and bridge_notify_token:
-        try:
-            async with _httpx.AsyncClient(timeout=5.0) as client:
-                await client.post(
-                    bridge_notify_url,
-                    json={"agent_id": claims.agent_id, "email": google_email},
-                    headers={"Authorization": f"Bearer {bridge_notify_token}"},
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "google-connect callback: bridge notification failed: %s", exc
-            )
-
+    # Success. Branch on whether the JWT asked for a redirect back to an
+    # allowlisted URL (app UI path) or the inline HTML page (WhatsApp path).
+    if claims_redirect_to:
+        return RedirectResponse(
+            _append_query(claims_redirect_to, "google", "connected"),
+            status_code=302,
+        )
     return HTMLResponse(_success_html(google_email), status_code=200)
-
-
-# ─────────────────────────────────────────────────────────────────────────
-# Disconnect — signed-in dashboard UI
-# ─────────────────────────────────────────────────────────────────────────
-
-
-class DisconnectRequest(BaseModel):
-    agent_id: str
-
-
-@router.post("/disconnect")
-async def oauth_disconnect(
-    body: DisconnectRequest,
-    request: Request,
-    user: dict = Depends(get_current_user),
-):
-    db = request.app.state.db
-
-    # Verify the user actually owns this agent (no cross-user disconnects).
-    owned = db.get_user_agents(user["id"])
-    if not any(a.get("agent_id") == body.agent_id for a in owned):
-        raise HTTPException(status_code=403, detail="not_your_agent")
-
-    # Best-effort revoke at Google; we still delete our row either way.
-    # The meter would also do this via its /auth/google/revoke route, but
-    # we do it here too so dashboard-driven disconnects don't require a
-    # round-trip through the meter.
-    row = google_oauth.fetch_credentials(db, agent_id=body.agent_id)
-    if row is None:
-        return {"revoked": False}
-
-    # We don't have the plaintext token here (it's KMS-encrypted in the
-    # row and only the meter decrypts). So we let the meter handle the
-    # actual Google revoke by calling its internal route. For v1, if
-    # the meter isn't reachable we still delete locally — Google's token
-    # will expire naturally.
-    google_oauth.delete_credentials(db, agent_id=body.agent_id)
-    return {"revoked": True}

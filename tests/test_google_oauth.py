@@ -92,4 +92,102 @@ def test_router_imports():
     paths = {route.path for route in router.routes}
     assert any(p.endswith("/oauth/google/start") for p in paths)
     assert any(p.endswith("/oauth/google/callback") for p in paths)
-    assert any(p.endswith("/oauth/google/disconnect") for p in paths)
+    # Phase 2: POST /disconnect was deleted — disconnect now lives on the
+    # path-based DELETE route in api/routes/integrations.py.
+    assert not any(p.endswith("/oauth/google/disconnect") for p in paths)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Phase 2: redirect_to + login_hint
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_mint_with_redirect_to_and_login_hint():
+    token = google_oauth.mint_connect_jwt(
+        "agent-abc",
+        redirect_to="https://app-dev.agentiko.io/dashboard",
+        login_hint="user@example.com",
+    )
+    claims = google_oauth.verify_connect_jwt(token)
+    assert claims.agent_id == "agent-abc"
+    assert claims.redirect_to == "https://app-dev.agentiko.io/dashboard"
+    assert claims.login_hint == "user@example.com"
+
+
+def test_mint_rejects_unallowlisted_redirect_to():
+    with pytest.raises(google_oauth.InvalidRedirectError):
+        google_oauth.mint_connect_jwt(
+            "agent-abc",
+            redirect_to="https://evil.com/steal",
+        )
+
+
+def test_mint_rejects_http_for_prod_host():
+    # Non-localhost hosts must be https — prevents a downgrade footgun
+    # if an attacker somehow got hold of a state URL.
+    with pytest.raises(google_oauth.InvalidRedirectError):
+        google_oauth.mint_connect_jwt(
+            "agent-abc",
+            redirect_to="http://app.agentiko.io/dashboard",
+        )
+
+
+def test_mint_allows_localhost_http_for_dev():
+    token = google_oauth.mint_connect_jwt(
+        "agent-abc",
+        redirect_to="http://localhost:5173/dashboard",
+    )
+    claims = google_oauth.verify_connect_jwt(token)
+    assert claims.redirect_to == "http://localhost:5173/dashboard"
+
+
+def test_verify_rejects_forged_redirect_to(monkeypatch):
+    """A JWT signed with the real secret but carrying a non-allowlisted
+    redirect_to must still be rejected at verify time (belt + braces)."""
+    from jose import jwt
+
+    payload = {
+        "iss": "attacker",
+        "aud": google_oauth._JWT_AUDIENCE,
+        "sub": "agent-x",
+        "iat": 0,
+        "exp": 9999999999,
+        "nonce": "n",
+        "redirect_to": "https://evil.com/steal",
+    }
+    token = jwt.encode(
+        payload,
+        os.environ["APP_GOOGLE_CONNECT_JWT_SECRET"],
+        algorithm="HS256",
+    )
+    with pytest.raises(google_oauth.InvalidRedirectError):
+        google_oauth.verify_connect_jwt(token)
+
+
+def test_scopes_to_capabilities_v1_set():
+    caps = google_oauth.scopes_to_capabilities(
+        [
+            "https://www.googleapis.com/auth/calendar",
+            "https://www.googleapis.com/auth/calendar.events",
+            "https://www.googleapis.com/auth/gmail.send",
+        ]
+    )
+    assert "manage_calendar" in caps["can"]
+    assert "manage_events" in caps["can"]
+    assert "send_email" in caps["can"]
+    # Explicit "cannot" list is the trust feature — ensure it's surfaced
+    assert "read_email_bodies" in caps["cannot"]
+    assert "read_email_metadata" in caps["cannot"]
+    assert "create_drafts" in caps["cannot"]
+
+
+def test_authorization_url_includes_login_hint():
+    url = google_oauth.build_authorization_url(
+        state="s", login_hint="alice@example.com"
+    )
+    assert "login_hint=alice%40example.com" in url or "login_hint=alice@example.com" in url
+
+
+def test_authorization_url_without_login_hint():
+    url = google_oauth.build_authorization_url(state="s")
+    assert "login_hint" not in url

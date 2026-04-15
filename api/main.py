@@ -15,6 +15,7 @@ from api.routes.admin import router as admin_router
 from api.routes.auth import router as auth_router
 from api.routes.dashboard import router as dashboard_router
 from api.routes.google_oauth import router as google_oauth_router
+from api.routes.integrations import router as integrations_router
 from api.routes.invites import router as invites_router
 from api.routes.onboarding import router as onboarding_router
 from api.routes.payment import router as payment_router
@@ -76,6 +77,7 @@ app.include_router(tenants_router, prefix="/api")
 app.include_router(invites_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(google_oauth_router, prefix="/api")
+app.include_router(integrations_router, prefix="/api")
 
 
 @app.get("/health")
