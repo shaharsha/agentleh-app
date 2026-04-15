@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   disconnectGoogle,
   getAgentIntegrations,
@@ -15,6 +15,13 @@ interface IntegrationsPanelProps {
   onChange?: () => void
 }
 
+// Poll cadence while a connect flow is in progress in a different tab.
+// 3s is fast enough for a live-ish feel, slow enough to be gentle on the
+// DB. 2 minutes is a generous ceiling — most real consent flows finish
+// in 10-30 seconds.
+const POLL_INTERVAL_MS = 3_000
+const POLL_TIMEOUT_MS = 2 * 60 * 1_000
+
 /**
  * Per-agent integrations card. Today it shows exactly one integration —
  * Google Calendar + Gmail — but the shape is a dict keyed by integration
@@ -23,25 +30,32 @@ interface IntegrationsPanelProps {
  *
  * Bilingual (he/en) via `useI18n` to match the rest of TenantPage. The
  * component is collapsible to match the compact agent-row style of the
- * tenant workspace.
+ * tenant workspace. Connect-button click opens Google's consent screen
+ * in a new tab and the panel polls for status so it flips to 'connected'
+ * as soon as the user finishes the OAuth flow, without needing a page
+ * refresh.
  */
 export default function IntegrationsPanel({
   tenantId,
   agentId,
   onChange,
 }: IntegrationsPanelProps) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<IntegrationsResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [waitingForConsent, setWaitingForConsent] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [loginHint, setLoginHint] = useState('')
   // Capability selection — both checked by default. When user clicks
   // Connect, only the checked ones are requested from Google.
   const [wantCalendar, setWantCalendar] = useState(true)
   const [wantEmail, setWantEmail] = useState(true)
+  // Poll state — cleared on unmount or when the poller resolves.
+  const pollTimeoutRef = useRef<number | null>(null)
+  const pollDeadlineRef = useRef<number>(0)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -49,6 +63,7 @@ export default function IntegrationsPanel({
     try {
       const data = await getAgentIntegrations(tenantId, agentId)
       setStatus(data)
+      return data
     } catch (err) {
       setError(
         t({
@@ -56,18 +71,70 @@ export default function IntegrationsPanel({
           en: 'Failed to load integrations',
         }) + ': ' + ((err as Error).message || ''),
       )
+      return null
     } finally {
       setLoading(false)
     }
   }, [tenantId, agentId, t])
 
-  // First-open: fetch status.
+  // Eager initial fetch: we want the collapsed header to show the real
+  // status (connected / not connected) without the user having to click
+  // to expand. Cheap since the endpoint is a single indexed DB lookup.
   useEffect(() => {
-    if (open && status === null && !loading) {
-      void refresh()
-    }
+    void refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [tenantId, agentId])
+
+  // Clean up any in-flight poller on unmount.
+  useEffect(() => {
+    return () => {
+      if (pollTimeoutRef.current != null) {
+        window.clearTimeout(pollTimeoutRef.current)
+        pollTimeoutRef.current = null
+      }
+    }
+  }, [])
+
+  const stopPolling = useCallback(() => {
+    if (pollTimeoutRef.current != null) {
+      window.clearTimeout(pollTimeoutRef.current)
+      pollTimeoutRef.current = null
+    }
+    setWaitingForConsent(false)
+  }, [])
+
+  const startPolling = useCallback(() => {
+    setWaitingForConsent(true)
+    pollDeadlineRef.current = Date.now() + POLL_TIMEOUT_MS
+
+    const tick = async () => {
+      // Timed out — give up and let the user click Connect again.
+      if (Date.now() > pollDeadlineRef.current) {
+        stopPolling()
+        setError(
+          t({
+            he: 'לא הצלחנו לזהות חיבור. נסה שוב או רענן את הדף.',
+            en: "Couldn't detect a completed connection. Try again or refresh the page.",
+          }),
+        )
+        return
+      }
+      try {
+        const data = await getAgentIntegrations(tenantId, agentId)
+        setStatus(data)
+        if (data.integrations.google.connected) {
+          stopPolling()
+          onChange?.()
+          return
+        }
+      } catch {
+        // Swallow transient errors during polling — try again next tick.
+      }
+      pollTimeoutRef.current = window.setTimeout(tick, POLL_INTERVAL_MS)
+    }
+
+    pollTimeoutRef.current = window.setTimeout(tick, POLL_INTERVAL_MS)
+  }, [tenantId, agentId, onChange, stopPolling, t])
 
   const handleConnect = async () => {
     if (!wantCalendar && !wantEmail) {
@@ -103,8 +170,18 @@ export default function IntegrationsPanel({
         login_hint: loginHint.trim() || undefined,
         capabilities,
       })
-      // Same-tab navigation — most reliable on mobile, no popup blockers.
-      window.location.href = connect_url
+      // Open in a NEW tab so this page stays put and can poll for
+      // status. If the popup is blocked, `newTab` is null — fall back
+      // to same-tab nav so the flow still works.
+      const newTab = window.open(connect_url, '_blank')
+      if (newTab == null) {
+        // Popup blocked — preserve the old behavior.
+        window.location.href = connect_url
+        return
+      }
+      // Start polling the backend for status — the new tab will
+      // eventually POST to /callback which writes the DB row.
+      startPolling()
     } catch (err) {
       setError(
         t({
@@ -112,6 +189,7 @@ export default function IntegrationsPanel({
           en: 'Failed to start connect flow',
         }) + ': ' + ((err as Error).message || ''),
       )
+    } finally {
       setBusy(false)
     }
   }
@@ -145,6 +223,17 @@ export default function IntegrationsPanel({
     }
   }
 
+  // Chevron that points AT the target. In LTR: ▶ (right). In RTL: ◀
+  // (left). Open state is direction-agnostic: ▼ (down).
+  const isRtl = lang === 'he'
+  const chevron = open ? '▼' : isRtl ? '◀' : '▶'
+
+  // Summary badge for the collapsed header. Always visible once we've
+  // fetched status, so users immediately see whether this agent has
+  // Google wired up without having to click to expand.
+  const googleStatus = status?.integrations.google
+  const connected = googleStatus?.connected === true
+
   return (
     <div className="mt-3 border-t border-gray-100 pt-3">
       <button
@@ -153,20 +242,35 @@ export default function IntegrationsPanel({
         className="w-full flex items-center justify-between text-sm text-gray-600 hover:text-gray-900 transition"
       >
         <span className="flex items-center gap-2">
-          {open ? '▼' : '▶'}{' '}
+          <span aria-hidden="true">{chevron}</span>
           <span>{t({ he: 'אינטגרציות', en: 'Integrations' })}</span>
-          {status?.integrations.google.connected && (
+        </span>
+        {googleStatus == null ? (
+          <span className="text-gray-400 text-xs">
+            {loading
+              ? t({ he: 'טוען…', en: 'Loading…' })
+              : t({ he: 'גוגל · יומן · מייל', en: 'Google · Calendar · Mail' })}
+          </span>
+        ) : connected ? (
+          <span className="flex items-center gap-1.5 text-xs text-green-700">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />
-          )}
-        </span>
-        <span className="text-gray-400 text-xs">
-          {t({ he: 'גוגל · יומן · מייל', en: 'Google · Calendar · Mail' })}
-        </span>
+            <span>
+              {t({ he: 'גוגל מחובר', en: 'Google connected' })}
+            </span>
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
+            <span>
+              {t({ he: 'גוגל לא מחובר', en: 'Google not connected' })}
+            </span>
+          </span>
+        )}
       </button>
 
       {open && (
-        <div className="mt-3">
-          {loading && (
+        <div className="mt-3 space-y-3">
+          {loading && status === null && (
             <div className="text-sm text-gray-500 py-2">
               {t({ he: 'טוען…', en: 'Loading…' })}
             </div>
@@ -176,10 +280,27 @@ export default function IntegrationsPanel({
               {error}
             </div>
           )}
-          {!loading && !error && status && (
+          {waitingForConsent && (
+            <div className="rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-900 px-3 py-2 text-sm flex items-center justify-between gap-3">
+              <span>
+                {t({
+                  he: 'ממתין לאישור שלך בחלון הבא של גוגל…',
+                  en: 'Waiting for you to approve in the Google tab…',
+                })}
+              </span>
+              <button
+                type="button"
+                onClick={stopPolling}
+                className="text-indigo-700 hover:text-indigo-900 text-xs font-medium underline"
+              >
+                {t({ he: 'ביטול', en: 'Cancel' })}
+              </button>
+            </div>
+          )}
+          {!error && status && (
             <GoogleIntegrationCard
               status={status.integrations.google}
-              busy={busy}
+              busy={busy || waitingForConsent}
               showAdvanced={showAdvanced}
               setShowAdvanced={setShowAdvanced}
               loginHint={loginHint}
