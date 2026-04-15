@@ -282,7 +282,7 @@ class AppDatabase:
         return self._fetch_one(
             """
             SELECT
-                a.agent_id, a.gateway_url, a.session_scope,
+                a.agent_id, a.gateway_url, a.session_scope, a.tenant_id,
                 ua.agent_name, ua.agent_gender, ua.status AS link_status,
                 u.id AS user_id, u.email AS user_email,
                 u.full_name AS user_full_name, u.role AS user_role
