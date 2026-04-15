@@ -86,7 +86,7 @@ export default function InviteAcceptPage() {
           </h1>
           <p className="text-sm text-gray-600 mb-6">{error}</p>
           <a href="/" className="text-indigo-600 text-sm hover:underline">
-            {t({ he: 'חזרה ל-Agentleh', en: 'Back to Agentleh' })}
+            {t({ he: 'חזרה ל-Agentiko', en: 'Back to Agentiko' })}
           </a>
         </div>
       </div>
@@ -136,7 +136,7 @@ export default function InviteAcceptPage() {
           </h1>
           <p className="text-sm text-gray-600 mb-6">{label}</p>
           <a href="/" className="text-indigo-600 text-sm hover:underline">
-            {t({ he: 'חזרה ל-Agentleh', en: 'Back to Agentleh' })}
+            {t({ he: 'חזרה ל-Agentiko', en: 'Back to Agentiko' })}
           </a>
         </div>
       </div>
