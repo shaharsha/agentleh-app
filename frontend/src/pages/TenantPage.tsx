@@ -65,6 +65,43 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId])
 
+  // After the Google OAuth callback redirects back here with
+  // ?google=connected|denied|error, surface a toast-like alert, reload
+  // so the integrations panel flips state, and clear the query param so
+  // a page refresh doesn't re-trigger.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const googleParam = params.get('google')
+    if (!googleParam) return
+
+    if (googleParam === 'connected') {
+      window.alert(
+        t({ he: 'חשבון גוגל חובר בהצלחה!', en: 'Google account connected!' }),
+      )
+      reload()
+    } else if (googleParam === 'denied') {
+      window.alert(
+        t({
+          he: 'החיבור לגוגל לא הושלם. ניתן לנסות שוב.',
+          en: 'Google connect was cancelled. You can try again.',
+        }),
+      )
+    } else if (googleParam === 'error') {
+      window.alert(
+        t({
+          he: 'שגיאה בחיבור לגוגל. נסה שוב.',
+          en: 'Google connect failed. Try again.',
+        }),
+      )
+    }
+
+    params.delete('google')
+    const newQuery = params.toString()
+    const newUrl = `${window.location.pathname}${newQuery ? '?' + newQuery : ''}`
+    window.history.replaceState({}, '', newUrl)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   if (loading) {
     return (
       <div className="p-8 text-gray-500">
@@ -197,7 +234,7 @@ function DashboardTab({
   isAdminOrOwner: boolean
   onChanged: () => void
 }) {
-  const { t } = useI18n()
+  const { t, dir } = useI18n()
   const subscription = dashboard?.subscription
   const totals = dashboard?.totals
 
@@ -303,12 +340,20 @@ function DashboardTab({
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   {t({ he: 'שם הסוכן', en: 'Agent name' })}
                 </label>
+                {/* Explicit dir from useI18n instead of dir="auto": an
+                    empty input with dir="auto" falls back to parent
+                    direction for the VALUE, but the placeholder still
+                    renders via the ::placeholder pseudo-element whose
+                    direction rules don't always honor auto-detect, so
+                    Hebrew placeholders ended up LTR-aligned. Following
+                    the active UI language is predictable and matches
+                    the user's expectation on keystroke. */}
                 <input
                   type="text"
                   value={newAgentName}
                   onChange={(e) => setNewAgentName(e.target.value)}
                   placeholder={t({ he: 'שולי', en: 'e.g. Shuli' })}
-                  dir="auto"
+                  dir={dir}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
@@ -326,11 +371,19 @@ function DashboardTab({
                 </select>
               </div>
             </div>
+            {/* The phone field is the END USER's phone — the person who
+                will send WhatsApp messages to this agent — NOT the
+                agent's phone (there's no such thing; our Meta WABA
+                business number is a single shared endpoint for all
+                inbound traffic and the bridge routes by the sender's
+                phone number to the right agent). Labels reflect that
+                explicitly to avoid the "why isn't this my business
+                number" confusion we had on dev. */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 {t({
-                  he: 'מספר וואטסאפ (פורמט בינלאומי, לדוגמה +972501234567)',
-                  en: 'WhatsApp phone (E.164, e.g. +972501234567)',
+                  he: 'מספר הוואטסאפ של המשתמש',
+                  en: "User's WhatsApp number",
                 })}
               </label>
               <input
@@ -341,6 +394,12 @@ function DashboardTab({
                 dir="ltr"
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
+              <p className="text-[11px] text-gray-500 mt-1">
+                {t({
+                  he: 'המספר שממנו ישלח המשתמש הודעות לסוכן (פורמט בינלאומי, לדוגמה +972501234567). לא המספר המשותף של Agentleh.',
+                  en: 'The number the user will message this agent from (E.164, e.g. +972501234567). Not Agentleh\'s shared business number.',
+                })}
+              </p>
             </div>
             {provisionError && (
               <div className="text-sm text-red-700 bg-red-50 p-3 rounded">{provisionError}</div>
