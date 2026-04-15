@@ -191,3 +191,113 @@ def test_authorization_url_includes_login_hint():
 def test_authorization_url_without_login_hint():
     url = google_oauth.build_authorization_url(state="s")
     assert "login_hint" not in url
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Capability selection (Phase 2 extension)
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_capabilities_to_scope_list_all_by_default():
+    scopes = google_oauth.capabilities_to_scope_list(None)
+    # Identity scopes always included
+    assert "openid" in scopes
+    assert "https://www.googleapis.com/auth/userinfo.email" in scopes
+    # All feature scopes present
+    assert "https://www.googleapis.com/auth/calendar" in scopes
+    assert "https://www.googleapis.com/auth/calendar.events" in scopes
+    assert "https://www.googleapis.com/auth/gmail.send" in scopes
+
+
+def test_capabilities_to_scope_list_calendar_only():
+    scopes = google_oauth.capabilities_to_scope_list(["calendar"])
+    assert "https://www.googleapis.com/auth/calendar" in scopes
+    assert "https://www.googleapis.com/auth/gmail.send" not in scopes
+    # Identity always included
+    assert "openid" in scopes
+
+
+def test_capabilities_to_scope_list_email_only():
+    scopes = google_oauth.capabilities_to_scope_list(["email"])
+    assert "https://www.googleapis.com/auth/gmail.send" in scopes
+    assert "https://www.googleapis.com/auth/calendar" not in scopes
+    assert "https://www.googleapis.com/auth/calendar.events" not in scopes
+
+
+def test_capabilities_to_scope_list_rejects_unknown():
+    with pytest.raises(ValueError, match="unknown_capability"):
+        google_oauth.capabilities_to_scope_list(["ninjas"])
+
+
+def test_mint_jwt_with_capabilities():
+    token = google_oauth.mint_connect_jwt("agent-abc", capabilities=["calendar"])
+    claims = google_oauth.verify_connect_jwt(token)
+    assert claims.capabilities == ["calendar"]
+
+
+def test_mint_jwt_rejects_unknown_capability():
+    with pytest.raises(ValueError, match="unknown_capability"):
+        google_oauth.mint_connect_jwt("agent-abc", capabilities=["bogus"])
+
+
+def test_verify_jwt_rejects_forged_unknown_capability():
+    """Belt + braces: even a JWT signed with the real secret can't sneak
+    an unknown capability past verify_connect_jwt."""
+    from jose import jwt
+
+    payload = {
+        "iss": "attacker",
+        "aud": google_oauth._JWT_AUDIENCE,
+        "sub": "agent-x",
+        "iat": 0,
+        "exp": 9999999999,
+        "nonce": "n",
+        "caps": ["drive_full"],  # not in our allowlist
+    }
+    token = jwt.encode(
+        payload,
+        os.environ["APP_GOOGLE_CONNECT_JWT_SECRET"],
+        algorithm="HS256",
+    )
+    with pytest.raises(ValueError, match="invalid_state_token"):
+        google_oauth.verify_connect_jwt(token)
+
+
+def test_build_authorization_url_respects_scope_list():
+    url = google_oauth.build_authorization_url(
+        state="s",
+        scopes=["openid", "https://www.googleapis.com/auth/gmail.send"],
+    )
+    # Only the passed scopes should appear
+    assert "gmail.send" in url
+    assert "calendar" not in url
+
+
+def test_backwards_compat_google_scopes_constant():
+    """Existing call sites that use GOOGLE_SCOPES should still get the
+    full v1 scope set."""
+    assert "openid" in google_oauth.GOOGLE_SCOPES
+    assert "https://www.googleapis.com/auth/calendar" in google_oauth.GOOGLE_SCOPES
+    assert "https://www.googleapis.com/auth/gmail.send" in google_oauth.GOOGLE_SCOPES
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Shortlink service
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_shortlink_generate_code_length_and_charset():
+    from services import shortlink
+
+    code = shortlink.generate_code()
+    assert len(code) == 10
+    # base62: no punctuation, no dashes
+    assert code.isalnum()
+
+
+def test_shortlink_codes_are_unique_over_many_calls():
+    from services import shortlink
+
+    codes = {shortlink.generate_code() for _ in range(500)}
+    # 500 random picks from 62^10 ≈ 8e17 should be trivially unique
+    assert len(codes) == 500

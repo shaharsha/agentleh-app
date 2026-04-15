@@ -39,15 +39,64 @@ GOOGLE_AUTH_URI = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URI = "https://openidconnect.googleapis.com/v1/userinfo"
 
-# v1 scopes — all sensitive-only, no restricted (no CASA audit).
-# Kept in one place so the start route and the DB row agree.
-GOOGLE_SCOPES: tuple[str, ...] = (
+# Identity scopes — always requested, so we get a google_email back
+# from /userinfo regardless of which feature scopes the user picked.
+IDENTITY_SCOPES: tuple[str, ...] = (
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/calendar",
-    "https://www.googleapis.com/auth/calendar.events",
-    "https://www.googleapis.com/auth/gmail.send",
 )
+
+# Feature capabilities the user can pick individually. Each maps to one
+# or more Google OAuth scopes. Keep this restricted to scopes the
+# Google Auth Platform approved for our project — adding anything else
+# requires a new verification cycle and potentially CASA.
+#
+# v1 allowed keys: `calendar`, `email`. Adding a new capability means
+# adding an entry here AND updating the corresponding Hebrew/English
+# label maps in the frontend `IntegrationsPanel` component.
+GOOGLE_CAPABILITY_TO_SCOPES: dict[str, tuple[str, ...]] = {
+    "calendar": (
+        "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/calendar.events",
+    ),
+    "email": ("https://www.googleapis.com/auth/gmail.send",),
+}
+
+ALL_CAPABILITIES: tuple[str, ...] = tuple(GOOGLE_CAPABILITY_TO_SCOPES.keys())
+
+# Full scope list when no capabilities are specified (backwards-compat
+# default). Preserved as ``GOOGLE_SCOPES`` so older call sites keep
+# working until they're migrated to ``capabilities_to_scope_list``.
+GOOGLE_SCOPES: tuple[str, ...] = tuple(
+    list(IDENTITY_SCOPES)
+    + [
+        scope
+        for cap in ALL_CAPABILITIES
+        for scope in GOOGLE_CAPABILITY_TO_SCOPES[cap]
+    ]
+)
+
+
+def capabilities_to_scope_list(caps: list[str] | None) -> list[str]:
+    """Resolve a capability selection to the full OAuth scope list.
+
+    - ``None`` or empty → all capabilities (backwards-compat default).
+    - Unknown capability key → ``ValueError`` so the caller can 400.
+    - Identity scopes are always included so userinfo fetch keeps
+      working regardless of which features the user picked.
+    """
+    if not caps:
+        caps = list(ALL_CAPABILITIES)
+    resolved: list[str] = list(IDENTITY_SCOPES)
+    seen: set[str] = set(resolved)
+    for cap in caps:
+        if cap not in GOOGLE_CAPABILITY_TO_SCOPES:
+            raise ValueError(f"unknown_capability: {cap}")
+        for scope in GOOGLE_CAPABILITY_TO_SCOPES[cap]:
+            if scope not in seen:
+                resolved.append(scope)
+                seen.add(scope)
+    return resolved
 
 _JWT_ALGORITHM = "HS256"
 _JWT_AUDIENCE = "agentiko-google-connect"
@@ -132,6 +181,7 @@ class ConnectClaims:
     nonce: str
     redirect_to: str | None = None
     login_hint: str | None = None
+    capabilities: list[str] | None = None
 
 
 class InvalidRedirectError(ValueError):
@@ -145,6 +195,7 @@ def mint_connect_jwt(
     *,
     redirect_to: str | None = None,
     login_hint: str | None = None,
+    capabilities: list[str] | None = None,
 ) -> str:
     """Mint a short-lived state JWT pinning the OAuth flow to ``agent_id``.
 
@@ -152,11 +203,21 @@ def mint_connect_jwt(
     no ``redirect_to`` (WhatsApp flow lands on the inline Hebrew success
     page). The app UI passes ``redirect_to`` so the callback redirects
     back to the dashboard.
+
+    ``capabilities`` is an optional list of capability keys (from
+    ``GOOGLE_CAPABILITY_TO_SCOPES``) that limits which Google scopes the
+    start endpoint will request. When omitted, all capabilities are
+    requested (backwards-compat default). Validated at mint time so
+    typos fail fast instead of at consent time.
     """
     if redirect_to is not None and not _is_redirect_allowed(redirect_to):
         raise InvalidRedirectError(
             f"redirect_to host not allowlisted: {redirect_to!r}"
         )
+
+    if capabilities:
+        # Validate against the allowlist — raises ValueError on unknown key.
+        capabilities_to_scope_list(capabilities)
 
     now = int(time.time())
     payload: dict[str, Any] = {
@@ -171,6 +232,8 @@ def mint_connect_jwt(
         payload["redirect_to"] = redirect_to
     if login_hint:
         payload["login_hint"] = login_hint
+    if capabilities:
+        payload["caps"] = list(capabilities)
     return jwt.encode(payload, _jwt_secret(), algorithm=_JWT_ALGORITHM)
 
 
@@ -204,11 +267,27 @@ def verify_connect_jwt(token: str) -> ConnectClaims:
 
     login_hint = payload.get("login_hint")
 
+    # Validate capabilities claim at verify time too — defense against
+    # a forged JWT that somehow got a bad key past mint-time validation.
+    caps_raw = payload.get("caps")
+    capabilities: list[str] | None = None
+    if caps_raw is not None:
+        if not isinstance(caps_raw, list) or not all(
+            isinstance(c, str) for c in caps_raw
+        ):
+            raise ValueError("invalid_state_token")
+        try:
+            capabilities_to_scope_list(list(caps_raw))  # raises on unknown
+        except ValueError:
+            raise ValueError("invalid_state_token")
+        capabilities = list(caps_raw)
+
     return ConnectClaims(
         agent_id=str(agent_id),
         nonce=str(nonce),
         redirect_to=str(redirect_to) if redirect_to else None,
         login_hint=str(login_hint) if login_hint else None,
+        capabilities=capabilities,
     )
 
 
@@ -217,14 +296,27 @@ def verify_connect_jwt(token: str) -> ConnectClaims:
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def build_authorization_url(state: str, *, login_hint: str | None = None) -> str:
+def build_authorization_url(
+    state: str,
+    *,
+    login_hint: str | None = None,
+    scopes: list[str] | None = None,
+) -> str:
+    """Build the Google OAuth consent URL.
+
+    ``scopes`` is the resolved OAuth scope list — use
+    :func:`capabilities_to_scope_list` upstream to turn a capability
+    selection into the right list. When omitted, falls back to the full
+    v1 scope set.
+    """
     from urllib.parse import urlencode
 
+    resolved_scopes = list(scopes) if scopes is not None else list(GOOGLE_SCOPES)
     params: dict[str, str] = {
         "response_type": "code",
         "client_id": _client_id(),
         "redirect_uri": _redirect_uri(),
-        "scope": " ".join(GOOGLE_SCOPES),
+        "scope": " ".join(resolved_scopes),
         "state": state,
         "access_type": "offline",
         "prompt": "consent",

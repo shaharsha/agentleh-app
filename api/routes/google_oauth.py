@@ -39,10 +39,11 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlencode, urlparse, urlunparse
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from pydantic import BaseModel, Field
 
-from services import google_oauth
+from services import google_oauth, shortlink
 from services.google_oauth import InvalidRedirectError
 from services.meter_client import MeterClientError, store_google_credentials
 
@@ -146,11 +147,24 @@ async def oauth_start(t: str = Query(..., min_length=10, max_length=2048)):
             status_code=400,
         )
 
+    # Resolve the capability claim (if any) into a concrete OAuth scope
+    # list. If the JWT has no caps claim, fall back to the full v1 set
+    # for backwards-compat — existing plugin builds that don't know
+    # about capabilities keep working.
+    try:
+        scope_list = google_oauth.capabilities_to_scope_list(claims.capabilities)
+    except ValueError:
+        return HTMLResponse(
+            _error_html("הקישור פג תוקף או שאינו תקין."),
+            status_code=400,
+        )
+
     logger.info(
-        "google-connect start: agent_id=%s has_redirect=%s has_hint=%s",
+        "google-connect start: agent_id=%s has_redirect=%s has_hint=%s caps=%s",
         claims.agent_id,
         bool(claims.redirect_to),
         bool(claims.login_hint),
+        claims.capabilities or "all",
     )
     # Pass the same JWT as the state parameter — callback re-validates
     # and extracts agent_id + redirect_to from it. Google echoes state
@@ -159,6 +173,7 @@ async def oauth_start(t: str = Query(..., min_length=10, max_length=2048)):
         url=google_oauth.build_authorization_url(
             state=t,
             login_hint=claims.login_hint,
+            scopes=scope_list,
         ),
         status_code=302,
     )
@@ -282,3 +297,80 @@ async def oauth_callback(
             status_code=302,
         )
     return HTMLResponse(_success_html(google_email), status_code=200)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Shortlink POST endpoint (JWT-authed by the JWT itself)
+#
+# The OpenClaw plugin calls this right after minting a connect JWT. It
+# hands us the JWT, we re-verify it with the same secret we'd use on
+# /start, create a short code that maps to the full /start URL, and
+# return the short URL. The plugin then sends the SHORT URL to the user
+# in WhatsApp instead of the ~450-char raw JWT URL.
+#
+# Auth: the JWT itself. We already validate aud, signature, and expiry
+# in verify_connect_jwt — that's enough. No admin bearer, no extra
+# header. The endpoint is public but only creates a shortlink for a
+# JWT that's already valid, so the only thing an attacker with no
+# JWT can do is hit it with garbage and get 400.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class ShortlinkRequest(BaseModel):
+    """Body for POST /api/oauth/google/shortlink. ``t`` is the full JWT
+    that would otherwise land in the query string of the /start URL."""
+
+    t: str = Field(..., min_length=10, max_length=4096)
+
+
+@router.post("/shortlink")
+async def create_shortlink(
+    body: ShortlinkRequest,
+    request: Request,
+) -> dict:
+    # Validate the JWT first — same audience/signature check as /start.
+    # If the JWT is bad, we refuse to shorten it (don't want to persist
+    # state for garbage inputs).
+    try:
+        google_oauth.verify_connect_jwt(body.t)
+    except (ValueError, InvalidRedirectError):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_state_token"},
+        )
+
+    # Build the full /start URL. We don't accept a prebuilt long_url
+    # from the caller — it's derived from the JWT alone, so there's no
+    # open-redirect risk and the caller can't sneak a different target
+    # through.
+    import os
+
+    base = os.environ.get("APP_PUBLIC_URL", "").rstrip("/")
+    if not base:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "app_public_url_not_set"},
+        )
+    long_url = f"{base}/api/oauth/google/start?t={body.t}"
+
+    db = request.app.state.db
+    try:
+        code, expires_at = shortlink.create_shortlink(db, long_url=long_url)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("shortlink create failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "shortlink_create_failed"},
+        )
+
+    short_url = f"{base}/c/{code}"
+    logger.info(
+        "shortlink created: code=%s expires_at=%s",
+        code,
+        expires_at.isoformat(),
+    )
+    return {
+        "short_url": short_url,
+        "code": code,
+        "expires_at": expires_at.isoformat(),
+    }

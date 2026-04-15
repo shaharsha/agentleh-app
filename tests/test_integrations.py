@@ -248,6 +248,31 @@ def test_connect_propagates_login_hint(client):
     assert claims.login_hint == "alice@example.com"
 
 
+def test_connect_propagates_capabilities(client):
+    resp = client.post(
+        "/api/tenants/10/agents/agent-a/integrations/google/connect",
+        headers={"Authorization": "Bearer fake"},
+        json={"capabilities": ["calendar"]},
+    )
+    assert resp.status_code == 200
+
+    from services import google_oauth
+
+    token = resp.json()["connect_url"].split("?t=", 1)[1]
+    claims = google_oauth.verify_connect_jwt(token)
+    assert claims.capabilities == ["calendar"]
+
+
+def test_connect_rejects_unknown_capability(client):
+    resp = client.post(
+        "/api/tenants/10/agents/agent-a/integrations/google/connect",
+        headers={"Authorization": "Bearer fake"},
+        json={"capabilities": ["ninjas"]},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "invalid_capability"
+
+
 def test_connect_agent_not_in_tenant_404(client):
     app.state.db.get_agent_details = MagicMock(return_value=_agent_row(tenant_id=99))
     resp = client.post(

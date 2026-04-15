@@ -143,11 +143,17 @@ class GoogleConnectRequest(BaseModel):
 
     ``login_hint`` is optional and purely a UX nicety: when provided,
     Google's consent screen skips the account picker and pre-selects
-    that account. Users with multiple Google accounts can use the
-    frontend's 'Advanced' disclosure to provide it.
+    that account.
+
+    ``capabilities`` is an optional list of capability keys from
+    ``GOOGLE_CAPABILITY_TO_SCOPES`` (``calendar`` / ``email``). When
+    omitted or empty, all capabilities are requested. The checkbox UI
+    in the IntegrationsPanel populates this; unselected keys are
+    excluded before the Google consent screen even sees them.
     """
 
     login_hint: str | None = Field(default=None, max_length=320)
+    capabilities: list[str] | None = Field(default=None, max_length=10)
 
 
 @router.post("/tenants/{tenant_id}/agents/{agent_id}/integrations/google/connect")
@@ -168,6 +174,7 @@ async def start_google_connect(
             agent_id,
             redirect_to=return_to,
             login_hint=(body.login_hint or None),
+            capabilities=(body.capabilities or None),
         )
     except InvalidRedirectError as exc:
         # This would only fire if someone misconfigured APP_PUBLIC_URL
@@ -176,6 +183,14 @@ async def start_google_connect(
         raise HTTPException(
             status_code=500,
             detail={"error": "invalid_redirect_config"},
+        )
+    except ValueError as exc:
+        # Unknown capability key — frontend sent an invalid selection.
+        # 400 with the specific message so it surfaces nicely in the panel.
+        logger.warning("start_google_connect: invalid capability: %s", exc)
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_capability", "message": str(exc)},
         )
 
     base = os.environ.get("APP_PUBLIC_URL", "").rstrip("/")

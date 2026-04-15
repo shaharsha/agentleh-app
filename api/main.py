@@ -7,7 +7,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -83,6 +83,68 @@ app.include_router(integrations_router, prefix="/api")
 @app.get("/health")
 def health() -> dict:
     return {"ok": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Short-URL redirect for the WhatsApp OAuth connect flow.
+#
+# The plugin's google_get_connect_url tool asks the app to shorten the
+# full /api/oauth/google/start?t=<jwt> URL before sending it in
+# WhatsApp. This route 302-redirects to the stored long URL (or shows
+# the same Hebrew error page /start uses on expiry / unknown code, so
+# the failure mode looks identical no matter which link the user taps).
+#
+# Registered BEFORE the /{full_path:path} SPA fallback so it wins route
+# matching for /c/<code>.
+# ─────────────────────────────────────────────────────────────────────────
+@app.get("/c/{code}")
+def shortlink_redirect(code: str, request: Request):
+    from fastapi.responses import HTMLResponse, RedirectResponse
+    from services import shortlink
+
+    # Compact validation — codes are always 10 base62 chars. Anything
+    # else is definitely bogus; short-circuit with the Hebrew error page.
+    if not code.isalnum() or len(code) > 32:
+        return HTMLResponse(
+            _shortlink_error_html(),
+            status_code=400,
+        )
+
+    db = request.app.state.db
+    long_url = shortlink.resolve_shortlink(db, code=code)
+    if long_url is None:
+        return HTMLResponse(
+            _shortlink_error_html(),
+            status_code=404,
+        )
+    return RedirectResponse(url=long_url, status_code=302)
+
+
+def _shortlink_error_html() -> str:
+    """Tiny reusable Hebrew/English error page for expired/missing
+    shortlinks. Matches the styling of the /start error page."""
+    return """<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agentiko</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 0; min-height: 100vh; display: grid; place-items: center; }
+    .card { background: rgba(30, 41, 59, 0.8); border-radius: 18px; padding: 32px; max-width: 360px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+    .x { font-size: 56px; line-height: 1; margin-bottom: 16px; color: #f87171; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { font-size: 14px; color: #cbd5e1; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="x">⚠</div>
+    <h1>הקישור פג תוקף או שאינו תקין</h1>
+    <p>חזור לוואטסאפ ובקש מהסוכן קישור חדש.</p>
+  </div>
+</body>
+</html>"""
 
 
 @app.get("/{full_path:path}")
