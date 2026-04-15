@@ -397,8 +397,8 @@ function DashboardTab({
               />
               <p className="text-[11px] text-gray-500 mt-1">
                 {t({
-                  he: 'המספר שממנו ישלח המשתמש הודעות לסוכן (פורמט בינלאומי, לדוגמה +972501234567). לא המספר המשותף של Agentleh.',
-                  en: 'The number the user will message this agent from (E.164, e.g. +972501234567). Not Agentleh\'s shared business number.',
+                  he: 'המספר שממנו ישלח המשתמש הודעות לסוכן (פורמט בינלאומי, לדוגמה +972501234567). לא המספר המשותף של Agentiko.',
+                  en: 'The number the user will message this agent from (E.164, e.g. +972501234567). Not Agentiko\'s shared business number.',
                 })}
               </p>
             </div>

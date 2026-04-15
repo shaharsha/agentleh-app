@@ -30,7 +30,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 RESEND_API_URL = "https://api.resend.com/emails"
-FROM_ADDRESS = "Agentleh <noreply@agentiko.io>"
+FROM_ADDRESS = "Agentiko <noreply@agentiko.io>"
 
 
 def _api_key() -> str:
@@ -68,7 +68,7 @@ def _invite_html(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>הזמנה ל-{tenant} ב-Agentleh</title>
+  <title>הזמנה ל-{tenant} ב-Agentiko</title>
 </head>
 <body style="margin:0;padding:0;background:#f7f7f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;direction:rtl;">
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f7f7f8;padding:40px 0;">
@@ -77,7 +77,7 @@ def _invite_html(
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="background:#ffffff;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);overflow:hidden;">
           <tr>
             <td style="padding:40px 40px 24px 40px;text-align:right;">
-              <div style="font-size:28px;font-weight:700;color:#111;letter-spacing:-0.5px;">Agentleh</div>
+              <div style="font-size:28px;font-weight:700;color:#111;letter-spacing:-0.5px;">Agentiko</div>
               <div style="font-size:14px;color:#888;margin-top:4px;">עוזר ה-AI שלך בוואטסאפ</div>
             </td>
           </tr>
@@ -87,7 +87,7 @@ def _invite_html(
                 {inviter} הזמין/ה אותך להצטרף ל־<span style="color:#4338ca;">{tenant}</span>
               </h1>
               <p style="font-size:16px;color:#555;margin:0 0 8px 0;line-height:1.6;">
-                קיבלת הזמנה להצטרף לסביבת עבודה ב-Agentleh בתור <strong style="color:#111;">{role_label}</strong>.
+                קיבלת הזמנה להצטרף לסביבת עבודה ב-Agentiko בתור <strong style="color:#111;">{role_label}</strong>.
               </p>
               <p style="font-size:16px;color:#555;margin:0 0 24px 0;line-height:1.6;">
                 בתוך הסביבה תוכל/י לראות ולנהל את סוכני ה-WhatsApp, לראות שימוש וחיובים, ולהזמין אנשים נוספים.
@@ -116,7 +116,7 @@ def _invite_html(
             <td style="padding:20px 40px;border-top:1px solid #eee;background:#fafafa;text-align:center;">
               <p style="font-size:12px;color:#999;margin:0;line-height:1.5;">
                 אם לא ציפית להזמנה הזו, ניתן להתעלם בבטחה.<br>
-                Agentleh · agentiko.io
+                Agentiko · agentiko.io
               </p>
             </td>
           </tr>
@@ -138,12 +138,12 @@ def _invite_text(
     """Plain-text fallback for clients that don't render HTML."""
     role_label = _role_he(role)
     return (
-        f"{inviter_name} הזמין/ה אותך להצטרף ל-{tenant_name} ב-Agentleh.\n\n"
+        f"{inviter_name} הזמין/ה אותך להצטרף ל-{tenant_name} ב-Agentiko.\n\n"
         f"תפקיד: {role_label}\n\n"
         f"לקבלת ההזמנה לחץ/י כאן:\n{accept_url}\n\n"
         f"ההזמנה תוקפה 7 ימים.\n\n"
         f"אם לא ציפית להזמנה הזו, ניתן להתעלם.\n"
-        f"Agentleh · agentiko.io\n"
+        f"Agentiko · agentiko.io\n"
     )
 
 
@@ -161,7 +161,7 @@ async def send_invite_email(
     Returns the Resend response dict (includes an `id` field for the
     message, useful for debugging if delivery issues are reported).
     """
-    subject = f"הזמנה ל-{tenant_name} ב-Agentleh"
+    subject = f"הזמנה ל-{tenant_name} ב-Agentiko"
     body_html = _invite_html(
         tenant_name=tenant_name,
         inviter_name=inviter_name,
