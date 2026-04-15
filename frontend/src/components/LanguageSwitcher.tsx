@@ -1,12 +1,15 @@
 import { useI18n, type Lang } from '../lib/i18n'
+import { GlobeIcon } from './icons'
 
 /**
  * Compact two-state language toggle for the top nav.
  *
- * Renders as "עב | EN" with the active language highlighted. Clicking
- * either side calls `setLang`, which (via I18nProvider's useEffect)
- * flips `<html dir>` + `<html lang>` and triggers a re-render across
- * the whole tree. No page reload, no flicker.
+ * Renders as `🌐 עב | EN` with the active language highlighted. A small
+ * globe icon prefixes the group so at a glance the cluster reads as
+ * "language control" rather than "two random buttons". Clicking either
+ * side calls `setLang`, which (via I18nProvider's useEffect) flips
+ * `<html dir>` + `<html lang>` and triggers a re-render across the
+ * whole tree. No page reload, no flicker.
  *
  * Deliberately minimal — no dropdown, no flags, no "auto" option. Two
  * languages, one click, instantly obvious.
@@ -29,7 +32,8 @@ export default function LanguageSwitcher() {
   )
 
   return (
-    <div className="flex items-center gap-1 border border-gray-200 rounded-md p-0.5 bg-white/50">
+    <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-1.5 py-0.5 bg-white/50">
+      <GlobeIcon className="w-[14px] h-[14px] text-text-muted" />
       {btn('he', 'עב')}
       {btn('en', 'EN')}
     </div>
