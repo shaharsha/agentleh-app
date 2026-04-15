@@ -131,7 +131,7 @@ async def get_agent_voice(
 ) -> dict[str, Any]:
     db = request.app.state.db
     agent = db._fetch_one(
-        "SELECT agent_id, tenant_id, tts_voice_name FROM agents WHERE agent_id = %s",
+        "SELECT agent_id, tenant_id, tts_voice_name, bot_gender FROM agents WHERE agent_id = %s",
         (agent_id,),
     )
     if agent is None:
@@ -143,14 +143,46 @@ async def get_agent_voice(
     return {
         "agent_id": agent["agent_id"],
         "tts_voice_name": agent["tts_voice_name"],
+        "bot_gender": agent.get("bot_gender") or "male",
     }
 
 
 # ─── PATCH /api/tenants/{tenant_id}/agents/{agent_id}/voice ─────────
 
 
+# Mirror of agent-config/openclaw/voices.json and meter.main.VOICE_GENDER.
+# Authoritative validation happens here for UI writes; the meter enforces
+# the same invariants for agent-self-edit writes via /agent/profile.
+# Update all three sites in the same PR when Google ships new voices.
+VOICE_GENDER: dict[str, set[str]] = {
+    "female": {
+        "Achernar", "Aoede", "Autonoe", "Callirrhoe", "Despina", "Erinome",
+        "Gacrux", "Kore", "Laomedeia", "Leda", "Pulcherrima", "Sulafat",
+        "Vindemiatrix", "Zephyr",
+    },
+    "male": {
+        "Achird", "Algenib", "Algieba", "Alnilam", "Charon", "Enceladus",
+        "Fenrir", "Iapetus", "Orus", "Puck", "Rasalgethi", "Sadachbia",
+        "Sadaltager", "Schedar", "Umbriel", "Zubenelgenubi",
+    },
+}
+
+
+def _gender_for_voice(voice: str) -> str | None:
+    for gender, ids in VOICE_GENDER.items():
+        if voice in ids:
+            return gender
+    return None
+
+
 class VoiceUpdate(BaseModel):
-    tts_voice_name: str = Field(min_length=1, max_length=64)
+    """Partial update for an agent's voice + gender. Either field can be
+    sent alone — when only voice is passed, gender is inferred from the
+    catalog; when only gender is passed, voice resets to that gender's
+    default (Puck/Kore). Mismatches are rejected."""
+
+    tts_voice_name: str | None = Field(default=None, min_length=1, max_length=64)
+    bot_gender: str | None = Field(default=None, pattern="^(male|female)$")
 
 
 @router.patch("/tenants/{tenant_id}/agents/{agent_id}/voice")
@@ -162,23 +194,37 @@ async def update_agent_voice(
 ) -> dict[str, Any]:
     db = request.app.state.db
 
-    # Validate against the manifest — prevents typos, SQL-safe, documents
-    # the allowed set. If the manifest ever shrinks, existing unchanged
-    # agents keep their now-missing voice without side effects (the skill
-    # will try it, meter will 400, skill falls back to text).
-    await _fetch_manifest()
-    if (
-        _allowed_voices_cache is not None
-        and body.tts_voice_name not in _allowed_voices_cache
-    ):
+    if body.tts_voice_name is None and body.bot_gender is None:
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": "unknown_voice",
-                "voice": body.tts_voice_name,
-                "hint": "GET /api/voices/manifest for the allowed set",
-            },
+            detail={"error": "no_fields", "hint": "pass at least one of: tts_voice_name, bot_gender"},
         )
+
+    # Resolve the (voice, gender) target from the partial update.
+    if body.tts_voice_name is not None:
+        voice_gender = _gender_for_voice(body.tts_voice_name)
+        if voice_gender is None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "unknown_voice",
+                    "voice": body.tts_voice_name,
+                    "hint": "GET /api/voices/manifest for the allowed set",
+                },
+            )
+        if body.bot_gender is not None and body.bot_gender != voice_gender:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "gender_voice_mismatch",
+                    "hint": f"voice '{body.tts_voice_name}' is a {voice_gender} voice, cannot pair with gender={body.bot_gender}",
+                },
+            )
+        target_voice = body.tts_voice_name
+        target_gender = voice_gender
+    else:
+        target_gender = body.bot_gender
+        target_voice = "Puck" if target_gender == "male" else "Kore"
 
     # Ownership check — the agent must belong to the caller's tenant
     # (superadmin bypasses).
@@ -192,21 +238,24 @@ async def update_agent_voice(
         raise HTTPException(status_code=404, detail={"error": "agent_not_found"})
 
     db._execute(
-        "UPDATE agents SET tts_voice_name = %s WHERE agent_id = %s",
-        (body.tts_voice_name, agent_id),
+        "UPDATE agents SET tts_voice_name = %s, bot_gender = %s WHERE agent_id = %s",
+        (target_voice, target_gender, agent_id),
     )
     logger.info(
-        "voice_updated agent=%s tenant=%s voice=%s by_user=%s",
+        "voice_updated agent=%s tenant=%s voice=%s gender=%s by_user=%s",
         agent_id,
         ctx.tenant_id,
-        body.tts_voice_name,
+        target_voice,
+        target_gender,
         ctx.user_id,
     )
     return {
         "agent_id": agent_id,
-        "tts_voice_name": body.tts_voice_name,
+        "tts_voice_name": target_voice,
+        "bot_gender": target_gender,
         "note": (
-            "The new voice takes effect on the next container restart. "
-            "Restarts happen automatically within a few minutes."
+            "The new voice takes effect on the next voice message — the plugin "
+            "queries the meter's /agent/profile on each synthesis, so no "
+            "container restart is needed."
         ),
     }

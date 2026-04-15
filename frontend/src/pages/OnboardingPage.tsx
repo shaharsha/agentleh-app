@@ -119,10 +119,17 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
             <p className="text-[12px] text-text-secondary mb-2">
               לחץ על קול כדי לשמוע אותו ולבחור אותו. הסוכן ישתמש בקול הזה כאשר ישלח הודעות קוליות בוואטסאפ.
             </p>
-            <VoicePicker
-              value={form.tts_voice_name}
-              onChange={(v) => update('tts_voice_name', v)}
-            />
+            {form.agent_gender ? (
+              <VoicePicker
+                value={form.tts_voice_name}
+                onChange={(v) => update('tts_voice_name', v)}
+                lockedGender={form.agent_gender as 'male' | 'female'}
+              />
+            ) : (
+              <div className="glass-card rounded-[16px] p-4 text-center text-[13px] text-text-secondary">
+                בחר את מגדר הסוכן למעלה כדי לראות את הקולות המתאימים
+              </div>
+            )}
           </div>
         </section>
 

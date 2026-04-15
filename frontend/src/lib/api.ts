@@ -110,7 +110,7 @@ export async function getVoiceManifest(): Promise<VoiceManifest> {
 export async function getAgentVoice(
   tenantId: number,
   agentId: string,
-): Promise<{ agent_id: string; tts_voice_name: string }> {
+): Promise<{ agent_id: string; tts_voice_name: string; bot_gender: 'male' | 'female' }> {
   const res = await authFetch(
     `/api/tenants/${tenantId}/agents/${encodeURIComponent(agentId)}/voice`,
   )
@@ -121,13 +121,18 @@ export async function getAgentVoice(
 export async function updateAgentVoice(
   tenantId: number,
   agentId: string,
-  ttsVoiceName: string,
-): Promise<{ agent_id: string; tts_voice_name: string; note: string }> {
+  update: { tts_voice_name?: string; bot_gender?: 'male' | 'female' },
+): Promise<{
+  agent_id: string
+  tts_voice_name: string
+  bot_gender: 'male' | 'female'
+  note: string
+}> {
   const res = await authFetch(
     `/api/tenants/${tenantId}/agents/${encodeURIComponent(agentId)}/voice`,
     {
       method: 'PATCH',
-      body: JSON.stringify({ tts_voice_name: ttsVoiceName }),
+      body: JSON.stringify(update),
     },
   )
   if (!res.ok) {

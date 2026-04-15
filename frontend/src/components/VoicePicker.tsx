@@ -63,6 +63,15 @@ interface VoicePickerProps {
   onChange: (voiceName: string) => void
   /** Optional — override the manifest-driven default when a pre-selected value should win. */
   fallbackDefault?: string
+  /**
+   * When set, the voice picker is locked to this gender: the gender-filter
+   * buttons are hidden and the grid only shows matching voices. The parent
+   * component owns the gender toggle (radio button above) so the bot_gender
+   * DB field and the voice list stay in lockstep. If lockedGender changes
+   * to a value that doesn't match the current `value`, the picker emits
+   * an onChange with the manifest's default voice for the new gender.
+   */
+  lockedGender?: 'male' | 'female'
 }
 
 type GenderFilter = 'all' | 'female' | 'male'
@@ -71,6 +80,7 @@ export default function VoicePicker({
   value,
   onChange,
   fallbackDefault,
+  lockedGender,
 }: VoicePickerProps) {
   const [manifest, setManifest] = useState<VoiceManifest | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -115,6 +125,28 @@ export default function VoicePicker({
     }
   }, [])
 
+  // When the parent toggles lockedGender and the currently-selected voice
+  // doesn't belong to the new gender, snap the selection to that gender's
+  // first voice. Keeps the picker in a consistent state so there's never
+  // a male-gender-with-Kore-selected moment.
+  useEffect(() => {
+    if (!manifest || !lockedGender) return
+    const selectedEntry = manifest.voices.find(
+      (v: VoiceManifestEntry) => v.name === value,
+    )
+    if (selectedEntry && selectedEntry.gender === lockedGender) return
+    const preferredDefault = lockedGender === 'male' ? 'Puck' : 'Kore'
+    const pick =
+      manifest.voices.find(
+        (v: VoiceManifestEntry) =>
+          v.gender === lockedGender && v.name === preferredDefault,
+      ) ||
+      manifest.voices.find((v: VoiceManifestEntry) => v.gender === lockedGender)
+    if (pick) onChange(pick.name)
+    // onChange is not stable — run only when lockedGender or manifest changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockedGender, manifest])
+
   function playSample(voice: VoiceManifestEntry) {
     // Hot-swap the single <audio> element's src. Using one element (not
     // per-card <audio>) means switching voices stops the previous one
@@ -154,28 +186,33 @@ export default function VoicePicker({
     )
   }
 
+  // When lockedGender is set, only show matching voices and hide the
+  // gender toggle entirely — the parent owns gender selection above.
+  const effectiveGenderFilter: GenderFilter = lockedGender ?? filter
   const filtered = manifest.voices.filter((v: VoiceManifestEntry) => {
-    if (filter === 'all') return true
-    return v.gender === filter
+    if (effectiveGenderFilter === 'all') return true
+    return v.gender === effectiveGenderFilter
   })
 
   return (
     <div className="space-y-4">
-      {/* Gender filter */}
-      <div className="flex gap-2">
-        <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
-          הכל ({manifest.voices.length})
-        </FilterButton>
-        <FilterButton
-          active={filter === 'female'}
-          onClick={() => setFilter('female')}
-        >
-          נשיים ({manifest.voices.filter((v: VoiceManifestEntry) => v.gender === 'female').length})
-        </FilterButton>
-        <FilterButton active={filter === 'male'} onClick={() => setFilter('male')}>
-          גבריים ({manifest.voices.filter((v: VoiceManifestEntry) => v.gender === 'male').length})
-        </FilterButton>
-      </div>
+      {/* Gender filter — hidden when the parent locks gender via the prop */}
+      {!lockedGender && (
+        <div className="flex gap-2">
+          <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
+            הכל ({manifest.voices.length})
+          </FilterButton>
+          <FilterButton
+            active={filter === 'female'}
+            onClick={() => setFilter('female')}
+          >
+            נשיים ({manifest.voices.filter((v: VoiceManifestEntry) => v.gender === 'female').length})
+          </FilterButton>
+          <FilterButton active={filter === 'male'} onClick={() => setFilter('male')}>
+            גבריים ({manifest.voices.filter((v: VoiceManifestEntry) => v.gender === 'male').length})
+          </FilterButton>
+        </div>
+      )}
 
       {/* Sample text — same phrase every voice speaks, so users compare apples-to-apples */}
       <div className="text-[12px] text-text-secondary text-center">
