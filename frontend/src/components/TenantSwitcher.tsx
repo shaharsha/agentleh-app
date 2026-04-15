@@ -63,9 +63,11 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
       >
-        <span className="max-w-[180px] truncate">{activeTenant.name}</span>
+        <span className="max-w-[180px] truncate" dir="auto">
+          {activeTenant.name}
+        </span>
         {tenants.length > 1 && (
           <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -88,11 +90,13 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
                     onSelect(t.id)
                     setOpen(false)
                   }}
-                  className={`w-full text-right px-3 py-2 rounded-lg text-sm flex items-center justify-between gap-2 ${
+                  className={`w-full text-right px-3 py-2 rounded-lg text-sm flex items-center justify-between gap-2 cursor-pointer ${
                     t.id === activeTenantId ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50 text-gray-700'
                   }`}
                 >
-                  <span className="truncate">{t.name}</span>
+                  <span className="truncate" dir="auto">
+                    {t.name}
+                  </span>
                   {roleBadge(t.role)}
                 </button>
               ))}

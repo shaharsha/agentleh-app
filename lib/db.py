@@ -12,6 +12,31 @@ from psycopg.rows import dict_row
 logger = logging.getLogger(__name__)
 
 
+def _default_tenant_name(name_base: str) -> str:
+    """Build a script-appropriate default workspace name.
+
+    Mixing RTL Hebrew with the English "'s workspace" suffix renders
+    garbled via the Unicode Bidi Algorithm — the apostrophe-s and the
+    word "workspace" get visually reordered around the Hebrew portion
+    and the result looks broken even though the character sequence
+    is technically correct.
+
+    We detect Hebrew (U+0590..U+05FF) in the name and switch to a
+    fully-Hebrew template ("מרחב העבודה של <name>") which reads
+    naturally right-to-left. Latin / mixed-non-Hebrew names keep the
+    original "<name>'s workspace" template.
+
+    Examples:
+        "Shahar Shavit"   -> "Shahar Shavit's workspace"
+        "שחר שביט"        -> "מרחב העבודה של שחר שביט"
+        "alice"           -> "alice's workspace"
+    """
+    has_hebrew = any("\u0590" <= c <= "\u05FF" for c in name_base)
+    if has_hebrew:
+        return f"מרחב העבודה של {name_base}"
+    return f"{name_base}'s workspace"
+
+
 @dataclass
 class AppDatabase:
     dsn: str
@@ -347,7 +372,7 @@ class AppDatabase:
         email_local = (user["email"] or "user").split("@", 1)[0].lower()
         slug = f"{email_local}-{user_id}"
         name_base = user["full_name"] or email_local
-        name = f"{name_base}'s workspace"
+        name = _default_tenant_name(name_base)
         billing_email = user["email"] or ""
 
         with self.connect() as conn:

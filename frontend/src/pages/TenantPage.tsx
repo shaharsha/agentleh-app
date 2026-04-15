@@ -85,7 +85,13 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
   return (
     <div className="max-w-5xl mx-auto px-6 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{tenant.name}</h1>
+        {/* dir="auto" lets the browser pick RTL vs LTR per-element from
+            the first strong directional character, so Hebrew names
+            render right-aligned and English names render left-aligned
+            without mixing in the same line. */}
+        <h1 className="text-2xl font-bold text-gray-900" dir="auto">
+          {tenant.name}
+        </h1>
         <p className="text-sm text-gray-500 mt-1">
           {members.length} member{members.length !== 1 ? 's' : ''} · {agents.length} agent
           {agents.length !== 1 ? 's' : ''} · your role: <span className="font-medium">{tenant.role}</span>
