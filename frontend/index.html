@@ -9,6 +9,50 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script>
+      // Resolve the active language + direction BEFORE React mounts so
+      // the very first paint matches whatever the user will see. Runs
+      // synchronously in plain JS (no JSX, no modules) so there's no
+      // flash of the wrong direction between the static HTML and the
+      // I18nProvider useEffect firing.
+      //
+      // Resolution order MUST match src/lib/i18n.tsx::pickInitialLang:
+      //   1. localStorage explicit pick (user clicked switcher)
+      //   2. navigator.languages walk — first supported primary tag
+      //      wins. `iw` is the legacy Chrome code for Hebrew.
+      //   3. Product default: Hebrew (agentleh is Israeli-first; any
+      //      non-he/en browser language falls to Hebrew, not English).
+      (function () {
+        try {
+          var lang;
+          var saved = localStorage.getItem('agentleh.lang');
+          if (saved === 'he' || saved === 'en') {
+            lang = saved;
+          } else {
+            var langs =
+              navigator.languages && navigator.languages.length
+                ? navigator.languages
+                : [navigator.language || 'he'];
+            lang = 'he';
+            for (var i = 0; i < langs.length; i++) {
+              var primary = String(langs[i]).toLowerCase().split('-')[0];
+              if (primary === 'he' || primary === 'iw') {
+                lang = 'he';
+                break;
+              }
+              if (primary === 'en') {
+                lang = 'en';
+                break;
+              }
+            }
+          }
+          document.documentElement.lang = lang;
+          document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr';
+        } catch (e) {
+          // localStorage or navigator disabled — keep html defaults
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

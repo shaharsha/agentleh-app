@@ -35,6 +35,15 @@ input, button, select, textarea {
   font-family: inherit;
 }
 
+/* Tailwind v4 removed the default browser `cursor: pointer` on non-disabled
+ * <button>s (preflight change). Restore it globally so every interactive
+ * button across the app feels clickable without having to sprinkle
+ * `cursor-pointer` on 40+ call sites. Disabled buttons get the default
+ * cursor so the affordance matches their grayed-out state. */
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 ::selection {
   background-color: var(--color-brand-100);
   color: var(--color-brand-dark);

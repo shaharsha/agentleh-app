@@ -3,3 +3,6 @@ supabase_url: "https://mnetqtjwcdunznvvfaob.supabase.co"
 supabase_anon_key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1uZXRxdGp3Y2R1bnpudnZmYW9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDc0NTMsImV4cCI6MjA5MTEyMzQ1M30.QdtX_YczXzokSS6vfqDcMFGQcZFPCmgT4Arspvb8I8c"
 # JWT secret must come from env var APP_SUPABASE_JWT_SECRET (never commit)
 cors_allowed_origins: "http://localhost:5173,http://127.0.0.1:5173,https://app-dev.agentiko.io,https://agentleh-app-dev.onrender.com"
+# Dev voice samples live in a separate public bucket so we can regenerate
+# without touching the one real customers' onboarding reads from.
+voice_manifest_url: "https://storage.googleapis.com/agentiko-public-assets-dev/voice-samples/manifest.json"
