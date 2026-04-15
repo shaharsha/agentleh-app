@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import type { TenantMembership } from '../lib/types'
+import type { TenantMembership, TenantRole } from '../lib/types'
 import { createTenant } from '../lib/api'
+import { useI18n } from '../lib/i18n'
 
 interface Props {
   tenants: TenantMembership[]
@@ -17,47 +18,70 @@ interface Props {
  *
  * Hidden when the user has <2 tenants — a B2C user with a single
  * personal workspace never needs to switch, so we keep the nav clean.
+ *
+ * All strings are bilingual via useI18n. The dropdown inherits the
+ * active direction from <html>, so Hebrew renders RTL, English renders
+ * LTR, and user-entered tenant names get a per-element dir="auto" to
+ * render correctly regardless of the wrapper's direction.
  */
 export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRefresh }: Props) {
+  const { t, dir } = useI18n()
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
 
   const activeTenant = tenants.find((t) => t.id === activeTenantId) || tenants[0] || null
 
-  // Keep the switcher UI out of the way for users with just one tenant,
-  // BUT expose the "new workspace" button via a subtle affordance once
-  // they click their tenant name. For zero-tenant users (shouldn't
-  // happen post-onboarding), render nothing.
   if (!activeTenant) return null
 
   async function handleCreate() {
     if (!newName.trim()) return
     setCreating(true)
     try {
-      const t = await createTenant(newName.trim())
+      const created = await createTenant(newName.trim())
       onRefresh()
-      onSelect(t.id)
+      onSelect(created.id)
       setOpen(false)
       setNewName('')
     } catch (err) {
-      alert('Failed to create workspace: ' + (err as Error).message)
+      alert(
+        t({
+          he: 'יצירת סביבת עבודה נכשלה: ',
+          en: 'Failed to create workspace: ',
+        }) + (err as Error).message,
+      )
     } finally {
       setCreating(false)
     }
   }
 
-  const roleBadge = (role: string) => {
+  const roleLabel = (role: TenantRole) =>
+    t(
+      role === 'owner'
+        ? { he: 'בעלים', en: 'owner' }
+        : role === 'admin'
+          ? { he: 'מנהל', en: 'admin' }
+          : { he: 'חבר', en: 'member' },
+    )
+
+  const roleBadge = (role: TenantRole) => {
     const color =
-      role === 'owner' ? 'bg-amber-100 text-amber-800'
-      : role === 'admin' ? 'bg-indigo-100 text-indigo-800'
-      : 'bg-gray-100 text-gray-600'
+      role === 'owner'
+        ? 'bg-amber-100 text-amber-800'
+        : role === 'admin'
+          ? 'bg-indigo-100 text-indigo-800'
+          : 'bg-gray-100 text-gray-600'
     return (
       <span className={`inline-block px-1.5 py-0.5 text-[10px] font-medium rounded ${color}`}>
-        {role}
+        {roleLabel(role)}
       </span>
     )
   }
+
+  // The dropdown is anchored to the opposite side of the button from
+  // the reading direction, so it aligns with the nav content below the
+  // logo in both LTR and RTL layouts.
+  const anchorClass = dir === 'rtl' ? 'start-0' : 'end-0'
 
   return (
     <div className="relative">
@@ -78,26 +102,30 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-200 z-20 overflow-hidden">
+          <div
+            className={`absolute ${anchorClass} mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-200 z-20 overflow-hidden`}
+          >
             <div className="p-2">
               <div className="px-2 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                Your workspaces
+                {t({ he: 'סביבות העבודה שלך', en: 'Your workspaces' })}
               </div>
-              {tenants.map((t) => (
+              {tenants.map((tenant) => (
                 <button
-                  key={t.id}
+                  key={tenant.id}
                   onClick={() => {
-                    onSelect(t.id)
+                    onSelect(tenant.id)
                     setOpen(false)
                   }}
-                  className={`w-full text-right px-3 py-2 rounded-lg text-sm flex items-center justify-between gap-2 cursor-pointer ${
-                    t.id === activeTenantId ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50 text-gray-700'
+                  className={`w-full px-3 py-2 rounded-lg text-sm flex items-center justify-between gap-2 cursor-pointer ${
+                    tenant.id === activeTenantId
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'hover:bg-gray-50 text-gray-700'
                   }`}
                 >
-                  <span className="truncate" dir="auto">
-                    {t.name}
+                  <span className="truncate flex-1 text-start" dir="auto">
+                    {tenant.name}
                   </span>
-                  {roleBadge(t.role)}
+                  {roleBadge(tenant.role)}
                 </button>
               ))}
             </div>
@@ -108,9 +136,10 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
                     type="text"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Workspace name"
+                    placeholder={t({ he: 'שם סביבת העבודה', en: 'Workspace name' })}
                     className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     autoFocus
+                    dir="auto"
                     onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
                   />
                   <button
@@ -118,18 +147,18 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
                     disabled={!newName.trim()}
                     className="px-3 py-1 text-sm text-white bg-indigo-600 rounded disabled:opacity-40 hover:bg-indigo-700"
                   >
-                    Create
+                    {t({ he: 'יצירה', en: 'Create' })}
                   </button>
                 </div>
               ) : (
                 <button
                   onClick={() => setCreating(true)}
-                  className="w-full text-right px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-2 justify-start"
+                  className="w-full px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-2 text-start"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
-                  New workspace
+                  {t({ he: 'סביבת עבודה חדשה', en: 'New workspace' })}
                 </button>
               )}
             </div>

@@ -9,6 +9,23 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script>
+      // Read the saved language + direction BEFORE React mounts so the
+      // first paint matches the active language. Without this, returning
+      // English users would see a flash of RTL between the static HTML
+      // and the I18nProvider useEffect firing. Kept in plain JS (not
+      // JSX) so it runs synchronously before any module evaluates.
+      (function () {
+        try {
+          var saved = localStorage.getItem('agentleh.lang');
+          var lang = saved === 'en' ? 'en' : 'he';
+          document.documentElement.lang = lang;
+          document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr';
+        } catch (e) {
+          // localStorage disabled — keep html defaults (Hebrew / RTL)
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

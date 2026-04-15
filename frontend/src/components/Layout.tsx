@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import type { AppUser, TenantMembership } from '../lib/types'
 import TenantSwitcher from './TenantSwitcher'
+import LanguageSwitcher from './LanguageSwitcher'
+import { useI18n } from '../lib/i18n'
 
 interface LayoutProps {
   children: ReactNode
@@ -19,6 +21,7 @@ export default function Layout({
   onTenantSelect,
   onRefreshTenants,
 }: LayoutProps) {
+  const { t } = useI18n()
   const isAdminRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
   const isTenantRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/tenants')
   const isSuperadmin = user?.role === 'superadmin'
@@ -38,8 +41,8 @@ export default function Layout({
             </div>
             <span className="text-[17px] font-semibold tracking-[-0.3px]">Agentiko</span>
             {isAdminRoute && (
-              <span className="ml-2 text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold">
-                ADMIN
+              <span className="ms-2 text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold">
+                {t({ he: 'ניהול', en: 'ADMIN' })}
               </span>
             )}
           </div>
@@ -57,14 +60,17 @@ export default function Layout({
                 href={isAdminRoute ? '/' : '/admin'}
                 className="text-[14px] text-text-secondary hover:text-text-primary transition-colors"
               >
-                {isAdminRoute ? 'Dashboard' : 'Admin'}
+                {isAdminRoute
+                  ? t({ he: 'לוח הבקרה', en: 'Dashboard' })
+                  : t({ he: 'ניהול', en: 'Admin' })}
               </a>
             )}
+            <LanguageSwitcher />
             <button
               onClick={onLogout}
               className="text-[14px] text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
             >
-              התנתקות
+              {t({ he: 'התנתקות', en: 'Logout' })}
             </button>
           </div>
         </div>

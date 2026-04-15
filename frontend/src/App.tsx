@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { getMe } from './lib/api'
+import { useI18n } from './lib/i18n'
 import type { AppUser } from './lib/types'
 import type { Session } from '@supabase/supabase-js'
 import LandingPage from './pages/LandingPage'
@@ -36,6 +37,7 @@ function parseRoute(pathname: string): {
 }
 
 export default function App() {
+  const { t } = useI18n()
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<AppUser | null>(null)
   const [loading, setLoading] = useState(true)
@@ -125,7 +127,9 @@ export default function App() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-gray-500">Loading...</div>
+        <div className="text-gray-500">
+          {t({ he: 'טוען…', en: 'Loading…' })}
+        </div>
       </div>
     )
   }
@@ -154,7 +158,12 @@ export default function App() {
     >
       {route.kind === 'admin' && isSuperadmin && <AdminPage />}
       {route.kind === 'admin' && !isSuperadmin && (
-        <div className="p-8 text-red-600">403 — superadmin access required.</div>
+        <div className="p-8 text-red-600">
+          {t({
+            he: '403 — דרושה גישת סופראדמין.',
+            en: '403 — superadmin access required.',
+          })}
+        </div>
       )}
 
       {route.kind === 'tenant' && route.tenantId && (
