@@ -104,28 +104,28 @@ export default function IntegrationsPanel({
   }
 
   return (
-    <div className="mt-4 border-t border-white/5 pt-4">
+    <div className="mt-3 border-t border-gray-100 pt-3">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between text-[13px] text-text-secondary hover:text-text-primary transition"
+        className="w-full flex items-center justify-between text-sm text-gray-600 hover:text-gray-900 transition"
       >
         <span className="flex items-center gap-2">
           {open ? '▼' : '▶'} <span>אינטגרציות</span>
           {status?.integrations.google.connected && (
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-success" />
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />
           )}
         </span>
-        <span className="text-text-muted">Google · יומן · מייל</span>
+        <span className="text-gray-400 text-xs">Google · יומן · מייל</span>
       </button>
 
       {open && (
         <div className="mt-3">
           {loading && (
-            <div className="text-[13px] text-text-muted py-2">טוען…</div>
+            <div className="text-sm text-gray-500 py-2">טוען…</div>
           )}
           {error && (
-            <div className="rounded-[12px] bg-red-50 text-red-700 px-3 py-2 text-[13px]">
+            <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">
               {error}
             </div>
           )}
@@ -186,12 +186,14 @@ function GoogleIntegrationCard(props: {
 
   if (!status.connected) {
     return (
-      <div className="glass-card rounded-[14px] p-4 space-y-3">
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
         <div className="flex items-center gap-3">
           <GoogleLogo />
           <div className="flex-1">
-            <div className="text-[14px] font-semibold">Google Calendar + Gmail</div>
-            <div className="text-[12px] text-text-muted">
+            <div className="text-sm font-semibold text-gray-900">
+              Google Calendar + Gmail
+            </div>
+            <div className="text-xs text-gray-500">
               הסוכן יוכל לנהל את היומן ולשלוח מיילים בשמך
             </div>
           </div>
@@ -200,7 +202,7 @@ function GoogleIntegrationCard(props: {
         <details
           open={showAdvanced}
           onToggle={(e) => setShowAdvanced((e.target as HTMLDetailsElement).open)}
-          className="text-[12px] text-text-muted"
+          className="text-xs text-gray-500"
         >
           <summary className="cursor-pointer select-none py-1">
             מתקדם — לבחור חשבון מראש (אופציונלי)
@@ -211,9 +213,9 @@ function GoogleIntegrationCard(props: {
             placeholder="you@gmail.com"
             value={loginHint}
             onChange={(e) => setLoginHint(e.target.value)}
-            className="input-glass mt-2 w-full px-3 py-2 text-[13px]"
+            className="mt-2 w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          <p className="mt-1 text-text-muted">
+          <p className="mt-1 text-gray-500">
             אם יש לך כמה חשבונות גוגל, אפשר לבחור מראש איזה לחבר. משאירים ריק = Google
             יציג בחירה.
           </p>
@@ -223,7 +225,7 @@ function GoogleIntegrationCard(props: {
           type="button"
           onClick={onConnect}
           disabled={busy}
-          className="btn-brand btn-md w-full disabled:opacity-60"
+          className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
         >
           {busy ? 'מתחבר…' : 'חבר חשבון גוגל'}
         </button>
@@ -234,15 +236,15 @@ function GoogleIntegrationCard(props: {
   const { can, cannot } = status.capabilities
 
   return (
-    <div className="glass-card rounded-[14px] p-4 space-y-3">
+    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
       <div className="flex items-center gap-3">
         <GoogleLogo />
         <div className="flex-1">
-          <div className="text-[14px] font-semibold flex items-center gap-2">
+          <div className="text-sm font-semibold text-gray-900 flex items-center gap-2">
             <span>Google Calendar + Gmail</span>
-            <span className="text-success text-[16px]">✓</span>
+            <span className="text-green-600">✓</span>
           </div>
-          <div className="text-[12px] text-text-muted" dir="ltr">
+          <div className="text-xs text-gray-500" dir="ltr">
             {status.email}
           </div>
         </div>
@@ -250,13 +252,13 @@ function GoogleIntegrationCard(props: {
 
       {can.length > 0 && (
         <div>
-          <div className="text-[12px] font-semibold text-text-secondary mb-1">
+          <div className="text-xs font-semibold text-gray-700 mb-1">
             ניתן לסוכן:
           </div>
-          <ul className="text-[12px] text-text-muted space-y-0.5">
+          <ul className="text-xs text-gray-600 space-y-0.5">
             {can.map((k) => (
               <li key={k} className="flex items-start gap-1.5">
-                <span className="text-success">✓</span>
+                <span className="text-green-600">✓</span>
                 <span>{CAN_LABELS[k] ?? k}</span>
               </li>
             ))}
@@ -266,13 +268,13 @@ function GoogleIntegrationCard(props: {
 
       {cannot.length > 0 && (
         <div>
-          <div className="text-[12px] font-semibold text-text-secondary mb-1">
+          <div className="text-xs font-semibold text-gray-700 mb-1">
             לא ניתן לסוכן:
           </div>
-          <ul className="text-[12px] text-text-muted space-y-0.5">
+          <ul className="text-xs text-gray-500 space-y-0.5">
             {cannot.map((k) => (
               <li key={k} className="flex items-start gap-1.5">
-                <span className="text-text-muted">×</span>
+                <span className="text-gray-400">×</span>
                 <span>{CANNOT_LABELS[k] ?? k}</span>
               </li>
             ))}
@@ -281,7 +283,7 @@ function GoogleIntegrationCard(props: {
       )}
 
       {status.granted_at && (
-        <div className="text-[11px] text-text-muted">
+        <div className="text-xs text-gray-400">
           חובר ב-{new Date(status.granted_at).toLocaleDateString('he-IL')}
         </div>
       )}
@@ -290,7 +292,7 @@ function GoogleIntegrationCard(props: {
         type="button"
         onClick={onDisconnect}
         disabled={busy}
-        className="btn-secondary btn-md w-full text-red-600 disabled:opacity-60"
+        className="w-full px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50"
       >
         {busy ? 'מנתק…' : 'נתק חשבון'}
       </button>

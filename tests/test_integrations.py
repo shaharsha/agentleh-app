@@ -222,13 +222,14 @@ def test_connect_happy_path_returns_url(client):
     )
     assert body["expires_in_seconds"] == 15 * 60
 
-    # Sanity: the embedded JWT carries the agent_id + redirect_to
+    # Sanity: the embedded JWT carries the agent_id + redirect_to back to
+    # the tenant's workspace page (where the integrations panel lives)
     from services import google_oauth
 
     token = body["connect_url"].split("?t=", 1)[1]
     claims = google_oauth.verify_connect_jwt(token)
     assert claims.agent_id == "agent-a"
-    assert claims.redirect_to == "https://app-dev.agentiko.io/dashboard"
+    assert claims.redirect_to == "https://app-dev.agentiko.io/tenants/10"
     assert claims.login_hint is None
 
 

@@ -15,6 +15,7 @@ import {
 import { useI18n, type Bilingual } from '../lib/i18n'
 import { planLabel, statusLabel } from '../lib/labels'
 import TenantName from '../components/TenantName'
+import IntegrationsPanel from '../components/IntegrationsPanel'
 
 interface Props {
   tenantId: number
@@ -432,18 +433,25 @@ function DashboardTab({
         ) : (
           <div className="divide-y divide-gray-100">
             {agents.map((a) => (
-              <div key={a.agent_id} className="py-3 flex items-center justify-between">
-                <div>
-                  <div className="font-medium text-gray-900" dir="auto">
-                    {a.agent_name}
+              <div key={a.agent_id} className="py-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-gray-900" dir="auto">
+                      {a.agent_name}
+                    </div>
+                    <div className="text-xs text-gray-500 font-mono" dir="ltr">
+                      {a.agent_id}
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500 font-mono" dir="ltr">
-                    {a.agent_id}
-                  </div>
+                  <span className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded">
+                    {t(statusLabel(a.status))}
+                  </span>
                 </div>
-                <span className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded">
-                  {t(statusLabel(a.status))}
-                </span>
+                <IntegrationsPanel
+                  tenantId={tenantId}
+                  agentId={a.agent_id}
+                  onChange={onChanged}
+                />
               </div>
             ))}
           </div>

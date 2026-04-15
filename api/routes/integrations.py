@@ -92,18 +92,20 @@ def _build_google_entry(row: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def _default_return_to() -> str:
-    """Where to redirect the user after a successful app-UI connect. The
-    app-public URL is injected via env (``APP_PUBLIC_URL``); we append
-    ``/dashboard`` so the integrations panel is visible when the user
-    comes back."""
+def _return_to_for_tenant(tenant_id: int) -> str:
+    """Where to redirect the user after a successful app-UI connect.
+
+    We land them back on their tenant workspace page — that's where the
+    integrations panel is rendered — with a query param the page's
+    ``useEffect`` watcher picks up to show a success toast and refetch.
+    """
     base = os.environ.get("APP_PUBLIC_URL", "").rstrip("/")
     if not base:
         raise HTTPException(
             status_code=500,
             detail={"error": "app_public_url_not_set"},
         )
-    return f"{base}/dashboard"
+    return f"{base}/tenants/{tenant_id}"
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -159,7 +161,7 @@ async def start_google_connect(
     db = request.app.state.db
     _assert_agent_in_tenant(db, tenant_id=tenant_id, agent_id=agent_id)
 
-    return_to = _default_return_to()
+    return_to = _return_to_for_tenant(tenant_id)
 
     try:
         token = google_oauth.mint_connect_jwt(

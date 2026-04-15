@@ -7,7 +7,6 @@ import type { Session } from '@supabase/supabase-js'
 import LandingPage from './pages/LandingPage'
 import PaymentPage from './pages/PaymentPage'
 import OnboardingPage from './pages/OnboardingPage'
-import DashboardPage from './pages/DashboardPage'
 import AdminPage from './pages/AdminPage'
 import TenantPage from './pages/TenantPage'
 import InviteAcceptPage from './pages/InviteAcceptPage'
@@ -181,9 +180,16 @@ export default function App() {
       )}
       {route.kind === 'root' && status === 'complete' && !user?.default_tenant_id && (
         // Complete user with no tenant — shouldn't happen after the
-        // loadUser auto-redirect, but keep a fallback so we don't blank
-        // the page if the backend returns an inconsistent me payload.
-        <DashboardPage />
+        // loadUser auto-redirect, but keep a minimal fallback so we
+        // don't blank the page if the backend returns an inconsistent
+        // me payload. Plain-text message is enough — the user should
+        // contact support rather than land on a broken dashboard.
+        <div className="p-8 text-center text-gray-600">
+          {t({
+            he: 'סביבת העבודה לא נטענה. נסה לרענן את הדף או פנה לתמיכה.',
+            en: 'Could not load your workspace. Try refreshing the page or contact support.',
+          })}
+        </div>
       )}
     </Layout>
   )
