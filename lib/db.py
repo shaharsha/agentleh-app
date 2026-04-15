@@ -130,8 +130,79 @@ class AppDatabase:
                         UNIQUE(user_id, agent_id)
                     )
                 """)
+                # Short-URL table for WhatsApp connect links. Maps a
+                # random 10-char base62 code → the full JWT-laden start
+                # URL. 15-min TTL matches the JWT TTL so an expired
+                # link produces the same error everywhere. Table is
+                # tiny and cleaned up lazily on lookup; no background
+                # job needed.
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS oauth_connect_shortlinks (
+                        code TEXT PRIMARY KEY,
+                        long_url TEXT NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        expires_at TIMESTAMPTZ NOT NULL,
+                        used_at TIMESTAMPTZ
+                    )
+                """)
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS oauth_connect_shortlinks_expires_idx
+                    ON oauth_connect_shortlinks(expires_at)
+                """)
             conn.commit()
         logger.info("Database schema initialized")
+
+    # ── OAuth connect shortlinks ─────────────────────────────────────
+
+    def create_oauth_shortlink(
+        self, *, code: str, long_url: str, expires_at
+    ) -> None:
+        """Insert a new shortlink row. Caller generates the code; this
+        helper just persists it. PK collision would raise; with a
+        62^10 keyspace it's negligible but the caller can retry."""
+        self._execute(
+            """
+            INSERT INTO oauth_connect_shortlinks (code, long_url, expires_at)
+            VALUES (%s, %s, %s)
+            """,
+            (code, long_url, expires_at),
+        )
+
+    def get_oauth_shortlink(self, code: str) -> dict[str, Any] | None:
+        """Look up a shortlink by code. Returns None if missing or
+        expired. Side effect: marks used_at on the first read so we
+        get a lightweight 'was this clicked?' signal."""
+        from datetime import datetime, timezone
+
+        row = self._fetch_one(
+            """
+            SELECT code, long_url, created_at, expires_at, used_at
+            FROM oauth_connect_shortlinks
+            WHERE code = %s
+            """,
+            (code,),
+        )
+        if row is None:
+            return None
+        expires_at = row["expires_at"]
+        if expires_at and expires_at < datetime.now(timezone.utc):
+            return None
+        if row["used_at"] is None:
+            # Best-effort used-at update; no guarantee of uniqueness.
+            # Failures are swallowed so a DB hiccup doesn't 500 the
+            # redirect path.
+            try:
+                self._execute(
+                    """
+                    UPDATE oauth_connect_shortlinks
+                    SET used_at = now()
+                    WHERE code = %s AND used_at IS NULL
+                    """,
+                    (code,),
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        return row
 
     # ── Users ─────────────────────────────────────────────────────────
 

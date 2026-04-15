@@ -279,3 +279,25 @@ def test_backwards_compat_google_scopes_constant():
     assert "openid" in google_oauth.GOOGLE_SCOPES
     assert "https://www.googleapis.com/auth/calendar" in google_oauth.GOOGLE_SCOPES
     assert "https://www.googleapis.com/auth/gmail.send" in google_oauth.GOOGLE_SCOPES
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Shortlink service
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_shortlink_generate_code_length_and_charset():
+    from services import shortlink
+
+    code = shortlink.generate_code()
+    assert len(code) == 10
+    # base62: no punctuation, no dashes
+    assert code.isalnum()
+
+
+def test_shortlink_codes_are_unique_over_many_calls():
+    from services import shortlink
+
+    codes = {shortlink.generate_code() for _ in range(500)}
+    # 500 random picks from 62^10 ≈ 8e17 should be trivially unique
+    assert len(codes) == 500
