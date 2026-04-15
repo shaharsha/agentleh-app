@@ -146,11 +146,24 @@ async def oauth_start(t: str = Query(..., min_length=10, max_length=2048)):
             status_code=400,
         )
 
+    # Resolve the capability claim (if any) into a concrete OAuth scope
+    # list. If the JWT has no caps claim, fall back to the full v1 set
+    # for backwards-compat — existing plugin builds that don't know
+    # about capabilities keep working.
+    try:
+        scope_list = google_oauth.capabilities_to_scope_list(claims.capabilities)
+    except ValueError:
+        return HTMLResponse(
+            _error_html("הקישור פג תוקף או שאינו תקין."),
+            status_code=400,
+        )
+
     logger.info(
-        "google-connect start: agent_id=%s has_redirect=%s has_hint=%s",
+        "google-connect start: agent_id=%s has_redirect=%s has_hint=%s caps=%s",
         claims.agent_id,
         bool(claims.redirect_to),
         bool(claims.login_hint),
+        claims.capabilities or "all",
     )
     # Pass the same JWT as the state parameter — callback re-validates
     # and extracts agent_id + redirect_to from it. Google echoes state
@@ -159,6 +172,7 @@ async def oauth_start(t: str = Query(..., min_length=10, max_length=2048)):
         url=google_oauth.build_authorization_url(
             state=t,
             login_hint=claims.login_hint,
+            scopes=scope_list,
         ),
         status_code=302,
     )

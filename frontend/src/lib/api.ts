@@ -370,7 +370,7 @@ export async function getAgentIntegrations(
 export async function startGoogleConnect(
   tenantId: number,
   agentId: string,
-  opts: { login_hint?: string } = {},
+  opts: { login_hint?: string; capabilities?: string[] } = {},
 ): Promise<GoogleConnectStartResponse> {
   const res = await authFetch(
     `/api/tenants/${tenantId}/agents/${encodeURIComponent(
@@ -378,7 +378,14 @@ export async function startGoogleConnect(
     )}/integrations/google/connect`,
     { method: 'POST', body: JSON.stringify(opts) },
   )
-  if (!res.ok) throw new Error('Failed to start Google connect flow')
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as {
+      detail?: { error?: string; message?: string }
+    }
+    throw new Error(
+      body?.detail?.message || body?.detail?.error || 'Failed to start Google connect flow',
+    )
+  }
   return res.json()
 }
 
