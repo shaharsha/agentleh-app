@@ -45,8 +45,13 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
 
   const activeTab: Tab = (subpage || 'dashboard') as Tab
 
-  const reload = async () => {
-    setLoading(true)
+  // reload({ silent: true }) refetches in the background without flipping
+  // the loading flag — keeps the UI mounted so the user doesn't see a
+  // "Loading workspace…" screen every time something changes (e.g. after
+  // creating an agent). Full-screen loader only fires on the initial
+  // mount where we have nothing to show.
+  const reload = async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true)
     setError(null)
     try {
       const [d, dash] = await Promise.all([
@@ -58,9 +63,11 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
     } catch (err) {
       setError((err as Error).message)
     } finally {
-      setLoading(false)
+      if (!opts.silent) setLoading(false)
     }
   }
+
+  const reloadSilent = () => { reload({ silent: true }) }
 
   useEffect(() => {
     reload()
@@ -190,7 +197,7 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
           dashboard={dashboard}
           agents={agents}
           isAdminOrOwner={isAdminOrOwner}
-          onChanged={reload}
+          onChanged={reloadSilent}
         />
       )}
       {activeTab === 'members' && (
@@ -201,7 +208,7 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
           isAdminOrOwner={isAdminOrOwner}
           isOwner={isOwner}
           ownerUserId={tenant.owner_user_id}
-          onChanged={reload}
+          onChanged={reloadSilent}
         />
       )}
       {activeTab === 'settings' && (
@@ -210,7 +217,7 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
           tenant={tenant}
           members={members}
           isOwner={isOwner}
-          onChanged={reload}
+          onChanged={reloadSilent}
           onDeleted={() => {
             onTenantsChanged()
             onNavigate('/')
@@ -286,11 +293,36 @@ function DashboardTab({
     )
   }
 
-  const progressPct = provisioning
-    ? progress.step === 0
-      ? 3
-      : Math.round((progress.step / progress.total) * 100)
-    : 0
+  // Weighted progress — step 4 (health-check wait) is 70% of the real
+  // elapsed time, so give it a matching slice of the bar. Never show 100%
+  // while still provisioning; reserve the final 5% for the "done" moment
+  // when the success event arrives.
+  //
+  //   step 0 (connecting)   →  3%
+  //   step 1 (workspace)    → 15%
+  //   step 2 (database)     → 25%
+  //   step 3 (container up) → 40%
+  //   step 4 (N/30 ticks)   → 40% + (N/30) * 55%  (caps at 95%)
+  //   result(success)       → 100%
+  const subMatch = /\((\d+)\/(\d+)\)/.exec(progress.label || '')
+  const subTick = subMatch ? parseInt(subMatch[1], 10) : 0
+  const subTotal = subMatch ? parseInt(subMatch[2], 10) : 30
+
+  let progressPct: number
+  if (!provisioning) {
+    progressPct = 0
+  } else if (progress.step === 0) {
+    progressPct = 3
+  } else if (progress.step === 1) {
+    progressPct = 15
+  } else if (progress.step === 2) {
+    progressPct = 25
+  } else if (progress.step === 3) {
+    progressPct = 40
+  } else {
+    const sub = subTotal > 0 ? Math.min(1, subTick / subTotal) : 0
+    progressPct = Math.round(40 + sub * 55)
+  }
 
   async function handleProvision() {
     if (!newAgentName.trim() || !newAgentPhone.trim()) return
@@ -418,9 +450,13 @@ function DashboardTab({
                   </span>
                   <span className="tabular-nums text-gray-500">{progressPct}%</span>
                 </div>
+                {/* Long CSS transition (700ms) smooths out burst-delivered
+                    events from GCP Cloud Run, which sometimes buffers a
+                    few seconds of progress ticks before flushing them as
+                    a batch. Without this the bar would teleport. */}
                 <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-indigo-500 rounded-full transition-all duration-500 ease-out"
+                    className="h-full bg-indigo-500 rounded-full transition-all duration-700 ease-out"
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
@@ -432,23 +468,40 @@ function DashboardTab({
                     const label = active
                       ? stepLabel(stepNum, progress.total, progress.label)
                       : stepLabel(stepNum, progress.total, defaultStepLabel(stepNum))
+                    // For the active health-check step, extract the (N/M)
+                    // sub-tick and render it as a small secondary bar so
+                    // the user sees continuous motion during the 60-90s
+                    // wait even when the main bar's range is small.
+                    const isHealthStep = active && stepNum === (progress.total || 4) && subMatch
                     return (
-                      <li key={i} className="flex items-center gap-2">
-                        {done ? (
-                          <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        ) : active ? (
-                          <svg className="w-4 h-4 text-indigo-500 animate-spin shrink-0" viewBox="0 0 24 24" fill="none">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        ) : (
-                          <div className="w-4 h-4 rounded-full border-2 border-gray-300 shrink-0" />
-                        )}
-                        <span className={done ? 'text-gray-400' : active ? 'text-gray-900 font-medium' : 'text-gray-400'}>
-                          {t(label)}
-                        </span>
+                      <li key={i} className="flex items-start gap-2">
+                        <div className="mt-0.5 shrink-0">
+                          {done ? (
+                            <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          ) : active ? (
+                            <svg className="w-4 h-4 text-indigo-500 animate-spin" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          ) : (
+                            <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className={done ? 'text-gray-400' : active ? 'text-gray-900 font-medium' : 'text-gray-400'}>
+                            {t(label)}
+                          </div>
+                          {isHealthStep && (
+                            <div className="mt-1 h-0.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-indigo-400 rounded-full transition-all duration-700 ease-out"
+                                style={{ width: `${Math.round((subTick / subTotal) * 100)}%` }}
+                              />
+                            </div>
+                          )}
+                        </div>
                       </li>
                     )
                   })}
