@@ -625,6 +625,35 @@ class AppDatabase:
             (tenant_id,),
         )
 
+    def get_agent_tenant_id(self, agent_id: str) -> int | None:
+        row = self._fetch_one(
+            "SELECT tenant_id FROM agents WHERE agent_id = %s",
+            (agent_id,),
+        )
+        return row["tenant_id"] if row else None
+
+    def hard_delete_agent(self, agent_id: str) -> None:
+        """Hard-delete an agent and all its DB state.
+
+        app_user_agents_legacy has no FK cascade, so we delete it
+        explicitly. The agents DELETE cascades to: phone_routes,
+        agents_meter_keys, agent_subscriptions (per-agent rows),
+        agent_google_credentials, agent_nylas_credentials.
+
+        usage_events are intentionally kept for billing history.
+        """
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM app_user_agents_legacy WHERE agent_id = %s",
+                    (agent_id,),
+                )
+                cur.execute(
+                    "DELETE FROM agents WHERE agent_id = %s",
+                    (agent_id,),
+                )
+            conn.commit()
+
     def transfer_tenant_owner(self, tenant_id: int, new_owner_user_id: int) -> None:
         """Atomic ownership transfer. The new owner must already be a member.
         Demotes the old owner to 'admin'."""

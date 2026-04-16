@@ -511,3 +511,46 @@ async def provision_agent(
         "port": result.port,
         "status": "active",
     }
+
+
+@router.delete("/{tenant_id}/agents/{agent_id}", status_code=204)
+async def delete_agent(
+    tenant_id: int,
+    agent_id: str,
+    request: Request,
+    ctx: TenantContext = Depends(require_tenant_role("admin")),
+) -> None:
+    """Hard-delete an agent: VM cleanup (backup + teardown) then DB delete.
+
+    Order: VM first, DB second. If VM cleanup fails, the agent row stays
+    intact and the user can retry. If DB first, VM resources become
+    permanently orphaned.
+    """
+    import asyncio
+
+    db = request.app.state.db
+
+    # Verify agent belongs to this tenant
+    agent_tenant_id = db.get_agent_tenant_id(agent_id)
+    if agent_tenant_id is None or agent_tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail={"error": "agent_not_found"})
+
+    # Step 1: VM deprovision (backup to GCS + container teardown)
+    provisioner = request.app.state.provisioner
+    result = await asyncio.to_thread(provisioner.deprovision, agent_id)
+    if not result.success:
+        raise HTTPException(
+            status_code=502,
+            detail={"error": "deprovision_failed", "message": result.error},
+        )
+
+    # Step 2: DB hard-delete (cascading)
+    db.hard_delete_agent(agent_id)
+
+    logger.info(
+        "agent deleted agent_id=%s tenant=%s by user=%s backup=%s",
+        agent_id,
+        tenant_id,
+        ctx.user_id,
+        result.backup_path,
+    )

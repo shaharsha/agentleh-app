@@ -44,6 +44,14 @@ class ProvisionResult:
     error: str = ""
 
 
+@dataclass
+class DeprovisionResult:
+    agent_id: str
+    success: bool = True
+    error: str = ""
+    backup_path: str = ""
+
+
 class AgentProvisioner(Protocol):
     def provision(
         self,
@@ -53,6 +61,7 @@ class AgentProvisioner(Protocol):
         user_name: str,
         tenant_id: int,
     ) -> ProvisionResult: ...
+    def deprovision(self, agent_id: str) -> DeprovisionResult: ...
     def check_health(self, agent_id: str) -> bool: ...
 
 
@@ -123,6 +132,10 @@ class MockProvisioner:
             port=18800,
             success=True,
         )
+
+    def deprovision(self, agent_id: str) -> DeprovisionResult:
+        logger.info("MOCK: Deprovisioning agent %s", agent_id)
+        return DeprovisionResult(agent_id=agent_id, backup_path="gs://mock-backup/")
 
     def check_health(self, agent_id: str) -> bool:
         logger.info("MOCK: Health check for %s → healthy", agent_id)
@@ -233,6 +246,54 @@ class VmHttpProvisioner:
             gateway_token=result.get("gateway_token") or "",
             port=int(result.get("port") or 0),
             success=True,
+        )
+
+    def deprovision(self, agent_id: str) -> DeprovisionResult:
+        logger.info("VmHttpProvisioner: deprovisioning agent=%s", agent_id)
+
+        try:
+            with httpx.Client(timeout=150.0) as client:
+                resp = client.post(
+                    f"{self.base_url}/deprovision",
+                    json={"agent_id": agent_id},
+                    headers={"Authorization": f"Bearer {self.token}"},
+                )
+        except httpx.HTTPError as exc:
+            logger.error("provision-api unreachable (deprovision): %s", exc)
+            return DeprovisionResult(
+                agent_id=agent_id,
+                success=False,
+                error=f"provision-api unreachable: {exc}",
+            )
+
+        if resp.status_code >= 400:
+            try:
+                err = resp.json()
+            except Exception:  # noqa: BLE001
+                err = {"error": "http_error", "status": resp.status_code, "body": resp.text[:400]}
+            logger.error("provision-api deprovision %s: %s", resp.status_code, err)
+            diag = (err.get("stdout") or "").strip() or (err.get("stderr") or err.get("detail", "")).strip()
+            return DeprovisionResult(
+                agent_id=agent_id,
+                success=False,
+                error=f"{err.get('error', 'unknown')}: {diag[-400:]}",
+            )
+
+        result = resp.json()
+        if not result.get("success"):
+            diag = (result.get("stdout") or "").strip() or (result.get("stderr") or "").strip()
+            error_msg = result.get("error", "unknown")
+            if diag:
+                error_msg = f"{error_msg}: {diag[-400:]}"
+            return DeprovisionResult(
+                agent_id=agent_id,
+                success=False,
+                error=error_msg,
+            )
+
+        return DeprovisionResult(
+            agent_id=agent_id,
+            backup_path=result.get("backup_path") or "",
         )
 
     def check_health(self, agent_id: str) -> bool:

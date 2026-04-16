@@ -237,6 +237,17 @@ export async function deleteTenant(tenantId: number) {
   }
 }
 
+export async function deleteAgent(tenantId: number, agentId: string) {
+  const res = await authFetch(
+    `/api/tenants/${tenantId}/agents/${encodeURIComponent(agentId)}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.detail?.message || body?.detail?.error || 'Delete agent failed')
+  }
+}
+
 export async function transferTenantOwner(tenantId: number, newOwnerUserId: number) {
   const res = await authFetch(`/api/tenants/${tenantId}/transfer-owner`, {
     method: 'POST',
