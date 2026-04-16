@@ -74,11 +74,10 @@ def _google_row() -> dict:
         "google_email": "user@gmail.com",
         "scopes": [
             "https://www.googleapis.com/auth/calendar",
-            "https://www.googleapis.com/auth/calendar.events",
-            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/gmail.modify",
         ],
+        "capabilities": ["calendar", "email"],
         "granted_at": datetime(2026, 4, 14, 12, 0, tzinfo=timezone.utc),
-        "last_refreshed_at": datetime(2026, 4, 14, 12, 30, tzinfo=timezone.utc),
     }
 
 
@@ -157,8 +156,9 @@ def test_list_integrations_connected(client, client_with_role, monkeypatch):
     assert google["email"] == "user@gmail.com"
     assert "manage_calendar" in google["capabilities"]["can"]
     assert "send_email" in google["capabilities"]["can"]
-    # The "cannot" list is a trust feature — verify it's surfaced
-    assert "read_email_bodies" in google["capabilities"]["cannot"]
+    assert "read_email" in google["capabilities"]["can"]
+    # With gmail.modify via Nylas, email read is no longer in "cannot"
+    assert "read_email" not in google["capabilities"]["cannot"]
     assert google["granted_at"].startswith("2026-04-14")
 
 
@@ -304,7 +304,7 @@ def test_disconnect_happy_path(client, monkeypatch):
         return_value={"agent_id": "agent-a", "revoked": True, "email": "u@gmail.com"}
     )
     monkeypatch.setattr(
-        "api.routes.integrations.revoke_google_credentials", mock_revoke
+        "api.routes.integrations.revoke_nylas_credentials", mock_revoke
     )
 
     resp = client.delete(
@@ -322,7 +322,7 @@ def test_disconnect_idempotent(client, monkeypatch):
         return_value={"agent_id": "agent-a", "revoked": False, "email": None}
     )
     monkeypatch.setattr(
-        "api.routes.integrations.revoke_google_credentials", mock_revoke
+        "api.routes.integrations.revoke_nylas_credentials", mock_revoke
     )
 
     resp = client.delete(
@@ -340,7 +340,7 @@ def test_disconnect_meter_error_surfaces_as_502(client, monkeypatch):
         raise meter_client.MeterClientError("meter down", status_code=502)
 
     monkeypatch.setattr(
-        "api.routes.integrations.revoke_google_credentials", _boom
+        "api.routes.integrations.revoke_nylas_credentials", _boom
     )
 
     resp = client.delete(

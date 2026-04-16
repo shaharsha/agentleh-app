@@ -44,7 +44,7 @@ from services import google_oauth
 from services.google_oauth import InvalidRedirectError
 from services.meter_client import (
     MeterClientError,
-    revoke_google_credentials,
+    revoke_nylas_credentials,
 )
 
 logger = logging.getLogger(__name__)
@@ -226,7 +226,7 @@ async def disconnect_google(
     _assert_agent_in_tenant(db, tenant_id=tenant_id, agent_id=agent_id)
 
     try:
-        result = await revoke_google_credentials(agent_id=agent_id)
+        result = await revoke_nylas_credentials(agent_id=agent_id)
     except MeterClientError as exc:
         logger.error(
             "disconnect_google: meter revoke failed for agent_id=%s: %s",

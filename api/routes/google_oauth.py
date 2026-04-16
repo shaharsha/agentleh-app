@@ -45,7 +45,7 @@ from pydantic import BaseModel, Field
 
 from services import google_oauth, shortlink
 from services.google_oauth import InvalidRedirectError
-from services.meter_client import MeterClientError, store_google_credentials
+from services.meter_client import MeterClientError, store_nylas_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -222,9 +222,9 @@ async def oauth_callback(
         )
 
     try:
-        token_response = await google_oauth.exchange_code(code)
+        nylas_response = await google_oauth.exchange_code(code)
     except ValueError as exc:
-        logger.warning("google-connect callback: exchange failed: %s", exc)
+        logger.warning("nylas-connect callback: exchange failed: %s", exc)
         return _redirect_or_html_error(
             claims_redirect_to,
             "לא הצלחנו לאשר את החיבור מול גוגל.",
@@ -232,47 +232,39 @@ async def oauth_callback(
             "error",
         )
 
-    refresh_token = token_response.get("refresh_token")
-    access_token = token_response.get("access_token")
-    granted_scope = token_response.get("scope", "")
+    grant_id = nylas_response.get("grant_id")
+    email = nylas_response.get("email") or "unknown"
+    granted_scope = nylas_response.get("scope", "")
 
-    if not refresh_token:
-        # Happens when the user already authorized our app and Google
-        # skips issuing a new refresh_token. We force prompt=consent to
-        # avoid this, so hitting this branch is a real bug (or test flake).
+    if not grant_id:
         logger.error(
-            "google-connect callback: no refresh_token in response; "
-            "check that prompt=consent is set on the authorization URL"
+            "nylas-connect callback: no grant_id in response: %s",
+            {k: v for k, v in nylas_response.items() if k != "access_token"},
         )
         return _redirect_or_html_error(
             claims_redirect_to,
-            "גוגל לא החזירה אסימון חידוש. נסה שוב.",
+            "Nylas לא החזירה מזהה חיבור. נסה שוב.",
             502,
             "error",
         )
 
-    try:
-        userinfo = await google_oauth.fetch_userinfo(access_token)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("google-connect callback: userinfo fetch failed: %s", exc)
-        userinfo = {}
-
-    google_email = userinfo.get("email") or "unknown"
-
     scopes = [s for s in granted_scope.split() if s] or list(google_oauth.GOOGLE_SCOPES)
+    capabilities = list(claims.capabilities) if claims.capabilities else list(google_oauth.ALL_CAPABILITIES)
 
-    # Hand the plaintext refresh token to the meter — single writer for
-    # agent_google_credentials, atomic cache purge, no KMS in the app.
+    # Store the grant_id in the meter. No KMS, no encryption — the
+    # grant_id is useless without the Nylas API key (held only by the
+    # meter in Secret Manager).
     try:
-        await store_google_credentials(
+        await store_nylas_credentials(
             agent_id=claims.agent_id,
-            google_email=google_email,
-            refresh_token=refresh_token,
+            grant_id=grant_id,
+            email=email,
             scopes=scopes,
+            capabilities=capabilities,
         )
     except MeterClientError as exc:
         logger.error(
-            "google-connect callback: meter store failed for agent_id=%s: %s",
+            "nylas-connect callback: meter store failed for agent_id=%s: %s",
             claims.agent_id,
             exc,
         )
@@ -284,9 +276,10 @@ async def oauth_callback(
         )
 
     logger.info(
-        "google-connect callback: stored credentials for agent_id=%s email=%s",
+        "nylas-connect callback: stored grant for agent_id=%s email=%s grant_id=%s",
         claims.agent_id,
-        google_email,
+        email,
+        grant_id[:8] + "...",
     )
 
     # Success. Branch on whether the JWT asked for a redirect back to an
@@ -296,7 +289,7 @@ async def oauth_callback(
             _append_query(claims_redirect_to, "google", "connected"),
             status_code=302,
         )
-    return HTMLResponse(_success_html(google_email), status_code=200)
+    return HTMLResponse(_success_html(email), status_code=200)
 
 
 # ─────────────────────────────────────────────────────────────────────────

@@ -26,6 +26,8 @@ os.environ.setdefault(
     "APP_GOOGLE_OAUTH_REDIRECT_URI",
     "http://localhost:8000/api/oauth/google/callback",
 )
+os.environ.setdefault("APP_NYLAS_CLIENT_ID", "fake-nylas-client-id")
+os.environ.setdefault("APP_NYLAS_API_KEY", "fake-nylas-api-key")
 
 from services import google_oauth  # noqa: E402
 
@@ -60,28 +62,29 @@ def test_verify_rejects_wrong_audience(monkeypatch):
 
 def test_authorization_url_contains_scopes():
     url = google_oauth.build_authorization_url(state="statexyz")
-    assert url.startswith("https://accounts.google.com/o/oauth2/v2/auth?")
-    assert "client_id=fake-client-id" in url
+    assert url.startswith("https://api.us.nylas.com/v3/connect/auth?")
+    assert "client_id=fake-nylas-client-id" in url
     assert "response_type=code" in url
-    assert "access_type=offline" in url
-    assert "prompt=consent" in url
+    assert "provider=google" in url
     assert "state=statexyz" in url
     # Scopes are space-joined then URL-encoded → spaces become + or %20
     assert "calendar" in url
-    assert "gmail.send" in url
+    assert "gmail.modify" in url
     # openid (from the scope list) and userinfo.email
     assert "openid" in url
     assert "userinfo.email" in url
 
 
-def test_scope_constants_no_restricted():
-    # Hard guardrail: gmail.compose / gmail.metadata / gmail.readonly / gmail.modify
-    # are RESTRICTED scopes that would trigger CASA. Never add them here.
+def test_scope_constants_include_gmail_modify():
+    # With Nylas, we USE gmail.modify (restricted) because Nylas holds the
+    # CASA certification, not us. Verify it IS in the scope set now.
+    assert "https://www.googleapis.com/auth/gmail.modify" in google_oauth.GOOGLE_SCOPES
+    assert "https://www.googleapis.com/auth/calendar" in google_oauth.GOOGLE_SCOPES
+    # These are still not requested (compose/metadata/readonly are subsets of modify)
     forbidden = {
         "https://www.googleapis.com/auth/gmail.compose",
         "https://www.googleapis.com/auth/gmail.metadata",
         "https://www.googleapis.com/auth/gmail.readonly",
-        "https://www.googleapis.com/auth/gmail.modify",
     }
     assert not (set(google_oauth.GOOGLE_SCOPES) & forbidden)
 
@@ -164,21 +167,20 @@ def test_verify_rejects_forged_redirect_to(monkeypatch):
         google_oauth.verify_connect_jwt(token)
 
 
-def test_scopes_to_capabilities_v1_set():
+def test_scopes_to_capabilities_nylas_set():
+    """With Nylas, gmail.modify covers read + send + labels."""
     caps = google_oauth.scopes_to_capabilities(
         [
             "https://www.googleapis.com/auth/calendar",
-            "https://www.googleapis.com/auth/calendar.events",
-            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/gmail.modify",
         ]
     )
     assert "manage_calendar" in caps["can"]
-    assert "manage_events" in caps["can"]
+    assert "read_email" in caps["can"]
     assert "send_email" in caps["can"]
-    # Explicit "cannot" list is the trust feature — ensure it's surfaced
-    assert "read_email_bodies" in caps["cannot"]
-    assert "read_email_metadata" in caps["cannot"]
-    assert "create_drafts" in caps["cannot"]
+    assert "manage_labels" in caps["can"]
+    # With gmail.modify, there's nothing in "cannot" for email
+    assert "read_email" not in caps["cannot"]
 
 
 def test_authorization_url_includes_login_hint():
@@ -203,25 +205,23 @@ def test_capabilities_to_scope_list_all_by_default():
     # Identity scopes always included
     assert "openid" in scopes
     assert "https://www.googleapis.com/auth/userinfo.email" in scopes
-    # All feature scopes present
+    # All feature scopes present (Nylas uses gmail.modify instead of gmail.send)
     assert "https://www.googleapis.com/auth/calendar" in scopes
-    assert "https://www.googleapis.com/auth/calendar.events" in scopes
-    assert "https://www.googleapis.com/auth/gmail.send" in scopes
+    assert "https://www.googleapis.com/auth/gmail.modify" in scopes
 
 
 def test_capabilities_to_scope_list_calendar_only():
     scopes = google_oauth.capabilities_to_scope_list(["calendar"])
     assert "https://www.googleapis.com/auth/calendar" in scopes
-    assert "https://www.googleapis.com/auth/gmail.send" not in scopes
+    assert "https://www.googleapis.com/auth/gmail.modify" not in scopes
     # Identity always included
     assert "openid" in scopes
 
 
 def test_capabilities_to_scope_list_email_only():
     scopes = google_oauth.capabilities_to_scope_list(["email"])
-    assert "https://www.googleapis.com/auth/gmail.send" in scopes
+    assert "https://www.googleapis.com/auth/gmail.modify" in scopes
     assert "https://www.googleapis.com/auth/calendar" not in scopes
-    assert "https://www.googleapis.com/auth/calendar.events" not in scopes
 
 
 def test_capabilities_to_scope_list_rejects_unknown():
@@ -275,10 +275,10 @@ def test_build_authorization_url_respects_scope_list():
 
 def test_backwards_compat_google_scopes_constant():
     """Existing call sites that use GOOGLE_SCOPES should still get the
-    full v1 scope set."""
+    full scope set (now includes gmail.modify via Nylas)."""
     assert "openid" in google_oauth.GOOGLE_SCOPES
     assert "https://www.googleapis.com/auth/calendar" in google_oauth.GOOGLE_SCOPES
-    assert "https://www.googleapis.com/auth/gmail.send" in google_oauth.GOOGLE_SCOPES
+    assert "https://www.googleapis.com/auth/gmail.modify" in google_oauth.GOOGLE_SCOPES
 
 
 # ─────────────────────────────────────────────────────────────────────────

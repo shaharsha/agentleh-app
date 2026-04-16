@@ -35,44 +35,41 @@ from jose import JWTError, jwt
 
 logger = logging.getLogger(__name__)
 
-GOOGLE_AUTH_URI = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
-GOOGLE_USERINFO_URI = "https://openidconnect.googleapis.com/v1/userinfo"
+NYLAS_AUTH_BASE = "https://api.us.nylas.com/v3/connect"
+NYLAS_API_BASE = "https://api.us.nylas.com/v3"
 
-# Identity scopes — always requested, so we get a google_email back
-# from /userinfo regardless of which feature scopes the user picked.
+# Identity scopes — always requested so Nylas returns the email.
 IDENTITY_SCOPES: tuple[str, ...] = (
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
 )
 
 # Feature capabilities the user can pick individually. Each maps to one
-# or more Google OAuth scopes. Keep this restricted to scopes the
-# Google Auth Platform approved for our project — adding anything else
-# requires a new verification cycle and potentially CASA.
+# or more Google OAuth scopes passed to Nylas in the auth URL. Nylas's
+# shared GCP app is CASA-verified for gmail.modify (restricted scope),
+# so we get full email read + send without our own CASA audit.
 #
-# v1 allowed keys: `calendar`, `email`. Adding a new capability means
-# adding an entry here AND updating the corresponding Hebrew/English
-# label maps in the frontend `IntegrationsPanel` component.
-GOOGLE_CAPABILITY_TO_SCOPES: dict[str, tuple[str, ...]] = {
-    "calendar": (
-        "https://www.googleapis.com/auth/calendar",
-        "https://www.googleapis.com/auth/calendar.events",
-    ),
-    "email": ("https://www.googleapis.com/auth/gmail.send",),
+# Allowed keys: `calendar`, `email`. Adding a new capability means
+# adding an entry here AND updating the Hebrew/English label maps in
+# the frontend `IntegrationsPanel` component.
+CAPABILITY_TO_SCOPES: dict[str, tuple[str, ...]] = {
+    "calendar": ("https://www.googleapis.com/auth/calendar",),
+    "email": ("https://www.googleapis.com/auth/gmail.modify",),
 }
 
-ALL_CAPABILITIES: tuple[str, ...] = tuple(GOOGLE_CAPABILITY_TO_SCOPES.keys())
+ALL_CAPABILITIES: tuple[str, ...] = tuple(CAPABILITY_TO_SCOPES.keys())
 
-# Full scope list when no capabilities are specified (backwards-compat
-# default). Preserved as ``GOOGLE_SCOPES`` so older call sites keep
-# working until they're migrated to ``capabilities_to_scope_list``.
+# Backward-compat alias for older call sites.
+GOOGLE_CAPABILITY_TO_SCOPES = CAPABILITY_TO_SCOPES
+
+# Full scope list when no capabilities are specified (default: all).
 GOOGLE_SCOPES: tuple[str, ...] = tuple(
     list(IDENTITY_SCOPES)
     + [
         scope
         for cap in ALL_CAPABILITIES
-        for scope in GOOGLE_CAPABILITY_TO_SCOPES[cap]
+        for scope in CAPABILITY_TO_SCOPES[cap]
     ]
 )
 
@@ -90,9 +87,9 @@ def capabilities_to_scope_list(caps: list[str] | None) -> list[str]:
     resolved: list[str] = list(IDENTITY_SCOPES)
     seen: set[str] = set(resolved)
     for cap in caps:
-        if cap not in GOOGLE_CAPABILITY_TO_SCOPES:
+        if cap not in CAPABILITY_TO_SCOPES:
             raise ValueError(f"unknown_capability: {cap}")
-        for scope in GOOGLE_CAPABILITY_TO_SCOPES[cap]:
+        for scope in CAPABILITY_TO_SCOPES[cap]:
             if scope not in seen:
                 resolved.append(scope)
                 seen.add(scope)
@@ -123,16 +120,16 @@ _REDIRECT_HOST_ALLOWLIST: frozenset[str] = frozenset(
 def _env(name: str, *, required: bool = True, default: str = "") -> str:
     value = os.environ.get(name, default)
     if required and not value:
-        raise RuntimeError(f"env var {name} is required for Google OAuth")
+        raise RuntimeError(f"env var {name} is required for OAuth")
     return value
 
 
-def _client_id() -> str:
-    return _env("APP_GOOGLE_OAUTH_CLIENT_ID")
+def _nylas_client_id() -> str:
+    return _env("APP_NYLAS_CLIENT_ID")
 
 
-def _client_secret() -> str:
-    return _env("APP_GOOGLE_OAUTH_CLIENT_SECRET")
+def _nylas_api_key() -> str:
+    return _env("APP_NYLAS_API_KEY")
 
 
 def _jwt_secret() -> str:
@@ -292,7 +289,7 @@ def verify_connect_jwt(token: str) -> ConnectClaims:
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Google authorization URL + token exchange
+# Nylas hosted OAuth — authorization URL + code exchange
 # ─────────────────────────────────────────────────────────────────────────
 
 
@@ -302,61 +299,54 @@ def build_authorization_url(
     login_hint: str | None = None,
     scopes: list[str] | None = None,
 ) -> str:
-    """Build the Google OAuth consent URL.
+    """Build the Nylas hosted OAuth URL.
 
-    ``scopes`` is the resolved OAuth scope list — use
-    :func:`capabilities_to_scope_list` upstream to turn a capability
-    selection into the right list. When omitted, falls back to the full
-    v1 scope set.
+    Redirects the user to Nylas's consent page, which in turn shows
+    Google's consent screen (branded "Nylas" since we're using their
+    CASA-verified shared GCP app). After consent, Nylas redirects to
+    our callback URI with a code we exchange for a grant_id.
     """
     from urllib.parse import urlencode
 
     resolved_scopes = list(scopes) if scopes is not None else list(GOOGLE_SCOPES)
     params: dict[str, str] = {
-        "response_type": "code",
-        "client_id": _client_id(),
+        "client_id": _nylas_client_id(),
         "redirect_uri": _redirect_uri(),
+        "response_type": "code",
+        "access_type": "online",
+        "provider": "google",
         "scope": " ".join(resolved_scopes),
         "state": state,
-        "access_type": "offline",
-        "prompt": "consent",
-        "include_granted_scopes": "true",
     }
     if login_hint:
         params["login_hint"] = login_hint
-    return f"{GOOGLE_AUTH_URI}?{urlencode(params)}"
+    return f"{NYLAS_AUTH_BASE}/auth?{urlencode(params)}"
 
 
 async def exchange_code(code: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    """Exchange a Nylas authorization code for a grant.
+
+    Returns a dict with at least: grant_id, email, provider, scope.
+    """
+    async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
-            GOOGLE_TOKEN_URI,
-            data={
+            f"{NYLAS_AUTH_BASE}/token",
+            json={
+                "client_id": _nylas_client_id(),
+                "client_secret": _nylas_api_key(),
                 "grant_type": "authorization_code",
                 "code": code,
-                "client_id": _client_id(),
-                "client_secret": _client_secret(),
                 "redirect_uri": _redirect_uri(),
+                "code_verifier": "nylas",
             },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
     if resp.status_code != 200:
         logger.warning(
-            "google exchange_code failed: %s %s",
+            "nylas exchange_code failed: %s %s",
             resp.status_code,
             resp.text[:500],
         )
-        raise ValueError(f"google_token_exchange_failed: {resp.status_code}")
-    return resp.json()
-
-
-async def fetch_userinfo(access_token: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        resp = await client.get(
-            GOOGLE_USERINFO_URI,
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-    resp.raise_for_status()
+        raise ValueError(f"nylas_token_exchange_failed: {resp.status_code}")
     return resp.json()
 
 
@@ -368,23 +358,28 @@ async def fetch_userinfo(access_token: str) -> dict[str, Any]:
 def fetch_credentials(db, *, agent_id: str) -> dict[str, Any] | None:
     """Read the current credential row for an agent, for UI display.
 
-    This is the only DB access path that stays in the app service —
-    writes go through the meter. The app never decrypts the refresh
-    token (it never needs to) and never deletes; the read returns just
-    the metadata fields the integrations panel shows the user.
+    Reads from the Nylas credentials table (post-migration). The app
+    never touches the grant_id — only metadata for the integrations
+    panel. Writes go through the meter's /admin/nylas/store.
     """
     with db.connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT google_email, scopes, granted_at, last_refreshed_at
-                FROM agent_google_credentials
+                SELECT email, scopes, capabilities, granted_at
+                FROM agent_nylas_credentials
                 WHERE agent_id = %s
                 """,
                 (agent_id,),
             )
             row = cur.fetchone()
-    return dict(row) if row else None
+    if row is None:
+        return None
+    result = dict(row)
+    # Backward-compat: keep the google_email key that the frontend
+    # and integrations routes expect.
+    result["google_email"] = result.pop("email", "")
+    return result
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -393,7 +388,7 @@ def fetch_credentials(db, *, agent_id: str) -> dict[str, Any] | None:
 
 _SCOPE_CAN_MAP = {
     "https://www.googleapis.com/auth/calendar": "manage_calendar",
-    "https://www.googleapis.com/auth/calendar.events": "manage_events",
+    "https://www.googleapis.com/auth/gmail.modify": "manage_email",
     "https://www.googleapis.com/auth/gmail.send": "send_email",
 }
 
@@ -401,21 +396,22 @@ _SCOPE_CAN_MAP = {
 def scopes_to_capabilities(scopes: list[str]) -> dict[str, list[str]]:
     """Map granted scopes to human-facing capability keys.
 
-    The ``cannot`` list is hardcoded for the v1 scope set and is a trust
-    feature — users see explicitly what the agent cannot do. If we ever
-    upgrade to ``gmail.readonly``, the ``cannot`` list shrinks
-    automatically by removing entries from the hardcoded set.
+    With Nylas + gmail.modify, the agent can now read emails too. The
+    ``cannot`` list is much shorter than v1 (most email restrictions
+    are lifted).
     """
     scope_set = set(scopes or ())
     can = sorted({_SCOPE_CAN_MAP[s] for s in scope_set if s in _SCOPE_CAN_MAP})
+
+    # gmail.modify covers read + send + labels, so "can read" replaces
+    # the old "cannot read" entries.
+    if "https://www.googleapis.com/auth/gmail.modify" in scope_set:
+        can = sorted(set(can) | {"read_email", "send_email", "manage_labels"})
+
     cannot: list[str] = []
-    # Anything in this list that ISN'T implied by granted scopes becomes
-    # a "cannot" — guaranteed to be accurate because the v1 OAuth client
-    # cannot request these scopes at all.
-    if "https://www.googleapis.com/auth/gmail.readonly" not in scope_set:
-        cannot.append("read_email_bodies")
-    if "https://www.googleapis.com/auth/gmail.metadata" not in scope_set:
-        cannot.append("read_email_metadata")
-    if "https://www.googleapis.com/auth/gmail.compose" not in scope_set:
-        cannot.append("create_drafts")
+    # Only surface "cannot" for things that are genuinely not possible.
+    if "https://www.googleapis.com/auth/gmail.modify" not in scope_set:
+        if "https://www.googleapis.com/auth/gmail.send" not in scope_set:
+            cannot.append("send_email")
+        cannot.append("read_email")
     return {"can": can, "cannot": cannot}
