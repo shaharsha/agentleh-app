@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { TenantDetail, TenantRole } from '../lib/types'
 import {
   getTenantDashboard,
@@ -246,48 +246,69 @@ function DashboardTab({
   const [newAgentPhone, setNewAgentPhone] = useState('')
   const [provisioning, setProvisioning] = useState(false)
   const [provisionError, setProvisionError] = useState<string | null>(null)
-  const [elapsed, setElapsed] = useState(0)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Provision progress steps with time thresholds (seconds)
-  const provisionSteps: { at: number; he: string; en: string }[] = [
-    { at: 0, he: 'מכין סביבת עבודה…', en: 'Preparing workspace…' },
-    { at: 5, he: 'מגדיר קונפיגורציה…', en: 'Configuring agent…' },
-    { at: 12, he: 'מעדכן בסיס נתונים…', en: 'Updating database…' },
-    { at: 20, he: 'מפעיל קונטיינר…', en: 'Starting container…' },
-    { at: 35, he: 'בודק תקינות…', en: 'Running health checks…' },
-    { at: 50, he: 'כמעט מוכן…', en: 'Almost ready…' },
-  ]
+  // Real progress driven by the NDJSON stream from the backend:
+  //   { step: N, total: M, label: "..." }
+  // step ≤ 0 means "connecting / waiting for first event"
+  const [progress, setProgress] = useState<{ step: number; total: number; label: string }>({
+    step: 0,
+    total: 4,
+    label: '',
+  })
 
-  useEffect(() => {
-    if (provisioning) {
-      setElapsed(0)
-      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000)
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current)
-      timerRef.current = null
+  // Translate backend English labels → bilingual display. The step number
+  // is the source of truth; label text is for screen readers / fallback.
+  // The VM emits sub-step labels like "Waiting for agent to be ready (3/30)"
+  // during the health check; we surface those verbatim so the user sees
+  // continuous activity even during the long wait.
+  function stepLabel(_step: number, _total: number, rawLabel: string): { he: string; en: string } {
+    const match = /Waiting for agent to be ready(?:\s*\((\d+)\/(\d+)\))?/.exec(rawLabel)
+    if (match) {
+      const sub = match[1] ? ` (${match[1]}/${match[2]})` : ''
+      return { he: `בודק תקינות${sub}…`, en: `Waiting for agent to be ready${sub}…` }
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-    }
-  }, [provisioning])
-
-  let activeStepIndex = 0
-  for (let i = provisionSteps.length - 1; i >= 0; i--) {
-    if (elapsed >= provisionSteps[i].at) { activeStepIndex = i; break }
+    if (/Preparing workspace/i.test(rawLabel)) return { he: 'מכין סביבת עבודה…', en: 'Preparing workspace…' }
+    if (/Setting up database/i.test(rawLabel)) return { he: 'מעדכן בסיס נתונים…', en: 'Setting up database…' }
+    if (/Starting container/i.test(rawLabel)) return { he: 'מפעיל קונטיינר…', en: 'Starting container…' }
+    return { he: rawLabel, en: rawLabel }
   }
-  const progressPct = provisioning ? Math.min(90, Math.round((elapsed / 60) * 90)) : 0
+
+  // Default label for a step that is not yet the active one (we haven't
+  // seen its progress event yet). Keeps the checklist readable.
+  function defaultStepLabel(step: number): string {
+    return (
+      [
+        'Preparing workspace',
+        'Setting up database',
+        'Starting container',
+        'Waiting for agent to be ready',
+      ][step - 1] || `Step ${step}`
+    )
+  }
+
+  const progressPct = provisioning
+    ? progress.step === 0
+      ? 3
+      : Math.round((progress.step / progress.total) * 100)
+    : 0
 
   async function handleProvision() {
     if (!newAgentName.trim() || !newAgentPhone.trim()) return
     setProvisioning(true)
     setProvisionError(null)
+    setProgress({ step: 0, total: 4, label: 'Connecting…' })
     try {
-      await provisionTenantAgent(tenantId, {
-        agent_name: newAgentName.trim(),
-        agent_gender: newAgentGender,
-        phone: newAgentPhone.trim(),
-      })
+      await provisionTenantAgent(
+        tenantId,
+        {
+          agent_name: newAgentName.trim(),
+          agent_gender: newAgentGender,
+          phone: newAgentPhone.trim(),
+        },
+        (p) => {
+          setProgress({ step: p.step, total: p.total, label: p.label })
+        },
+      )
       setNewAgentName('')
       setNewAgentPhone('')
       setShowNewAgent(false)
@@ -389,7 +410,7 @@ function DashboardTab({
         {showNewAgent && isAdminOrOwner && (
           <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
             {provisioning ? (
-              /* ── Progress checklist during provisioning ── */
+              /* ── Real-time progress driven by backend NDJSON stream ── */
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-sm text-gray-700">
                   <span className="font-medium">
@@ -399,14 +420,18 @@ function DashboardTab({
                 </div>
                 <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-linear"
+                    className="h-full bg-indigo-500 rounded-full transition-all duration-500 ease-out"
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
                 <ul className="space-y-2 text-sm">
-                  {provisionSteps.map((step, i) => {
-                    const done = i < activeStepIndex
-                    const active = i === activeStepIndex
+                  {Array.from({ length: progress.total || 4 }).map((_, i) => {
+                    const stepNum = i + 1
+                    const done = progress.step > stepNum
+                    const active = progress.step === stepNum
+                    const label = active
+                      ? stepLabel(stepNum, progress.total, progress.label)
+                      : stepLabel(stepNum, progress.total, defaultStepLabel(stepNum))
                     return (
                       <li key={i} className="flex items-center gap-2">
                         {done ? (
@@ -422,7 +447,7 @@ function DashboardTab({
                           <div className="w-4 h-4 rounded-full border-2 border-gray-300 shrink-0" />
                         )}
                         <span className={done ? 'text-gray-400' : active ? 'text-gray-900 font-medium' : 'text-gray-400'}>
-                          {t({ he: step.he, en: step.en })}
+                          {t(label)}
                         </span>
                       </li>
                     )

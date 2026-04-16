@@ -313,6 +313,19 @@ export async function getTenantDashboard(tenantId: number) {
   return res.json()
 }
 
+export interface ProvisionProgress {
+  step: number
+  total: number
+  label: string
+}
+
+export interface ProvisionSuccess {
+  agent_id: string
+  gateway_url: string
+  port: number
+  status: string
+}
+
 export async function provisionTenantAgent(
   tenantId: number,
   body: {
@@ -322,11 +335,14 @@ export async function provisionTenantAgent(
     user_name?: string
     tts_voice_name?: string
   },
-) {
-  // Long-running — provisioning a real OpenClaw container on the VM
-  // takes 30–60s. The browser fetch doesn't need its own timeout (the
-  // backend's httpx Client already caps at 150s) but the user sees a
-  // spinner.
+  onProgress?: (progress: ProvisionProgress) => void,
+): Promise<ProvisionSuccess> {
+  // The backend returns an NDJSON stream:
+  //   {"type": "progress", "step": N, "total": M, "label": "..."}
+  //   ...
+  //   {"type": "result", "success": true,  "agent_id": "...", "gateway_url": "...", "port": ..., "status": "active"}
+  // OR
+  //   {"type": "result", "success": false, "error": "..."}
   const res = await authFetch(`/api/tenants/${tenantId}/agents`, {
     method: 'POST',
     body: JSON.stringify(body),
@@ -337,7 +353,52 @@ export async function provisionTenantAgent(
       errBody?.detail?.message || errBody?.detail?.error || 'Provision failed',
     )
   }
-  return res.json()
+  if (!res.body) throw new Error('No response body from provision endpoint')
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      // Process complete lines. Keep any trailing partial line in buffer.
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim()
+        if (!line) continue
+        let event: any
+        try {
+          event = JSON.parse(line)
+        } catch {
+          continue
+        }
+        if (event.type === 'progress') {
+          onProgress?.({ step: event.step, total: event.total, label: event.label })
+        } else if (event.type === 'result') {
+          if (event.success) {
+            return {
+              agent_id: event.agent_id,
+              gateway_url: event.gateway_url || '',
+              port: event.port || 0,
+              status: event.status || 'active',
+            }
+          }
+          throw new Error(event.error || 'Provision failed')
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  // Stream ended without a result event
+  throw new Error('Provision stream ended unexpectedly')
 }
 
 // ─── Superadmin ──────────────────────────────────────────────────────
