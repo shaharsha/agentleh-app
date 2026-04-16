@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { submitOnboarding } from '../lib/api'
 import StepIndicator from '../components/StepIndicator'
 import VoicePicker from '../components/VoicePicker'
@@ -11,6 +11,35 @@ interface OnboardingPageProps {
 
 export default function OnboardingPage({ user, onComplete }: OnboardingPageProps) {
   const [loading, setLoading] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const provisionSteps = [
+    { at: 0, label: 'מכין סביבת עבודה…' },
+    { at: 5, label: 'מגדיר קונפיגורציה…' },
+    { at: 12, label: 'מעדכן בסיס נתונים…' },
+    { at: 20, label: 'מפעיל קונטיינר…' },
+    { at: 35, label: 'בודק תקינות…' },
+    { at: 50, label: 'כמעט מוכן…' },
+  ]
+
+  useEffect(() => {
+    if (loading) {
+      setElapsed(0)
+      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000)
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [loading])
+
+  let activeStepIndex = 0
+  for (let i = provisionSteps.length - 1; i >= 0; i--) {
+    if (elapsed >= provisionSteps[i].at) { activeStepIndex = i; break }
+  }
+  const progressPct = loading ? Math.min(90, Math.round((elapsed / 60) * 90)) : 0
+
   const [form, setForm] = useState({
     full_name: user.full_name || '',
     phone: '',
@@ -133,15 +162,50 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
           </div>
         </section>
 
-        <button type="submit" disabled={loading || !isValid}
-          className="btn-brand w-full">
-          {loading ? (
-            <span className="flex items-center justify-center gap-2">
-              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-              יוצר את הסוכן...
-            </span>
-          ) : 'צור את הסוכן שלי'}
-        </button>
+        {loading ? (
+          <div className="glass-card-elevated rounded-[22px] p-6 space-y-4">
+            <div className="flex items-center justify-between text-[15px]">
+              <span className="font-semibold">מקים את הסוכן…</span>
+              <span className="tabular-nums text-text-secondary text-[13px]">{progressPct}%</span>
+            </div>
+            <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-brand-500 rounded-full transition-all duration-1000 ease-linear"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <ul className="space-y-2.5 text-[14px]">
+              {provisionSteps.map((step, i) => {
+                const done = i < activeStepIndex
+                const active = i === activeStepIndex
+                return (
+                  <li key={i} className="flex items-center gap-2.5">
+                    {done ? (
+                      <svg className="w-4.5 h-4.5 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : active ? (
+                      <svg className="w-4.5 h-4.5 text-brand-500 animate-spin shrink-0" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    ) : (
+                      <div className="w-4.5 h-4.5 rounded-full border-2 border-gray-300 shrink-0" />
+                    )}
+                    <span className={done ? 'text-text-secondary/60' : active ? 'text-text-primary font-medium' : 'text-text-secondary/60'}>
+                      {step.label}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ) : (
+          <button type="submit" disabled={!isValid}
+            className="btn-brand w-full">
+            צור את הסוכן שלי
+          </button>
+        )}
       </form>
     </div>
   )

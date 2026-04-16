@@ -456,8 +456,11 @@ async def provision_agent(
     suffix = _secrets.token_hex(2)
     agent_id = f"t{tenant_id}-{slug}-{suffix}"
 
+    import asyncio
+
     provisioner = request.app.state.provisioner
-    result = provisioner.provision(
+    result = await asyncio.to_thread(
+        provisioner.provision,
         agent_id=agent_id,
         phone=body.phone,
         agent_name=body.agent_name,

@@ -204,18 +204,27 @@ class VmHttpProvisioner:
             except Exception:  # noqa: BLE001
                 err = {"error": "http_error", "status": resp.status_code, "body": resp.text[:400]}
             logger.error("provision-api %s: %s", resp.status_code, err)
+            # Prefer stdout (where create-agent.sh sends diagnostic messages
+            # like "health check not passing") over stderr (where Docker
+            # compose sends progress output like "Container Creating/Started").
+            # Take the tail — the real diagnostic is at the end of stdout.
+            diag = (err.get("stdout") or "").strip() or (err.get("stderr") or err.get("detail", "")).strip()
             return ProvisionResult(
                 agent_id=agent_id,
                 success=False,
-                error=f"{err.get('error', 'unknown')}: {err.get('stderr', err.get('detail', ''))[:400]}",
+                error=f"{err.get('error', 'unknown')}: {diag[-400:]}",
             )
 
         result = resp.json()
         if not result.get("success"):
+            diag = (result.get("stdout") or "").strip() or (result.get("stderr") or "").strip()
+            error_msg = result.get("error", "unknown")
+            if diag:
+                error_msg = f"{error_msg}: {diag[-400:]}"
             return ProvisionResult(
                 agent_id=agent_id,
                 success=False,
-                error=result.get("error", "unknown"),
+                error=error_msg,
             )
 
         return ProvisionResult(

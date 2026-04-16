@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { TenantDetail, TenantRole } from '../lib/types'
 import {
   getTenantDashboard,
@@ -245,6 +245,37 @@ function DashboardTab({
   const [newAgentPhone, setNewAgentPhone] = useState('')
   const [provisioning, setProvisioning] = useState(false)
   const [provisionError, setProvisionError] = useState<string | null>(null)
+  const [elapsed, setElapsed] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Provision progress steps with time thresholds (seconds)
+  const provisionSteps: { at: number; he: string; en: string }[] = [
+    { at: 0, he: 'מכין סביבת עבודה…', en: 'Preparing workspace…' },
+    { at: 5, he: 'מגדיר קונפיגורציה…', en: 'Configuring agent…' },
+    { at: 12, he: 'מעדכן בסיס נתונים…', en: 'Updating database…' },
+    { at: 20, he: 'מפעיל קונטיינר…', en: 'Starting container…' },
+    { at: 35, he: 'בודק תקינות…', en: 'Running health checks…' },
+    { at: 50, he: 'כמעט מוכן…', en: 'Almost ready…' },
+  ]
+
+  useEffect(() => {
+    if (provisioning) {
+      setElapsed(0)
+      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000)
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [provisioning])
+
+  let activeStepIndex = 0
+  for (let i = provisionSteps.length - 1; i >= 0; i--) {
+    if (elapsed >= provisionSteps[i].at) { activeStepIndex = i; break }
+  }
+  const progressPct = provisioning ? Math.min(90, Math.round((elapsed / 60) * 90)) : 0
 
   async function handleProvision() {
     if (!newAgentName.trim() || !newAgentPhone.trim()) return
@@ -336,93 +367,120 @@ function DashboardTab({
 
         {showNewAgent && isAdminOrOwner && (
           <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  {t({ he: 'שם הסוכן', en: 'Agent name' })}
-                </label>
-                {/* Explicit dir from useI18n instead of dir="auto": an
-                    empty input with dir="auto" falls back to parent
-                    direction for the VALUE, but the placeholder still
-                    renders via the ::placeholder pseudo-element whose
-                    direction rules don't always honor auto-detect, so
-                    Hebrew placeholders ended up LTR-aligned. Following
-                    the active UI language is predictable and matches
-                    the user's expectation on keystroke. */}
-                <input
-                  type="text"
-                  value={newAgentName}
-                  onChange={(e) => setNewAgentName(e.target.value)}
-                  placeholder={t({ he: 'שולי', en: 'e.g. Shuli' })}
-                  dir={dir}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+            {provisioning ? (
+              /* ── Progress checklist during provisioning ── */
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm text-gray-700">
+                  <span className="font-medium">
+                    {t({ he: 'מקים סוכן…', en: 'Creating agent…' })}
+                  </span>
+                  <span className="tabular-nums text-gray-500">{progressPct}%</span>
+                </div>
+                <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-linear"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+                <ul className="space-y-2 text-sm">
+                  {provisionSteps.map((step, i) => {
+                    const done = i < activeStepIndex
+                    const active = i === activeStepIndex
+                    return (
+                      <li key={i} className="flex items-center gap-2">
+                        {done ? (
+                          <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : active ? (
+                          <svg className="w-4 h-4 text-indigo-500 animate-spin shrink-0" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : (
+                          <div className="w-4 h-4 rounded-full border-2 border-gray-300 shrink-0" />
+                        )}
+                        <span className={done ? 'text-gray-400' : active ? 'text-gray-900 font-medium' : 'text-gray-400'}>
+                          {t({ he: step.he, en: step.en })}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  {t({ he: 'מין', en: 'Gender' })}
-                </label>
-                <select
-                  value={newAgentGender}
-                  onChange={(e) => setNewAgentGender(e.target.value as 'female' | 'male')}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                >
-                  <option value="female">{t({ he: 'נקבה', en: 'Female' })}</option>
-                  <option value="male">{t({ he: 'זכר', en: 'Male' })}</option>
-                </select>
-              </div>
-            </div>
-            {/* The phone field is the END USER's phone — the person who
-                will send WhatsApp messages to this agent — NOT the
-                agent's phone (there's no such thing; our Meta WABA
-                business number is a single shared endpoint for all
-                inbound traffic and the bridge routes by the sender's
-                phone number to the right agent). Labels reflect that
-                explicitly to avoid the "why isn't this my business
-                number" confusion we had on dev. */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                {t({
-                  he: 'מספר הוואטסאפ של המשתמש',
-                  en: "User's WhatsApp number",
-                })}
-              </label>
-              <input
-                type="tel"
-                value={newAgentPhone}
-                onChange={(e) => setNewAgentPhone(e.target.value)}
-                placeholder="+972501234567"
-                dir="ltr"
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-              <p className="text-[11px] text-gray-500 mt-1">
-                {t({
-                  he: 'המספר שממנו ישלח המשתמש הודעות לסוכן (פורמט בינלאומי, לדוגמה +972501234567). לא המספר המשותף של Agentiko.',
-                  en: 'The number the user will message this agent from (E.164, e.g. +972501234567). Not Agentiko\'s shared business number.',
-                })}
-              </p>
-            </div>
-            {provisionError && (
-              <div className="text-sm text-red-700 bg-red-50 p-3 rounded">{provisionError}</div>
+            ) : (
+              /* ── Agent creation form ── */
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      {t({ he: 'שם הסוכן', en: 'Agent name' })}
+                    </label>
+                    <input
+                      type="text"
+                      value={newAgentName}
+                      onChange={(e) => setNewAgentName(e.target.value)}
+                      placeholder={t({ he: 'שולי', en: 'e.g. Shuli' })}
+                      dir={dir}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      {t({ he: 'מין', en: 'Gender' })}
+                    </label>
+                    <select
+                      value={newAgentGender}
+                      onChange={(e) => setNewAgentGender(e.target.value as 'female' | 'male')}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                    >
+                      <option value="female">{t({ he: 'נקבה', en: 'Female' })}</option>
+                      <option value="male">{t({ he: 'זכר', en: 'Male' })}</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    {t({
+                      he: 'מספר הוואטסאפ של המשתמש',
+                      en: "User's WhatsApp number",
+                    })}
+                  </label>
+                  <input
+                    type="tel"
+                    value={newAgentPhone}
+                    onChange={(e) => setNewAgentPhone(e.target.value)}
+                    placeholder="+972501234567"
+                    dir="ltr"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    {t({
+                      he: 'המספר שממנו ישלח המשתמש הודעות לסוכן (פורמט בינלאומי, לדוגמה +972501234567). לא המספר המשותף של Agentiko.',
+                      en: 'The number the user will message this agent from (E.164, e.g. +972501234567). Not Agentiko\'s shared business number.',
+                    })}
+                  </p>
+                </div>
+                {provisionError && (
+                  <div className="text-sm text-red-700 bg-red-50 p-3 rounded">{provisionError}</div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleProvision}
+                    disabled={!newAgentName.trim() || !newAgentPhone.trim()}
+                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {t({ he: 'צור סוכן', en: 'Create agent' })}
+                  </button>
+                  <button
+                    onClick={() => setShowNewAgent(false)}
+                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+                  >
+                    {t({ he: 'ביטול', en: 'Cancel' })}
+                  </button>
+                </div>
+              </>
             )}
-            <div className="flex gap-2">
-              <button
-                onClick={handleProvision}
-                disabled={provisioning || !newAgentName.trim() || !newAgentPhone.trim()}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {provisioning
-                  ? t({ he: 'מקים… (30–60 שניות)', en: 'Provisioning… (30–60s)' })
-                  : t({ he: 'צור סוכן', en: 'Create agent' })}
-              </button>
-              <button
-                onClick={() => setShowNewAgent(false)}
-                disabled={provisioning}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
-              >
-                {t({ he: 'ביטול', en: 'Cancel' })}
-              </button>
-            </div>
           </div>
         )}
 

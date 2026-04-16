@@ -68,10 +68,13 @@ async def submit(
     # The provisioner is responsible for inserting into `agents` with
     # tenant_id=tenant["id"] — create_agent.sh on the VM does this via its
     # new --tenant-id flag. MockProvisioner needs the same treatment.
+    import asyncio
+
     provisioner = request.app.state.provisioner
     agent_id = f"agent-{user['id']}-{body.agent_name.replace(' ', '-').lower()}"
 
-    result = provisioner.provision(
+    result = await asyncio.to_thread(
+        provisioner.provision,
         agent_id=agent_id,
         phone=body.phone,
         agent_name=body.agent_name,
