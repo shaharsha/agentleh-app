@@ -259,7 +259,7 @@ function DashboardTab({
   // step ≤ 0 means "connecting / waiting for first event"
   const [progress, setProgress] = useState<{ step: number; total: number; label: string }>({
     step: 0,
-    total: 4,
+    total: 5,
     label: '',
   })
 
@@ -277,6 +277,7 @@ function DashboardTab({
     if (/Preparing workspace/i.test(rawLabel)) return { he: 'מכין סביבת עבודה…', en: 'Preparing workspace…' }
     if (/Setting up database/i.test(rawLabel)) return { he: 'מעדכן בסיס נתונים…', en: 'Setting up database…' }
     if (/Starting container/i.test(rawLabel)) return { he: 'מפעיל קונטיינר…', en: 'Starting container…' }
+    if (/welcome message/i.test(rawLabel)) return { he: 'שולח הודעת ברוכים הבאים…', en: 'Sending welcome message…' }
     return { he: rawLabel, en: rawLabel }
   }
 
@@ -289,21 +290,23 @@ function DashboardTab({
         'Setting up database',
         'Starting container',
         'Waiting for agent to be ready',
+        'Sending welcome message',
       ][step - 1] || `Step ${step}`
     )
   }
 
-  // Weighted progress — step 4 (health-check wait) is 70% of the real
-  // elapsed time, so give it a matching slice of the bar. Never show 100%
-  // while still provisioning; reserve the final 5% for the "done" moment
-  // when the success event arrives.
+  // Weighted progress — step 4 (health-check wait) dominates the real
+  // elapsed time (~60-90s out of ~80-100s total), so give it a matching
+  // slice of the bar. Never show 100% while still provisioning; reserve
+  // the final % for the "done" moment when the success event arrives.
   //
-  //   step 0 (connecting)   →  3%
-  //   step 1 (workspace)    → 15%
-  //   step 2 (database)     → 25%
-  //   step 3 (container up) → 40%
-  //   step 4 (N/30 ticks)   → 40% + (N/30) * 55%  (caps at 95%)
-  //   result(success)       → 100%
+  //   step 0 (connecting)    →  3%
+  //   step 1 (workspace)     → 15%
+  //   step 2 (database)      → 25%
+  //   step 3 (container up)  → 35%
+  //   step 4 (N/30 ticks)    → 35% + (N/30) * 50%  (up to 85%)
+  //   step 5 (welcome send)  → 92%
+  //   result(success)        → 100%
   const subMatch = /\((\d+)\/(\d+)\)/.exec(progress.label || '')
   const subTick = subMatch ? parseInt(subMatch[1], 10) : 0
   const subTotal = subMatch ? parseInt(subMatch[2], 10) : 30
@@ -318,17 +321,19 @@ function DashboardTab({
   } else if (progress.step === 2) {
     progressPct = 25
   } else if (progress.step === 3) {
-    progressPct = 40
-  } else {
+    progressPct = 35
+  } else if (progress.step === 4) {
     const sub = subTotal > 0 ? Math.min(1, subTick / subTotal) : 0
-    progressPct = Math.round(40 + sub * 55)
+    progressPct = Math.round(35 + sub * 50)
+  } else {
+    progressPct = 92
   }
 
   async function handleProvision() {
     if (!newAgentName.trim() || !newAgentPhone.trim()) return
     setProvisioning(true)
     setProvisionError(null)
-    setProgress({ step: 0, total: 4, label: 'Connecting…' })
+    setProgress({ step: 0, total: 5, label: 'Connecting…' })
     try {
       await provisionTenantAgent(
         tenantId,
@@ -461,18 +466,19 @@ function DashboardTab({
                   />
                 </div>
                 <ul className="space-y-2 text-sm">
-                  {Array.from({ length: progress.total || 4 }).map((_, i) => {
+                  {Array.from({ length: progress.total || 5 }).map((_, i) => {
                     const stepNum = i + 1
                     const done = progress.step > stepNum
                     const active = progress.step === stepNum
                     const label = active
                       ? stepLabel(stepNum, progress.total, progress.label)
                       : stepLabel(stepNum, progress.total, defaultStepLabel(stepNum))
-                    // For the active health-check step, extract the (N/M)
-                    // sub-tick and render it as a small secondary bar so
-                    // the user sees continuous motion during the 60-90s
-                    // wait even when the main bar's range is small.
-                    const isHealthStep = active && stepNum === (progress.total || 4) && subMatch
+                    // For the active health-check step (step 4, the long
+                    // wait), extract the (N/30) sub-tick and render it as
+                    // a small secondary bar so the user sees continuous
+                    // motion during the 60-90s wait even when the main
+                    // bar's range is small.
+                    const isHealthStep = active && stepNum === 4 && subMatch
                     return (
                       <li key={i} className="flex items-start gap-2">
                         <div className="mt-0.5 shrink-0">

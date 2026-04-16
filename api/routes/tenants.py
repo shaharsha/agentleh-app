@@ -470,7 +470,8 @@ async def provision_agent(
 
         # Forward progress events from the VM daemon, capture the final
         # result so we can do post-provision DB work before telling the
-        # browser we're done.
+        # browser we're done. The VM emits 4 steps; we add a 5th for the
+        # welcome-message send, so rewrite `total` here for consistency.
         try:
             async for event in provisioner.provision_stream(
                 agent_id=agent_id,
@@ -482,6 +483,8 @@ async def provision_agent(
                 if event.get("type") == "result":
                     vm_result = event
                 else:
+                    if event.get("type") == "progress":
+                        event["total"] = 5
                     yield _json.dumps(event) + "\n"
         except Exception as exc:  # noqa: BLE001
             logger.exception("provision_stream failed for %s", agent_id)
@@ -525,6 +528,31 @@ async def provision_agent(
             )
         except Exception:  # noqa: BLE001
             logger.warning("create_user_agent link failed for %s", result_agent_id)
+
+        # Kick off the WhatsApp template hello message. Emit a progress
+        # event so the browser gets a visual tick while the bridge
+        # round-trips to Meta, then fire the actual send in a thread so
+        # a slow Meta response doesn't block the stream completion.
+        yield _json.dumps({
+            "type": "progress",
+            "step": 5,
+            "total": 5,
+            "label": "Sending welcome message",
+        }) + "\n"
+
+        import asyncio as _asyncio
+
+        whatsapp = request.app.state.whatsapp
+        try:
+            sent = await _asyncio.wait_for(
+                _asyncio.to_thread(whatsapp.send_welcome, body.phone, body.agent_name),
+                timeout=15.0,
+            )
+            if not sent:
+                logger.info("welcome message not sent for agent=%s phone=%s", result_agent_id, body.phone)
+        except Exception:  # noqa: BLE001
+            # Non-fatal — agent is live regardless of welcome-message success
+            logger.warning("welcome send errored for agent=%s", result_agent_id, exc_info=True)
 
         yield _json.dumps({
             "type": "result",
