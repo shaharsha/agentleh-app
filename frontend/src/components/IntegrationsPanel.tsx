@@ -541,7 +541,7 @@ function GoogleIntegrationCard(props: {
       {status.granted_at && (
         <div className="text-xs text-gray-400">
           {t({ he: 'חובר ב-', en: 'Connected on ' })}
-          {new Date(status.granted_at).toLocaleDateString()}
+          {new Date(status.granted_at).toLocaleDateString('en-GB')}
         </div>
       )}
 

@@ -119,3 +119,36 @@ async def revoke_google_credentials(*, agent_id: str) -> dict[str, Any]:
     the row, and purges the cache. Idempotent (returns ``revoked: false``
     if there was no row to begin with)."""
     return await _post("/admin/google/revoke", {"agent_id": agent_id})
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Nylas grant storage (Nylas migration)
+# ─────────────────────────────────────────────────────────────────────────
+
+
+async def store_nylas_credentials(
+    *,
+    agent_id: str,
+    grant_id: str,
+    email: str,
+    scopes: list[str],
+    capabilities: list[str] | None = None,
+) -> dict[str, Any]:
+    """POST /admin/nylas/store — meter UPSERTs the Nylas grant_id.
+    No encryption needed — grant_id is useless without the API key."""
+    return await _post(
+        "/admin/nylas/store",
+        {
+            "agent_id": agent_id,
+            "grant_id": grant_id,
+            "email": email,
+            "scopes": scopes,
+            "capabilities": capabilities or [],
+        },
+    )
+
+
+async def revoke_nylas_credentials(*, agent_id: str) -> dict[str, Any]:
+    """POST /admin/nylas/revoke — meter deletes the grant row and calls
+    Nylas DELETE /v3/grants/{id}. Idempotent."""
+    return await _post("/admin/nylas/revoke", {"agent_id": agent_id})
