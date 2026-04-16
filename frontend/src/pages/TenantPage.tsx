@@ -689,7 +689,7 @@ function MembersTab({
                   <div className="text-xs text-gray-500">
                     {roleOptionLabel(i.role)} ·{' '}
                     {t({ he: 'תוקף עד ', en: 'expires ' })}
-                    {new Date(i.expires_at).toLocaleDateString()}
+                    {new Date(i.expires_at).toLocaleDateString('en-GB')}
                   </div>
                 </div>
                 {isAdminOrOwner && (
