@@ -310,10 +310,10 @@ function AgentsTab({
                 <span
                   className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded ${
                     a.subscription_status === 'active'
-                      ? 'bg-green-50 text-green-700 dark:bg-green-500/10'
+                      ? 'bg-green-50 text-green-700 dark:text-green-300'
                       : a.subscription_status === 'exhausted'
-                        ? 'bg-red-50 text-red-700 dark:bg-red-500/10'
-                        : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300'
+                        ? 'bg-red-50 text-red-700 dark:text-red-300'
+                        : 'bg-gray-100 text-gray-600 dark:text-gray-300'
                   }`}
                 >
                   {a.subscription_status || 'none'}
@@ -536,7 +536,7 @@ function GrantPlanModal({
             as a coupon: upgrades take effect immediately, downgrades and same-plan renewals queue
             at the current period end.
           </p>
-          {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg p-2">{error}</div>}
+          {error && <div className="text-sm text-red-600 dark:text-red-300 bg-red-50 rounded-lg p-2">{error}</div>}
           <button onClick={handleSubmit} disabled={submitting} className="btn-brand w-full">
             {submitting ? 'Granting…' : 'Grant plan'}
           </button>
@@ -604,7 +604,7 @@ function CouponsTab({ plans }: { plans: AdminOverview['plans'] }) {
         />
       )}
 
-      {error && <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+      {error && <div className="p-3 bg-red-50 text-red-700 dark:text-red-300 rounded-lg text-sm">{error}</div>}
 
       <div className="glass-card">
         {/* Mobile: stacked cards */}
@@ -811,7 +811,7 @@ function CouponCreateForm({
         <>
           <div className="text-sm">
             <strong>Created:</strong>{' '}
-            <code className="font-mono bg-green-50 text-green-800 px-2 py-1 rounded">
+            <code className="font-mono bg-green-50 text-green-800 dark:text-green-300 px-2 py-1 rounded">
               {createdCode}
             </code>
             <button
@@ -903,7 +903,7 @@ function CouponCreateForm({
               placeholder="Internal note — who/why this coupon was created"
             />
           </label>
-          {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg p-2">{error}</div>}
+          {error && <div className="text-sm text-red-600 dark:text-red-300 bg-red-50 rounded-lg p-2">{error}</div>}
           <button onClick={submit} disabled={submitting} className="btn-brand">
             {submitting ? 'Creating…' : 'Create coupon'}
           </button>
@@ -1267,9 +1267,9 @@ function InfoTip({
 }
 
 function colorForPct(pct: number, yellow: number, red: number): string {
-  if (pct >= red) return 'text-red-600 bg-red-50'
-  if (pct >= yellow) return 'text-yellow-600 bg-yellow-50'
-  return 'text-green-600 bg-green-50'
+  if (pct >= red) return 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10'
+  if (pct >= yellow) return 'text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-500/10'
+  return 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10'
 }
 
 function barColor(pct: number, yellow: number, red: number): string {
@@ -2261,7 +2261,7 @@ function AgentDetailModal({
               </div>
 
               {detail.spend && 'error' in detail.spend && (
-                <div className="mt-4 p-3 bg-yellow-50 text-yellow-800 text-sm rounded">
+                <div className="mt-4 p-3 bg-yellow-50 text-yellow-800 dark:text-yellow-300 text-sm rounded">
                   Meter unreachable: {String(detail.spend.error)}
                 </div>
               )}

@@ -124,6 +124,32 @@ html[data-theme="dark"] {
     --color-gray-800: rgb(230 218 205);
     --color-gray-900: rgb(245 239 232);
 
+    /* Accent tints — only the light -50/-100/-200 tiers of each accent
+     * color are remapped. These are used as banner / badge backgrounds
+     * (e.g. `bg-red-50 text-red-700` alerts, `bg-green-50` status pills)
+     * that were rendering as glaring cream rectangles on dark mode.
+     * Saturated -500/-600 tiers are left alone — they're the solid
+     * accent colors used on buttons, progress bars, and icons that
+     * should stay vibrant in both themes. */
+    --color-red-50:     rgb(60 12 16);
+    --color-red-100:    rgb(80 18 22);
+    --color-red-200:    rgb(110 30 38);
+    --color-amber-50:   rgb(60 38 8);
+    --color-amber-100:  rgb(80 50 12);
+    --color-amber-200:  rgb(110 72 18);
+    --color-yellow-50:  rgb(58 48 8);
+    --color-yellow-100: rgb(78 62 12);
+    --color-yellow-200: rgb(108 86 18);
+    --color-green-50:   rgb(10 50 22);
+    --color-green-100:  rgb(14 60 28);
+    --color-green-200:  rgb(22 82 40);
+    --color-indigo-50:  rgb(28 24 80);
+    --color-indigo-100: rgb(34 28 100);
+    --color-indigo-200: rgb(50 42 130);
+    --color-purple-50:  rgb(40 22 70);
+    --color-purple-100: rgb(52 28 90);
+    --color-purple-200: rgb(72 42 120);
+
     /* Glass goes dark-tinted */
     --glass-nav-bg: rgba(22, 18, 14, 0.72);
     --glass-nav-border: rgba(255, 255, 255, 0.06);

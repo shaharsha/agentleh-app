@@ -252,7 +252,7 @@ export default function IntegrationsPanel({
               : t({ he: 'גוגל · יומן · מייל', en: 'Google · Calendar · Mail' })}
           </span>
         ) : connected ? (
-          <span className="flex items-center gap-1.5 text-xs text-green-700">
+          <span className="flex items-center gap-1.5 text-xs text-green-700 dark:text-green-300">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />
             <span>
               {t({ he: 'גוגל מחובר', en: 'Google connected' })}
@@ -276,12 +276,12 @@ export default function IntegrationsPanel({
             </div>
           )}
           {error && (
-            <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">
+            <div className="rounded-lg bg-red-50 text-red-700 dark:text-red-300 px-3 py-2 text-sm">
               {error}
             </div>
           )}
           {waitingForConsent && (
-            <div className="rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-900 px-3 py-2 text-sm flex items-center justify-between gap-3">
+            <div className="rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-900 dark:text-indigo-200 px-3 py-2 text-sm flex items-center justify-between gap-3">
               <span>
                 {t({
                   he: 'ממתין לאישור שלך בחלון הבא של גוגל…',
@@ -291,7 +291,7 @@ export default function IntegrationsPanel({
               <button
                 type="button"
                 onClick={stopPolling}
-                className="text-indigo-700 hover:text-indigo-900 text-xs font-medium underline"
+                className="text-indigo-700 dark:text-indigo-300 hover:text-indigo-900 dark:hover:text-indigo-200 text-xs font-medium underline"
               >
                 {t({ he: 'ביטול', en: 'Cancel' })}
               </button>

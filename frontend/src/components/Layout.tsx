@@ -80,7 +80,7 @@ export default function Layout({
                 Agentiko
               </span>
               {isAdminRoute && (
-                <span className="hidden sm:inline-block ms-2 text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold">
+                <span className="hidden sm:inline-block ms-2 text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 dark:text-purple-300 font-semibold">
                   {t({ he: 'ניהול', en: 'ADMIN' })}
                 </span>
               )}
