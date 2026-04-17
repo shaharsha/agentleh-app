@@ -89,7 +89,7 @@ const ERROR_MSG: Record<string, Bilingual> = {
 }
 
 export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageProps) {
-  const { t, lang } = useI18n()
+  const { t, lang, dir } = useI18n()
   const [code, setCode] = useState('')
   const [preview, setPreview] = useState<CouponPreview | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
@@ -215,37 +215,6 @@ export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageP
         </p>
       </div>
 
-      <div className="space-y-3 mb-8">
-        {PLANS.map((plan) => (
-          <div
-            key={plan.id}
-            className={`w-full rounded-[22px] p-5 relative glass-card ${
-              preview?.plan.plan_id === plan.id
-                ? 'border-brand/30 shadow-[0_16px_48px_rgba(212,98,43,0.08)]'
-                : ''
-            }`}
-          >
-            {plan.badge && (
-              <span className="absolute top-4 end-4 text-[11px] font-semibold bg-brand text-white px-3 py-0.5 rounded-full">
-                {t(plan.badge)}
-              </span>
-            )}
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-[16px] font-semibold">{t(plan.name)}</div>
-                <div className="text-[13px] text-text-secondary mt-0.5">{t(plan.features[0])}</div>
-              </div>
-              <div dir="ltr" className="text-left">
-                <span className="text-[22px] font-bold">₪{plan.price}</span>
-                <span className="text-[13px] text-text-muted ms-0.5">
-                  {t({ he: '/לחודש', en: '/mo' })}
-                </span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
       {ownedTenants.length > 1 && (
         <div className="mb-5">
           <label className="block text-[13px] font-medium mb-1.5">
@@ -274,8 +243,8 @@ export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageP
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           placeholder={t({ he: 'לדוגמה: BIZ-30-ABC', en: 'e.g. BIZ-30-ABC' })}
-          className="input-glass w-full font-mono tracking-wider text-[16px] uppercase"
-          dir="ltr"
+          className="input-glass w-full px-4 py-3 font-mono tracking-wider text-[16px] uppercase placeholder:normal-case placeholder:font-sans placeholder:tracking-normal"
+          dir={dir}
           autoFocus
         />
       </div>

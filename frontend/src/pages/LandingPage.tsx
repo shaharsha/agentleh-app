@@ -1,8 +1,20 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useI18n } from '../lib/i18n'
+import LanguageSwitcher from '../components/LanguageSwitcher'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL
+
+/**
+ * The landing site lives under /en/ for English and / for Hebrew. Build
+ * a locale-aware URL so the terms/privacy links from the login page land
+ * on the correct version instead of always sending English users to the
+ * Hebrew-only /terms.
+ */
+function landingHref(path: string, lang: 'he' | 'en'): string {
+  const prefix = lang === 'en' ? '/en' : ''
+  return `${LANDING_URL}${prefix}${path}`
+}
 
 interface LandingPageProps {
   initialMode?: 'login' | 'signup'
@@ -10,7 +22,7 @@ interface LandingPageProps {
 
 export default function LandingPage({ initialMode = 'login' }: LandingPageProps) {
   const [mode, setMode] = useState<'login' | 'signup'>(initialMode)
-  const { t, dir } = useI18n()
+  const { t, dir, lang } = useI18n()
 
   async function loginWithGoogle() {
     await supabase.auth.signInWithOAuth({
@@ -31,7 +43,10 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
   )
 
   return (
-    <div className="min-h-screen section-gradient-hero flex flex-col items-center justify-center px-5 py-16">
+    <div className="min-h-screen section-gradient-hero flex flex-col items-center justify-center px-5 py-16 relative">
+      <div className="absolute top-5 end-5">
+        <LanguageSwitcher />
+      </div>
       <div className="text-center mb-12">
         <h1 className="text-[36px] font-extrabold tracking-[-1px] text-text-primary mb-3">Agentiko</h1>
         <p className="text-[17px] text-text-secondary leading-relaxed">{tagline}</p>
@@ -90,11 +105,11 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
 
       <p className="text-center text-[13px] text-text-muted mt-8 max-w-[340px] leading-relaxed" dir={dir}>
         {t({ he: 'בהרשמה את/ה מסכימ/ה ל', en: 'By signing up you agree to the ' })}
-        <a href={LANDING_URL + '/terms'} className="text-brand hover:underline">
+        <a href={landingHref('/terms', lang)} className="text-brand hover:underline">
           {t({ he: 'תנאי השימוש', en: 'Terms of Service' })}
         </a>
         {t({ he: ' ול', en: ' and ' })}
-        <a href={LANDING_URL + '/privacy'} className="text-brand hover:underline">
+        <a href={landingHref('/privacy', lang)} className="text-brand hover:underline">
           {t({ he: 'מדיניות הפרטיות', en: 'Privacy Policy' })}
         </a>
       </p>

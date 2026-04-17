@@ -20,15 +20,24 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
 
   const res = await fetch(url, { ...options, headers })
 
-  if (res.status === 401) {
-    // Try refreshing the session
-    const { data: { session: refreshed } } = await supabase.auth.refreshSession()
-    if (refreshed?.access_token) {
-      headers['Authorization'] = `Bearer ${refreshed.access_token}`
-      return fetch(url, { ...options, headers })
-    }
+  if (res.status !== 401) return res
+
+  // 401 path: the JWT may have expired, OR the backend has revoked this
+  // account (app_users.deleted_at is set). Try a token refresh once; if
+  // the refreshed request still 401s, the server has actively revoked us
+  // and we need to drop the stale Supabase session from localStorage so a
+  // reload doesn't silently re-authenticate the dead account.
+  const { data: { session: refreshed } } = await supabase.auth.refreshSession()
+  if (refreshed?.access_token) {
+    headers['Authorization'] = `Bearer ${refreshed.access_token}`
+    const retry = await fetch(url, { ...options, headers })
+    if (retry.status !== 401) return retry
   }
 
+  // Local sign-out only — the refresh token may already be invalid at
+  // Supabase, and we don't want to block UI on a network call. The app
+  // re-renders the landing page the moment this promise resolves.
+  await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
   return res
 }
 
