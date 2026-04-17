@@ -5,6 +5,12 @@ import { useI18n, type Bilingual } from '../lib/i18n'
 import { planLabel } from '../lib/labels'
 import type { AgentUsageRow, TenantUsage } from '../lib/types'
 
+/** App-wide date format: dd/mm/yyyy via en-GB locale, dir="ltr" in the
+ *  JSX so bidi doesn't mangle the dash-separated range in Hebrew. */
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB')
+}
+
 type RangeKind = 'current' | 'last_7d' | 'last_30d' | 'custom'
 
 interface RangeSelection {
@@ -39,7 +45,7 @@ function defaultCustomTo(): string {
 }
 
 export default function UsageTab({ tenantId }: { tenantId: number }) {
-  const { t, lang } = useI18n()
+  const { t } = useI18n()
   const [range, setRange] = useState<RangeSelection>({ kind: 'current' })
   const [customFrom, setCustomFrom] = useState<string>(defaultCustomFrom())
   const [customTo, setCustomTo] = useState<string>(defaultCustomTo())
@@ -127,21 +133,14 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
     return Math.min(100, Math.max(0, pct))
   }, [subscription])
 
-  const dateFmt = useMemo(
-    () => new Intl.DateTimeFormat(lang === 'he' ? 'he-IL' : 'en-US', {
-      year: 'numeric', month: 'short', day: 'numeric',
-    }),
-    [lang],
-  )
-
   const formatRange = (from?: string, to?: string): string => {
     if (!from || !to) return ''
-    return `${dateFmt.format(new Date(from))} – ${dateFmt.format(new Date(to))}`
+    return `${fmtDate(from)} – ${fmtDate(to)}`
   }
 
   const rangeLabel = (kind: RangeKind): Bilingual => {
     switch (kind) {
-      case 'current': return { he: 'תקופה נוכחית', en: 'Current period' }
+      case 'current': return { he: 'מחזור חיוב נוכחי', en: 'Current billing cycle' }
       case 'last_7d': return { he: '7 ימים אחרונים', en: 'Last 7 days' }
       case 'last_30d': return { he: '30 יום אחרונים', en: 'Last 30 days' }
       case 'custom': return { he: 'טווח מותאם', en: 'Custom range' }
@@ -212,7 +211,7 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
               <span>
                 <span className="text-gray-500">{t({ he: 'סוף תקופה', en: 'Period ends' })}: </span>
                 <span className="font-medium text-gray-900">
-                  {num(dateFmt.format(new Date(subscription.period_end)))}
+                  {num(fmtDate(subscription.period_end))}
                 </span>
               </span>
               <span>
