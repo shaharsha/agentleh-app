@@ -577,17 +577,22 @@ async def delete_agent(
     request: Request,
     ctx: TenantContext = Depends(require_tenant_role("admin")),
 ) -> None:
-    """Hard-delete an agent: VM cleanup (backup + teardown) then DB delete.
+    """Soft-delete an agent: VM cleanup (backup + teardown) then DB tombstone.
 
     Order: VM first, DB second. If VM cleanup fails, the agent row stays
-    intact and the user can retry. If DB first, VM resources become
+    active and the user can retry. If DB first, VM resources become
     permanently orphaned.
+
+    The DB step is now a soft delete (``deleted_at`` stamp) — the agent's
+    ``usage_events`` and display name survive so the Usage tab can still
+    show its historical spend with a "(deleted)" label. See
+    ``Db.soft_delete_agent`` for what's preserved vs what's torn down.
     """
     import asyncio
 
     db = request.app.state.db
 
-    # Verify agent belongs to this tenant
+    # Verify agent belongs to this tenant and isn't already deleted
     agent_tenant_id = db.get_agent_tenant_id(agent_id)
     if agent_tenant_id is None or agent_tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail={"error": "agent_not_found"})
@@ -601,8 +606,8 @@ async def delete_agent(
             detail={"error": "deprovision_failed", "message": result.error},
         )
 
-    # Step 2: DB hard-delete (cascading)
-    db.hard_delete_agent(agent_id)
+    # Step 2: DB soft-delete (tombstone + clear live state)
+    db.soft_delete_agent(agent_id)
 
     logger.info(
         "agent deleted agent_id=%s tenant=%s by user=%s backup=%s",

@@ -225,12 +225,24 @@ async def tenant_usage(
     """
     db = request.app.state.db
     tenant = ctx.tenant
-    agents = db.list_tenant_agents(tenant["id"])
+    # Use the with-deleted variant: soft-deleted agents still appear in
+    # the breakdown — the meter returns rows keyed on their agent_id and
+    # the tenant was billed for that traffic. Without the `deleted_at`
+    # flag the UI can't tell live rows from tombstones.
+    agents = db.list_tenant_agents_with_deleted(tenant["id"])
     usage = await _fetch_tenant_usage_by_agent(tenant["id"], from_, to)
 
-    # Build a name map so we can enrich meter rows with agent_name.
+    def _iso(value: Any) -> str | None:
+        if value is None:
+            return None
+        return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
     agent_meta: dict[str, dict[str, Any]] = {
-        a["agent_id"]: {"agent_name": a["agent_name"], "agent_gender": a["agent_gender"]}
+        a["agent_id"]: {
+            "agent_name": a["agent_name"],
+            "agent_gender": a["agent_gender"],
+            "deleted_at": _iso(a.get("deleted_at")),
+        }
         for a in agents
     }
 
@@ -240,7 +252,13 @@ async def tenant_usage(
     for row in meter_agents:
         aid = row["agent_id"]
         seen.add(aid)
-        meta = agent_meta.get(aid, {"agent_name": aid, "agent_gender": ""})
+        # Meter returned an agent_id we don't know about? Treat as a
+        # legacy hard-deleted row (predates the soft-delete migration).
+        # Show the raw id and mark deleted so the UI doesn't pretend it's live.
+        meta = agent_meta.get(
+            aid,
+            {"agent_name": aid, "agent_gender": "", "deleted_at": "unknown"},
+        )
         enriched.append({**row, **meta})
 
     # Include agents with zero usage so the UI shows a complete roster.
@@ -252,6 +270,7 @@ async def tenant_usage(
                 "agent_id": a["agent_id"],
                 "agent_name": a["agent_name"],
                 "agent_gender": a["agent_gender"],
+                "deleted_at": _iso(a.get("deleted_at")),
                 "llm_micros": 0,
                 "search_micros": 0,
                 "tts_micros": 0,
