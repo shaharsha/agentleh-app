@@ -103,6 +103,27 @@ html[data-theme="dark"] {
     --color-brand-100: #3D2416;
     --color-success-light: #0F2A1C;
 
+    /* Tailwind gray-scale remap. Raw `bg-gray-*` / `text-gray-*` /
+     * `border-gray-*` utilities scattered across legacy components
+     * become dark-mode-aware without touching every JSX call site.
+     * Warm-tinted inversion so greys match the brand palette rather
+     * than looking ice-cold cyan-blue.
+     *
+     * `--color-white` is deliberately NOT overridden — `text-white` on
+     * the orange brand button must stay white in both themes. Use
+     * `bg-surface` / `bg-surface-soft` in JSX for surface backgrounds
+     * instead of `bg-white`. */
+    --color-gray-50:  rgb(28 22 18);
+    --color-gray-100: rgb(36 28 22);
+    --color-gray-200: rgb(56 45 35);
+    --color-gray-300: rgb(80 68 55);
+    --color-gray-400: rgb(122 107 94);
+    --color-gray-500: rgb(155 140 125);
+    --color-gray-600: rgb(184 168 153);
+    --color-gray-700: rgb(210 195 180);
+    --color-gray-800: rgb(230 218 205);
+    --color-gray-900: rgb(245 239 232);
+
     /* Glass goes dark-tinted */
     --glass-nav-bg: rgba(22, 18, 14, 0.72);
     --glass-nav-border: rgba(255, 255, 255, 0.06);

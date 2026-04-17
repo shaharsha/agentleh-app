@@ -105,8 +105,8 @@ export default function InviteAcceptPage() {
 
   if (error && !preview) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-        <div className="bg-white rounded-xl border border-red-200 p-8 max-w-md w-full text-center">
+      <div className="min-h-screen flex items-center justify-center section-gradient p-6">
+        <div className="glass-card-elevated rounded-xl border border-red-200 p-8 max-w-md w-full text-center">
           <div className="text-red-600 text-3xl mb-3">⚠</div>
           <h1 className="text-xl font-semibold text-gray-900 mb-2">
             {t({ he: 'לא הצלחנו לקבל את ההזמנה', en: "Couldn't accept invite" })}
@@ -122,8 +122,8 @@ export default function InviteAcceptPage() {
 
   if (accepted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-        <div className="bg-white rounded-xl border border-green-200 p-8 max-w-md w-full text-center">
+      <div className="min-h-screen flex items-center justify-center section-gradient p-6">
+        <div className="glass-card-elevated rounded-xl border border-green-200 p-8 max-w-md w-full text-center">
           <div className="text-green-600 text-4xl mb-3">✓</div>
           <h1 className="text-xl font-semibold text-gray-900 mb-2">
             {t({ he: 'הצטרפת!', en: "You're in!" })}
@@ -156,8 +156,8 @@ export default function InviteAcceptPage() {
           ? t({ he: 'ההזמנה בוטלה.', en: 'This invite has been revoked.' })
           : t({ he: 'ההזמנה פגת תוקף.', en: 'This invite has expired.' })
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full text-center">
+      <div className="min-h-screen flex items-center justify-center section-gradient p-6">
+        <div className="glass-card-elevated rounded-xl p-8 max-w-md w-full text-center">
           <h1 className="text-xl font-semibold text-gray-900 mb-2">
             {t({ he: 'ההזמנה לא זמינה', en: 'Invite unavailable' })}
           </h1>
@@ -172,7 +172,7 @@ export default function InviteAcceptPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-      <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full">
+      <div className="glass-card-elevated rounded-xl p-8 max-w-md w-full">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">
             {t({ he: 'הוזמנת להצטרף', en: "You're invited" })}

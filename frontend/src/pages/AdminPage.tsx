@@ -504,7 +504,7 @@ function GrantPlanModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-surface rounded-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold">Grant plan to tenant {tenantId}</h3>
           <button onClick={onClose} className="text-gray-500 text-2xl">×</button>
@@ -932,7 +932,7 @@ function RedemptionsModal({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-xl max-w-3xl w-full max-h-[85vh] overflow-y-auto p-6"
+        className="bg-surface rounded-xl max-w-3xl w-full max-h-[85vh] overflow-y-auto p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
@@ -1309,7 +1309,7 @@ function MetricTile({
         {value}
         {unit && <span className="text-sm font-normal opacity-70 ml-1">{unit}</span>}
       </div>
-      <div className="w-full h-1.5 bg-white/60 rounded-full mt-2 overflow-hidden">
+      <div className="w-full h-1.5 bg-black/10 dark:bg-white/10 rounded-full mt-2 overflow-hidden">
         <div className={`h-full ${bar} transition-all`} style={{ width: `${Math.min(100, pct)}%` }} />
       </div>
       {sub && <div className="text-xs opacity-70 mt-1">{sub}</div>}
@@ -1483,7 +1483,7 @@ function UsageTile({
   info?: string
 }) {
   return (
-    <div className="rounded-xl p-4 bg-white border border-gray-100 shadow-sm">
+    <div className="rounded-xl p-4 bg-surface border border-border-light shadow-sm">
       <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
         <span>{label}</span>
         {info && <InfoTip text={info} />}
@@ -2186,7 +2186,7 @@ function AgentDetailModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-surface rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6">

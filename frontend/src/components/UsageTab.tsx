@@ -166,7 +166,7 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
   return (
     <div className="space-y-6">
       {/* Range picker */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
+      <div className="bg-surface border border-border rounded-xl p-6">
         <div className="flex flex-wrap items-center gap-2">
           {(['current', 'last_7d', 'last_30d', 'custom'] as RangeKind[]).map((k) => (
             <button
@@ -176,7 +176,7 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
               className={`text-sm px-3 py-1.5 rounded-full border transition-colors cursor-pointer ${
                 range.kind === k
                   ? 'bg-indigo-600 text-white border-indigo-600'
-                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  : 'bg-surface text-text-primary border-border hover:bg-gray-50 dark:hover:bg-white/5'
               }`}
             >
               {t(rangeLabel(k))}
@@ -251,7 +251,7 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
       </div>
 
       {/* Tenant totals */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
+      <div className="bg-surface border border-border rounded-xl p-6">
         <div className="flex items-baseline justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">
             {t({ he: 'סיכום שימוש', en: 'Usage summary' })}
@@ -272,7 +272,7 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
       </div>
 
       {/* Per-agent table */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
+      <div className="bg-surface border border-border rounded-xl p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           {t({ he: 'פירוט לפי סוכן', en: 'Per-agent breakdown' })}
         </h2>
