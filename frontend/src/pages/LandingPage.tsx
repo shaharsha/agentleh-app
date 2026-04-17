@@ -74,15 +74,14 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
           <span className="font-medium">{googleCta}</span>
         </button>
 
-        <div className="relative my-7">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex justify-center">
-            <span className="bg-white/80 px-4 text-[13px] text-text-muted">
-              {t({ he: 'או', en: 'or' })}
-            </span>
-          </div>
+        {/* Two short hairlines with the "or" label between them. No need to
+         * paint a background under the label to "cut" a single rule — that
+         * approach leaves a bright rectangle on dark mode / any non-white
+         * background. Flex does the job on any surface, any theme. */}
+        <div className="my-7 flex items-center gap-3 text-[12px] uppercase tracking-wider text-text-muted">
+          <div className="flex-1 border-t border-border" aria-hidden="true" />
+          <span>{t({ he: 'או', en: 'or' })}</span>
+          <div className="flex-1 border-t border-border" aria-hidden="true" />
         </div>
 
         <EmailForm mode={mode} />

@@ -264,7 +264,7 @@ export default function MobileDrawer({
                 aria-pressed={lang === 'he'}
                 className={`flex-1 inline-flex items-center justify-center gap-2 min-h-[44px] px-3 rounded-lg text-sm font-medium transition-colors ${
                   lang === 'he'
-                    ? 'bg-text-primary text-surface'
+                    ? 'bg-gray-900 text-white dark:bg-white/15 dark:text-text-primary'
                     : 'bg-black/5 dark:bg-white/5 text-text-secondary hover:text-text-primary'
                 }`}
               >
@@ -276,7 +276,7 @@ export default function MobileDrawer({
                 aria-pressed={lang === 'en'}
                 className={`flex-1 inline-flex items-center justify-center gap-2 min-h-[44px] px-3 rounded-lg text-sm font-medium transition-colors ${
                   lang === 'en'
-                    ? 'bg-text-primary text-surface'
+                    ? 'bg-gray-900 text-white dark:bg-white/15 dark:text-text-primary'
                     : 'bg-black/5 dark:bg-white/5 text-text-secondary hover:text-text-primary'
                 }`}
               >

@@ -159,6 +159,25 @@ button:not(:disabled) {
   }
 }
 
+/* ── Theme cross-fade ──────────────────────
+ * When the OS flips prefers-color-scheme, CSS vars repoint instantly
+ * but the resolved property on each element can transition. Keep the
+ * selector list narrow (page surfaces + cards + section backgrounds)
+ * so existing hover animations on buttons/inputs aren't flattened.
+ * The .glass-card-hover rule below declares its own richer transition
+ * that overrides this for hover-capable cards. */
+@media (prefers-reduced-motion: no-preference) {
+  html, body,
+  .glass-nav, .glass-card, .glass-card-elevated, .glass-pill {
+    transition: background-color 250ms ease-out,
+                color 250ms ease-out,
+                border-color 250ms ease-out;
+  }
+  .section-gradient, .section-gradient-alt, .section-gradient-hero {
+    transition: background 350ms ease-out, color 250ms ease-out;
+  }
+}
+
 /* ── Touch-safe interactive floors ────────── */
 /* Coarse pointer = touch device. Guarantee every button/link meets the
  * 44×44 px iOS HIG minimum so nothing on mobile feels fiddly. */

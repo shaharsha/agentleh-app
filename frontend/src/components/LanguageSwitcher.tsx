@@ -24,7 +24,7 @@ export default function LanguageSwitcher() {
       aria-label={target === 'he' ? 'עברית' : 'English'}
       className={`inline-flex items-center justify-center min-w-[36px] h-9 px-2.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
         lang === target
-          ? 'bg-text-primary text-surface'
+          ? 'bg-gray-900 text-white dark:bg-white/15 dark:text-text-primary'
           : 'text-text-secondary hover:text-text-primary'
       }`}
     >
