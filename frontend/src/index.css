@@ -377,3 +377,34 @@ button:not(:disabled) {
   border-color: #E5484D;
   box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.15);
 }
+
+/* ═══════════════════════════════════════════
+   ADMIN TABLES — graceful horizontal scroll
+   ═══════════════════════════════════════════
+   The admin pages carry a dozen wide data tables. Rewriting each one
+   into a responsive card layout is too much churn for an audience of
+   one (me, the superadmin). Instead: keep the table, make it scroll
+   horizontally with touch momentum, and fade the trailing edge so the
+   "swipe me" affordance is visually obvious on mobile. Desktop renders
+   exactly as before.
+ */
+.admin-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+@media (max-width: 768px) {
+  .admin-table-wrap {
+    mask-image: linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%);
+  }
+  [dir="rtl"] .admin-table-wrap {
+    mask-image: linear-gradient(to left, black 0, black calc(100% - 24px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to left, black 0, black calc(100% - 24px), transparent 100%);
+  }
+  /* When the mask is active the table content is allowed to scroll under
+   * it; without a min-width the browser happily squashes columns to zero.
+   * 640 px = roughly the narrowest width where an 8-col table stays
+   * legible without the cells wrapping into Wordle grids. */
+  .admin-table-wrap > table { min-width: 640px; }
+}
