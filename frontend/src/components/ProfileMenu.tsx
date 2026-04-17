@@ -69,7 +69,7 @@ export default function ProfileMenu({ user, onLogout }: Props) {
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div
-            className="absolute end-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-200 z-20 overflow-hidden"
+            className="absolute end-0 mt-2 w-[min(18rem,calc(100vw-2rem))] bg-surface rounded-xl shadow-lg border border-border-light z-20 overflow-hidden"
             role="menu"
           >
             <div className="p-3 flex items-center gap-3">
@@ -81,22 +81,22 @@ export default function ProfileMenu({ user, onLogout }: Props) {
               </div>
               <div className="min-w-0 flex-1 text-start">
                 {user.full_name?.trim() && (
-                  <div className="text-sm font-medium text-gray-900 truncate">
+                  <div className="text-sm font-medium text-text-primary truncate">
                     <bdi>{user.full_name}</bdi>
                   </div>
                 )}
-                <div className="text-xs text-gray-500 truncate">
+                <div className="text-xs text-text-muted truncate">
                   <bdi>{user.email}</bdi>
                 </div>
               </div>
             </div>
-            <div className="border-t border-gray-100 p-1">
+            <div className="border-t border-border-light p-1">
               <button
                 onClick={() => {
                   setOpen(false)
                   onLogout()
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 text-start cursor-pointer"
+                className="w-full flex items-center gap-2 px-3 py-2.5 min-h-[44px] rounded-lg text-sm text-red-600 hover:bg-red-500/10 text-start cursor-pointer"
                 role="menuitem"
               >
                 <LogOutIcon className={logoutIconClass} />

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useI18n } from '../lib/i18n'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import ThemeSwitcher from '../components/ThemeSwitcher'
+import { ChevronLeftIcon } from '../components/icons'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL
 
@@ -44,7 +46,18 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
 
   return (
     <div className="min-h-screen section-gradient-hero flex flex-col items-center justify-center px-5 py-16 relative">
-      <div className="absolute top-5 end-5">
+      <div className="absolute top-5 start-5">
+        <a
+          href={landingHref('', lang)}
+          aria-label={t({ he: 'חזרה ל-Agentiko', en: 'Back to Agentiko' })}
+          className="inline-flex items-center gap-1.5 h-9 px-3 text-xs font-semibold rounded-lg border border-border-light bg-surface/60 text-text-secondary hover:text-text-primary transition-colors"
+        >
+          <ChevronLeftIcon className="w-[14px] h-[14px] rtl:rotate-180" />
+          <span>{t({ he: 'חזרה ל-Agentiko', en: 'Back to Agentiko' })}</span>
+        </a>
+      </div>
+      <div className="absolute top-5 end-5 flex items-center gap-2">
+        <ThemeSwitcher />
         <LanguageSwitcher />
       </div>
       <div className="text-center mb-12">
@@ -63,15 +76,14 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
           <span className="font-medium">{googleCta}</span>
         </button>
 
-        <div className="relative my-7">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex justify-center">
-            <span className="bg-white/80 px-4 text-[13px] text-text-muted">
-              {t({ he: 'או', en: 'or' })}
-            </span>
-          </div>
+        {/* Two short hairlines with the "or" label between them. No need to
+         * paint a background under the label to "cut" a single rule — that
+         * approach leaves a bright rectangle on dark mode / any non-white
+         * background. Flex does the job on any surface, any theme. */}
+        <div className="my-7 flex items-center gap-3 text-[12px] uppercase tracking-wider text-text-muted">
+          <div className="flex-1 border-t border-border" aria-hidden="true" />
+          <span>{t({ he: 'או', en: 'or' })}</span>
+          <div className="flex-1 border-t border-border" aria-hidden="true" />
         </div>
 
         <EmailForm mode={mode} />

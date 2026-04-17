@@ -121,3 +121,88 @@ export function GlobeIcon(props: IconProps) {
     </Icon>
   )
 }
+
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <polyline points="15 6 9 12 15 18" />
+    </Icon>
+  )
+}
+
+/** Three-line hamburger — opens the mobile nav drawer. */
+export function MenuIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <line x1="4" y1="7" x2="20" y2="7" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="17" x2="20" y2="17" />
+    </Icon>
+  )
+}
+
+/** X — close. Used on drawers, modals, dialogs. */
+export function XIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </Icon>
+  )
+}
+
+/** Plus — "add new workspace" affordance inside the mobile drawer. */
+export function PlusIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </Icon>
+  )
+}
+
+/** Filled check — the workspace marker inside the mobile drawer list. */
+export function CheckIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <polyline points="20 6 9 17 4 12" />
+    </Icon>
+  )
+}
+
+/** Sun — "Light" theme button. */
+export function SunIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2" />
+      <path d="M12 20v2" />
+      <path d="m4.93 4.93 1.41 1.41" />
+      <path d="m17.66 17.66 1.41 1.41" />
+      <path d="M2 12h2" />
+      <path d="M20 12h2" />
+      <path d="m4.93 19.07 1.41-1.41" />
+      <path d="m17.66 6.34 1.41-1.41" />
+    </Icon>
+  )
+}
+
+/** Moon — "Dark" theme button. */
+export function MoonIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </Icon>
+  )
+}
+
+/** Monitor — "Auto / follow system" theme button. */
+export function MonitorIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <line x1="8" y1="21" x2="16" y2="21" />
+      <line x1="12" y1="17" x2="12" y2="21" />
+    </Icon>
+  )
+}

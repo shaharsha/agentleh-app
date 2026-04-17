@@ -190,20 +190,20 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-[clamp(22px,5.5vw,30px)] font-bold">
           {t({ he: 'ניהול', en: 'Admin' })}
         </h1>
         <button
           onClick={reload}
-          className="btn-secondary btn-sm"
+          className="btn-secondary btn-sm shrink-0"
         >
           {t({ he: 'רענון', en: 'Refresh' })}
         </button>
       </div>
 
-      <div className="flex gap-2 border-b">
+      <div className="flex gap-1 sm:gap-2 border-b overflow-x-auto snap-x snap-mandatory scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
         {(['agents', 'users', 'plans', 'coupons', 'tenants'] as const).map((name) => {
           // Coupons + tenants load on tab mount via their own components,
           // so the parent overview doesn't carry counts for them.
@@ -215,7 +215,7 @@ export default function AdminPage() {
             <button
               key={name}
               onClick={() => setTab(name)}
-              className={`px-4 py-2 ${
+              className={`snap-start shrink-0 px-4 py-3 min-h-[44px] whitespace-nowrap text-sm ${
                 tab === name
                   ? 'border-b-2 border-blue-600 text-blue-600 font-semibold'
                   : 'text-gray-500 hover:text-gray-800'
@@ -227,7 +227,7 @@ export default function AdminPage() {
         })}
         <button
           onClick={() => setTab('stats')}
-          className={`px-4 py-2 ${
+          className={`snap-start shrink-0 px-4 py-3 min-h-[44px] whitespace-nowrap text-sm ${
             tab === 'stats'
               ? 'border-b-2 border-blue-600 text-blue-600 font-semibold'
               : 'text-gray-500 hover:text-gray-800'
@@ -285,80 +285,179 @@ function AgentsTab({
   const [grantTenantId, setGrantTenantId] = useState<number | null>(null)
 
   return (
-    <div className="glass-card overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="text-left p-3">Agent</th>
-            <th className="text-left p-3">Owner</th>
-            <th className="text-left p-3">Plan</th>
-            <th className="text-right p-3">Used</th>
-            <th className="text-right p-3">Cap</th>
-            <th className="text-right p-3">%</th>
-            <th className="text-left p-3">Status</th>
-            <th className="text-right p-3">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {agents.map((a) => {
-            const cap = (a.base_allowance_micros || 0) + (a.overage_cap_micros || 0)
-            return (
-              <tr key={a.agent_id} className="border-t hover:bg-gray-50">
-                <td className="p-3 font-mono text-xs">
-                  <div>{a.agent_id}</div>
+    <div className="glass-card">
+      {/* Mobile: stacked cards. Each agent renders as a self-contained
+          card with the key columns stacked, usage bar, and full-width
+          action buttons. */}
+      <ul className="md:hidden divide-y divide-border-light">
+        {agents.map((a) => {
+          const cap = (a.base_allowance_micros || 0) + (a.overage_cap_micros || 0)
+          const pctNum =
+            a.used_micros != null && cap > 0
+              ? Math.min(100, (a.used_micros / cap) * 100)
+              : 0
+          return (
+            <li key={a.agent_id} className="p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-mono text-xs break-all">{a.agent_id}</div>
                   {a.agent_name && (
-                    <div className="text-gray-500">({a.agent_name})</div>
+                    <div className="text-xs text-gray-500 mt-0.5 truncate">
+                      {a.agent_name}
+                    </div>
                   )}
-                </td>
-                <td className="p-3">
-                  {a.user_email || <span className="text-gray-400">—</span>}
-                </td>
-                <td className="p-3">
-                  {a.plan_name_he || <span className="text-gray-400">—</span>}
-                </td>
-                <td className="p-3 text-right font-mono">{fmtUsd(a.used_micros)}</td>
-                <td className="p-3 text-right font-mono">{fmtUsd(cap || null)}</td>
-                <td className="p-3 text-right">{pct(a.used_micros, cap || null)}</td>
-                <td className="p-3">
-                  <span
-                    className={
-                      a.subscription_status === 'active'
-                        ? 'text-green-600'
-                        : a.subscription_status === 'exhausted'
-                          ? 'text-red-600'
-                          : 'text-gray-500'
-                    }
-                  >
-                    {a.subscription_status || 'none'}
-                  </span>
-                </td>
-                <td className="p-3 text-right space-x-2">
+                </div>
+                <span
+                  className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded ${
+                    a.subscription_status === 'active'
+                      ? 'bg-green-50 text-green-700 dark:bg-green-500/10'
+                      : a.subscription_status === 'exhausted'
+                        ? 'bg-red-50 text-red-700 dark:bg-red-500/10'
+                        : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300'
+                  }`}
+                >
+                  {a.subscription_status || 'none'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                <div className="text-gray-500">Owner</div>
+                <div className="text-end truncate">
+                  {a.user_email || '—'}
+                </div>
+                <div className="text-gray-500">Plan</div>
+                <div className="text-end truncate">
+                  {a.plan_name_he || '—'}
+                </div>
+                <div className="text-gray-500">Used / cap</div>
+                <div className="text-end font-mono tabular-nums">
+                  {fmtUsd(a.used_micros)} / {fmtUsd(cap || null)}
+                </div>
+                <div className="text-gray-500">Usage</div>
+                <div className="text-end tabular-nums">
+                  {pct(a.used_micros, cap || null)}
+                </div>
+              </div>
+
+              {cap > 0 && (
+                <div className="h-1.5 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${
+                      pctNum >= 90 ? 'bg-red-500' : pctNum >= 70 ? 'bg-amber-500' : 'bg-indigo-500'
+                    }`}
+                    style={{ width: `${pctNum}%` }}
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => onSelect(a.agent_id)}
+                  className="btn-secondary btn-sm flex-1 min-w-[100px]"
+                >
+                  Details
+                </button>
+                <button
+                  onClick={() => onRotateKey(a.agent_id)}
+                  className="btn-secondary btn-sm flex-1 min-w-[100px]"
+                >
+                  Rotate key
+                </button>
+                {a.tenant_id != null && (
                   <button
-                    onClick={() => onSelect(a.agent_id)}
-                    className="btn-secondary btn-sm"
+                    onClick={() => setGrantTenantId(a.tenant_id)}
+                    className="btn-secondary btn-sm flex-1 min-w-[100px]"
                   >
-                    Details
+                    Grant plan
                   </button>
-                  <button
-                    onClick={() => onRotateKey(a.agent_id)}
-                    className="btn-secondary btn-sm"
-                  >
-                    Rotate key
-                  </button>
-                  {a.tenant_id != null && (
+                )}
+              </div>
+            </li>
+          )
+        })}
+        {agents.length === 0 && (
+          <li className="p-6 text-center text-sm text-gray-500">No agents yet.</li>
+        )}
+      </ul>
+
+      {/* Desktop: traditional table. Scrolls horizontally on small tablets
+          via admin-table-wrap (up to md, switchover). */}
+      <div className="hidden md:block admin-table-wrap">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="text-left p-3">Agent</th>
+              <th className="text-left p-3">Owner</th>
+              <th className="text-left p-3">Plan</th>
+              <th className="text-right p-3">Used</th>
+              <th className="text-right p-3">Cap</th>
+              <th className="text-right p-3">%</th>
+              <th className="text-left p-3">Status</th>
+              <th className="text-right p-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {agents.map((a) => {
+              const cap = (a.base_allowance_micros || 0) + (a.overage_cap_micros || 0)
+              return (
+                <tr key={a.agent_id} className="border-t hover:bg-gray-50">
+                  <td className="p-3 font-mono text-xs">
+                    <div>{a.agent_id}</div>
+                    {a.agent_name && (
+                      <div className="text-gray-500">({a.agent_name})</div>
+                    )}
+                  </td>
+                  <td className="p-3">
+                    {a.user_email || <span className="text-gray-400">—</span>}
+                  </td>
+                  <td className="p-3">
+                    {a.plan_name_he || <span className="text-gray-400">—</span>}
+                  </td>
+                  <td className="p-3 text-right font-mono">{fmtUsd(a.used_micros)}</td>
+                  <td className="p-3 text-right font-mono">{fmtUsd(cap || null)}</td>
+                  <td className="p-3 text-right">{pct(a.used_micros, cap || null)}</td>
+                  <td className="p-3">
+                    <span
+                      className={
+                        a.subscription_status === 'active'
+                          ? 'text-green-600'
+                          : a.subscription_status === 'exhausted'
+                            ? 'text-red-600'
+                            : 'text-gray-500'
+                      }
+                    >
+                      {a.subscription_status || 'none'}
+                    </span>
+                  </td>
+                  <td className="p-3 text-right space-x-2">
                     <button
-                      onClick={() => setGrantTenantId(a.tenant_id)}
+                      onClick={() => onSelect(a.agent_id)}
                       className="btn-secondary btn-sm"
                     >
-                      Grant plan
+                      Details
                     </button>
-                  )}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+                    <button
+                      onClick={() => onRotateKey(a.agent_id)}
+                      className="btn-secondary btn-sm"
+                    >
+                      Rotate key
+                    </button>
+                    {a.tenant_id != null && (
+                      <button
+                        onClick={() => setGrantTenantId(a.tenant_id)}
+                        className="btn-secondary btn-sm"
+                      >
+                        Grant plan
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
       {grantTenantId !== null && (
         <GrantPlanModal
           tenantId={grantTenantId}
@@ -507,63 +606,126 @@ function CouponsTab({ plans }: { plans: AdminOverview['plans'] }) {
 
       {error && <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
 
-      <div className="glass-card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left p-3">Code</th>
-              <th className="text-left p-3">Plan</th>
-              <th className="text-right p-3">Days</th>
-              <th className="text-right p-3">Used / Cap</th>
-              <th className="text-left p-3">Status</th>
-              <th className="text-left p-3">Valid until</th>
-              <th className="text-left p-3">Notes</th>
-              <th className="text-right p-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {coupons.map((c) => {
-              const status = couponStatus(c)
-              return (
-                <tr key={c.id} className="border-t hover:bg-gray-50">
-                  <td className="p-3 font-mono text-xs">{c.code}</td>
-                  <td className="p-3">{c.plan_name_he} <span className="text-gray-400">({c.plan_id})</span></td>
-                  <td className="p-3 text-right">{c.duration_days}</td>
-                  <td className="p-3 text-right">
+      <div className="glass-card">
+        {/* Mobile: stacked cards */}
+        <ul className="md:hidden divide-y divide-border-light">
+          {coupons.map((c) => {
+            const status = couponStatus(c)
+            return (
+              <li key={c.id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <code className="font-mono text-sm break-all">{c.code}</code>
+                  <span className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded bg-black/5 dark:bg-white/10 ${statusColor(status)}`}>
+                    {status}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                  <div className="text-gray-500">Plan</div>
+                  <div className="text-end truncate">
+                    {c.plan_name_he} <span className="text-gray-400">({c.plan_id})</span>
+                  </div>
+                  <div className="text-gray-500">Days</div>
+                  <div className="text-end tabular-nums">{c.duration_days}</div>
+                  <div className="text-gray-500">Used / cap</div>
+                  <div className="text-end tabular-nums">
                     {c.redemption_count}/{c.max_redemptions ?? '∞'}
-                  </td>
-                  <td className="p-3">
-                    <span className={statusColor(status)}>{status}</span>
-                  </td>
-                  <td className="p-3 text-xs text-gray-500">
+                  </div>
+                  <div className="text-gray-500">Valid until</div>
+                  <div className="text-end text-gray-600">
                     {c.valid_until ? new Date(c.valid_until).toLocaleDateString('en-GB') : '—'}
-                  </td>
-                  <td className="p-3 text-xs text-gray-500 max-w-xs truncate" title={c.notes}>
-                    {c.notes || '—'}
-                  </td>
-                  <td className="p-3 text-right space-x-2">
-                    <button
-                      onClick={() => setOpenRedemptionsFor(c)}
-                      className="btn-secondary btn-sm"
-                    >
-                      Redemptions
-                    </button>
-                    <button onClick={() => handleToggle(c)} className="btn-secondary btn-sm">
-                      {c.disabled_at ? 'Enable' : 'Disable'}
-                    </button>
+                  </div>
+                  {c.notes && (
+                    <>
+                      <div className="text-gray-500">Notes</div>
+                      <div className="text-end text-gray-600 truncate" title={c.notes}>
+                        {c.notes}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setOpenRedemptionsFor(c)}
+                    className="btn-secondary btn-sm flex-1 min-w-[120px]"
+                  >
+                    Redemptions
+                  </button>
+                  <button
+                    onClick={() => handleToggle(c)}
+                    className="btn-secondary btn-sm flex-1 min-w-[120px]"
+                  >
+                    {c.disabled_at ? 'Enable' : 'Disable'}
+                  </button>
+                </div>
+              </li>
+            )
+          })}
+          {coupons.length === 0 && (
+            <li className="p-6 text-center text-sm text-gray-500">
+              No coupons yet — tap "New coupon" to mint one.
+            </li>
+          )}
+        </ul>
+
+        {/* Desktop: table */}
+        <div className="hidden md:block admin-table-wrap">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left p-3">Code</th>
+                <th className="text-left p-3">Plan</th>
+                <th className="text-right p-3">Days</th>
+                <th className="text-right p-3">Used / Cap</th>
+                <th className="text-left p-3">Status</th>
+                <th className="text-left p-3">Valid until</th>
+                <th className="text-left p-3">Notes</th>
+                <th className="text-right p-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {coupons.map((c) => {
+                const status = couponStatus(c)
+                return (
+                  <tr key={c.id} className="border-t hover:bg-gray-50">
+                    <td className="p-3 font-mono text-xs">{c.code}</td>
+                    <td className="p-3">{c.plan_name_he} <span className="text-gray-400">({c.plan_id})</span></td>
+                    <td className="p-3 text-right">{c.duration_days}</td>
+                    <td className="p-3 text-right">
+                      {c.redemption_count}/{c.max_redemptions ?? '∞'}
+                    </td>
+                    <td className="p-3">
+                      <span className={statusColor(status)}>{status}</span>
+                    </td>
+                    <td className="p-3 text-xs text-gray-500">
+                      {c.valid_until ? new Date(c.valid_until).toLocaleDateString('en-GB') : '—'}
+                    </td>
+                    <td className="p-3 text-xs text-gray-500 max-w-xs truncate" title={c.notes}>
+                      {c.notes || '—'}
+                    </td>
+                    <td className="p-3 text-right space-x-2">
+                      <button
+                        onClick={() => setOpenRedemptionsFor(c)}
+                        className="btn-secondary btn-sm"
+                      >
+                        Redemptions
+                      </button>
+                      <button onClick={() => handleToggle(c)} className="btn-secondary btn-sm">
+                        {c.disabled_at ? 'Enable' : 'Disable'}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+              {coupons.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="p-6 text-center text-gray-500">
+                    No coupons yet — click "New coupon" to mint one.
                   </td>
                 </tr>
-              )
-            })}
-            {coupons.length === 0 && (
-              <tr>
-                <td colSpan={8} className="p-6 text-center text-gray-500">
-                  No coupons yet — click "New coupon" to mint one.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {openRedemptionsFor && (
@@ -784,31 +946,33 @@ function RedemptionsModal({
         ) : rows.length === 0 ? (
           <div className="text-gray-500">No redemptions yet.</div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left p-2">User</th>
-                <th className="text-left p-2">Tenant</th>
-                <th className="text-left p-2">Period</th>
-                <th className="text-left p-2">When</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <td className="p-2">{r.user_email}</td>
-                  <td className="p-2">{r.tenant_name}</td>
-                  <td className="p-2 text-xs text-gray-500">
-                    {new Date(r.period_start).toLocaleDateString('en-GB')} →{' '}
-                    {new Date(r.period_end).toLocaleDateString('en-GB')}
-                  </td>
-                  <td className="p-2 text-xs text-gray-500">
-                    {new Date(r.redeemed_at).toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem' })}
-                  </td>
+          <div className="admin-table-wrap">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left p-2">User</th>
+                  <th className="text-left p-2">Tenant</th>
+                  <th className="text-left p-2">Period</th>
+                  <th className="text-left p-2">When</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-t">
+                    <td className="p-2">{r.user_email}</td>
+                    <td className="p-2">{r.tenant_name}</td>
+                    <td className="p-2 text-xs text-gray-500">
+                      {new Date(r.period_start).toLocaleDateString('en-GB')} →{' '}
+                      {new Date(r.period_end).toLocaleDateString('en-GB')}
+                    </td>
+                    <td className="p-2 text-xs text-gray-500">
+                      {new Date(r.redeemed_at).toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
@@ -823,7 +987,7 @@ function UsersTab({
   onPromote: (user: AdminUserRow) => void
 }) {
   return (
-    <div className="glass-card overflow-x-auto">
+    <div className="glass-card admin-table-wrap">
       <table className="w-full text-sm">
         <thead className="bg-gray-50">
           <tr>
@@ -872,7 +1036,7 @@ function UsersTab({
 
 function PlansTab({ plans }: { plans: AdminOverview['plans'] }) {
   return (
-    <div className="glass-card overflow-x-auto">
+    <div className="glass-card admin-table-wrap">
       <table className="w-full text-sm">
         <thead className="bg-gray-50">
           <tr>
@@ -1610,7 +1774,8 @@ function ModelBreakdownCard({ rows }: { rows: VmStatsResponse['model_breakdown_7
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      <table className="w-full text-xs mt-3">
+      <div className="admin-table-wrap mt-3">
+      <table className="w-full text-xs">
         <thead className="text-gray-500">
           <tr>
             <th className="text-left p-1">Model</th>
@@ -1642,6 +1807,7 @@ function ModelBreakdownCard({ rows }: { rows: VmStatsResponse['model_breakdown_7
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
@@ -1935,7 +2101,8 @@ function TopAgentsCard({ agents }: { agents: VmStatsResponse['top_agents'] }) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      <table className="w-full text-xs mt-3">
+      <div className="admin-table-wrap mt-3">
+      <table className="w-full text-xs">
         <thead className="text-gray-500">
           <tr>
             <th className="text-left p-1">Agent</th>
@@ -1955,6 +2122,7 @@ function TopAgentsCard({ agents }: { agents: VmStatsResponse['top_agents'] }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
@@ -1967,6 +2135,7 @@ function ContainersCard({
   return (
     <div className="glass-card p-6">
       <h3 className="text-base font-semibold mb-3">Docker containers</h3>
+      <div className="admin-table-wrap">
       <table className="w-full text-xs">
         <thead>
           <tr className="text-left text-gray-500">
@@ -1999,6 +2168,7 @@ function ContainersCard({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
@@ -2045,7 +2215,7 @@ function AgentDetailModal({
               </div>
 
               <h3 className="font-semibold mt-4 mb-2">Recent usage events</h3>
-              <div className="overflow-x-auto">
+              <div className="admin-table-wrap">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50">
                     <tr>
@@ -2168,7 +2338,7 @@ function TenantsTab() {
         </span>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200">
+      <div className="admin-table-wrap rounded-xl border border-gray-200">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr>

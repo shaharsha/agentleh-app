@@ -1,9 +1,11 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { AppUser, TenantMembership } from '../lib/types'
 import TenantSwitcher from './TenantSwitcher'
 import LanguageSwitcher from './LanguageSwitcher'
+import ThemeSwitcher from './ThemeSwitcher'
+import MobileDrawer from './MobileDrawer'
 import { useI18n } from '../lib/i18n'
-import { GodModeIcon, LayoutDashboardIcon } from './icons'
+import { GodModeIcon, LayoutDashboardIcon, MenuIcon } from './icons'
 import ProfileMenu from './ProfileMenu'
 
 interface LayoutProps {
@@ -24,6 +26,7 @@ export default function Layout({
   onRefreshTenants,
 }: LayoutProps) {
   const { t } = useI18n()
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const isAdminRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
   const isTenantRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/tenants')
   const isSuperadmin = user?.role === 'superadmin'
@@ -32,77 +35,115 @@ export default function Layout({
   const mainMaxWidth = isAdminRoute ? 'max-w-7xl' : isTenantRoute ? 'max-w-5xl' : 'max-w-[560px]'
   const tenants: TenantMembership[] = (user?.tenants as TenantMembership[]) || []
 
-  // Shared ghost-icon-button class. Matches the hover feel of the
-  // TenantSwitcher trigger above so the whole right-side toolbar reads
-  // as one consistent action group.
   const iconBtnClass =
-    'flex items-center justify-center w-9 h-9 rounded-lg text-text-secondary hover:text-text-primary hover:bg-gray-100 transition-colors cursor-pointer'
+    'flex items-center justify-center w-9 h-9 rounded-lg text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer'
 
   const adminLabel = isAdminRoute
     ? t({ he: 'לוח הבקרה', en: 'Dashboard' })
     : t({ he: 'ניהול', en: 'Admin' })
 
+  const hasDrawerControls = tenants.length > 0 || isSuperadmin || !!user
+
   return (
     <div className="min-h-screen section-gradient">
-      <header className="glass-nav sticky top-0 z-50 px-6 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-[10px] bg-brand flex items-center justify-center shadow-sm">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="white"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+      <header className="glass-nav sticky top-0 z-50 safe-pt">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 px-4 sm:px-6 py-2.5 sm:py-3 safe-px">
+          {/* Start cluster: hamburger (mobile only) + logo */}
+          <div className="flex items-center gap-2 min-w-0">
+            {hasDrawerControls && user && (
+              <button
+                onClick={() => setDrawerOpen(true)}
+                aria-label={t({ he: 'פתיחת תפריט', en: 'Open menu' })}
+                aria-expanded={drawerOpen}
+                className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer shrink-0"
               >
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-            </div>
-            <span className="text-[17px] font-semibold tracking-[-0.3px]">Agentiko</span>
-            {isAdminRoute && (
-              <span className="ms-2 text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold">
-                {t({ he: 'ניהול', en: 'ADMIN' })}
+                <MenuIcon className="w-5 h-5" />
+              </button>
+            )}
+
+            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-[10px] bg-brand flex items-center justify-center shadow-sm shrink-0">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              </div>
+              <span className="text-[17px] font-semibold tracking-[-0.3px] truncate max-w-[160px] sm:max-w-none">
+                Agentiko
               </span>
-            )}
+              {isAdminRoute && (
+                <span className="hidden sm:inline-block ms-2 text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold">
+                  {t({ he: 'ניהול', en: 'ADMIN' })}
+                </span>
+              )}
+            </div>
           </div>
+
+          {/* End cluster */}
           <div className="flex items-center gap-2">
-            {tenants.length > 0 && onTenantSelect && onRefreshTenants && (
-              <TenantSwitcher
-                tenants={tenants}
-                activeTenantId={activeTenantId ?? null}
-                onSelect={onTenantSelect}
-                onRefresh={onRefreshTenants}
-              />
-            )}
+            {/* Desktop-only nav controls — collapsed into the drawer on <md */}
+            <div className="hidden md:flex items-center gap-2">
+              {tenants.length > 0 && onTenantSelect && onRefreshTenants && (
+                <TenantSwitcher
+                  tenants={tenants}
+                  activeTenantId={activeTenantId ?? null}
+                  onSelect={onTenantSelect}
+                  onRefresh={onRefreshTenants}
+                />
+              )}
 
-            {/* Thin vertical divider before the action icons — pure visual
-                grouping. Hidden when the tenant switcher isn't rendered
-                (avoids a divider with nothing on its start side). */}
-            {tenants.length > 0 && (
-              <div className="w-px h-5 bg-gray-200 mx-1" aria-hidden="true" />
-            )}
+              {tenants.length > 0 && (
+                <div className="w-px h-5 bg-border-light mx-1" aria-hidden="true" />
+              )}
 
-            <LanguageSwitcher />
+              <LanguageSwitcher />
 
-            {isSuperadmin && (
-              <a
-                href={isAdminRoute ? '/' : '/admin'}
-                className={iconBtnClass}
-                title={adminLabel}
-                aria-label={adminLabel}
-              >
-                {isAdminRoute ? <LayoutDashboardIcon /> : <GodModeIcon />}
-              </a>
-            )}
+              <ThemeSwitcher />
+
+              {isSuperadmin && (
+                <a
+                  href={isAdminRoute ? '/' : '/admin'}
+                  className={iconBtnClass}
+                  title={adminLabel}
+                  aria-label={adminLabel}
+                >
+                  {isAdminRoute ? <LayoutDashboardIcon /> : <GodModeIcon />}
+                </a>
+              )}
+            </div>
 
             {user && <ProfileMenu user={user} onLogout={onLogout} />}
           </div>
         </div>
       </header>
-      <main className={`${mainMaxWidth} mx-auto px-5 py-12`}>
+
+      {/* Mobile drawer — only renders when we have a logged-in user. */}
+      {user && (
+        <MobileDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          user={user}
+          tenants={tenants}
+          activeTenantId={activeTenantId ?? null}
+          onTenantSelect={(id) => {
+            onTenantSelect?.(id)
+          }}
+          onRefreshTenants={() => onRefreshTenants?.()}
+          onLogout={onLogout}
+          isAdminRoute={isAdminRoute}
+          isSuperadmin={!!isSuperadmin}
+        />
+      )}
+
+      <main className={`${mainMaxWidth} mx-auto px-4 sm:px-5 py-8 sm:py-12 safe-px`}>
         {children}
       </main>
     </div>

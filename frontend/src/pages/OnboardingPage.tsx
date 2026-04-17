@@ -100,11 +100,11 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
         current={1}
       />
 
-      <div className="text-center mb-10">
-        <h2 className="text-[28px] font-bold tracking-[-0.6px] mb-2">
+      <div className="text-center mb-8 sm:mb-10">
+        <h2 className="text-[clamp(22px,6vw,28px)] font-bold tracking-[-0.6px] mb-2">
           {t({ he: 'הגדרות', en: 'Setup' })}
         </h2>
-        <p className="text-[15px] text-text-secondary">
+        <p className="text-[clamp(14px,3.5vw,15px)] text-text-secondary">
           {t({
             he: 'ספר לנו קצת על עצמך ועל הסוכן שלך',
             en: 'Tell us a bit about yourself and your agent',
@@ -112,9 +112,9 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
         {/* User section */}
-        <section className="glass-card-elevated rounded-[22px] p-6 space-y-4">
+        <section className="glass-card-elevated rounded-[18px] sm:rounded-[22px] p-4 sm:p-6 space-y-4">
           <div className="flex items-center gap-2.5 mb-2">
             <div className="w-9 h-9 rounded-[12px] bg-brand-50 flex items-center justify-center">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4622B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -135,6 +135,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
               value={form.full_name}
               onChange={(e) => update('full_name', e.target.value)}
               required
+              autoComplete="name"
               dir={dir}
               className="input-glass w-full px-4 py-3 text-[15px]"
               placeholder={t({ he: 'השם שלך', en: 'Your name' })}
@@ -150,6 +151,9 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
               onChange={(e) => update('phone', e.target.value)}
               required
               type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              maxLength={20}
               dir="ltr"
               className="input-glass w-full px-4 py-3 text-[15px]"
               placeholder="+972..."
@@ -169,7 +173,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
         </section>
 
         {/* Agent section */}
-        <section className="glass-card-elevated rounded-[22px] p-6 space-y-4">
+        <section className="glass-card-elevated rounded-[18px] sm:rounded-[22px] p-4 sm:p-6 space-y-4">
           <div className="flex items-center gap-2.5 mb-2">
             <div className="w-9 h-9 rounded-[12px] bg-brand-50 flex items-center justify-center">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4622B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -189,6 +193,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
               value={form.agent_name}
               onChange={(e) => update('agent_name', e.target.value)}
               required
+              autoComplete="off"
               dir={dir}
               className="input-glass w-full px-4 py-3 text-[15px]"
               placeholder={t({ he: 'לדוגמה: שולי', en: 'e.g. Luna' })}
@@ -234,7 +239,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
         </section>
 
         {loading ? (
-          <div className="glass-card-elevated rounded-[22px] p-6 space-y-4">
+          <div className="glass-card-elevated rounded-[18px] sm:rounded-[22px] p-4 sm:p-6 space-y-4">
             <div className="flex items-center justify-between text-[15px]">
               <span className="font-semibold">
                 {t({ he: 'מקים את הסוכן…', en: 'Provisioning your agent…' })}

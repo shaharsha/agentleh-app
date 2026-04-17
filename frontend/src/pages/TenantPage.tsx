@@ -24,6 +24,7 @@ import TenantName from '../components/TenantName'
 import IntegrationsPanel from '../components/IntegrationsPanel'
 import UsageTab from '../components/UsageTab'
 import AuditTab from '../components/AuditTab'
+import VoicePicker from '../components/VoicePicker'
 import { microsToUsd } from '../lib/format'
 
 interface Props {
@@ -158,10 +159,10 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
     <button
       key={tab}
       onClick={() => setTab(tab)}
-      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+      className={`snap-start shrink-0 px-4 py-3 min-h-[44px] text-sm font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
         activeTab === tab
           ? 'border-indigo-600 text-indigo-600'
-          : 'border-transparent text-gray-500 hover:text-gray-700'
+          : 'border-transparent text-text-muted hover:text-text-primary'
       }`}
     >
       {t(tabLabel(tab))}
@@ -179,12 +180,12 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
     )
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <div className="mb-5 sm:mb-6">
+        <h1 className="text-[clamp(20px,5vw,24px)] font-bold text-text-primary break-words">
           <TenantName tenant={tenant} />
         </h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-text-muted mt-1">
           {t({
             he: `${members.length} ${members.length === 1 ? 'חבר' : 'חברים'} · ${agents.length} ${
               agents.length === 1 ? 'סוכן' : 'סוכנים'
@@ -197,7 +198,9 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
         </p>
       </div>
 
-      <div className="border-b border-gray-200 mb-6 flex gap-2">
+      {/* Scroll-snap tab bar — bleeds to page edge on mobile so the
+          trailing edge hints at more tabs when the row overflows. */}
+      <div className="border-b border-border-light mb-6 flex gap-1 sm:gap-2 overflow-x-auto snap-x snap-mandatory scrollbar-hide -mx-4 sm:mx-0 px-4 sm:px-0">
         {tabButton('dashboard')}
         {tabButton('members')}
         {tabButton('usage')}
@@ -269,6 +272,7 @@ function DashboardTab({
   const [showNewAgent, setShowNewAgent] = useState(false)
   const [newAgentName, setNewAgentName] = useState('')
   const [newAgentGender, setNewAgentGender] = useState<'female' | 'male'>('female')
+  const [newAgentVoice, setNewAgentVoice] = useState('')
   const [newAgentPhone, setNewAgentPhone] = useState('')
   const [phoneBlurred, setPhoneBlurred] = useState(false)
   const [provisioning, setProvisioning] = useState(false)
@@ -386,12 +390,16 @@ function DashboardTab({
           agent_name: newAgentName.trim(),
           agent_gender: newAgentGender,
           phone: phoneE164,
+          // Optional — backend falls back to the gender-matched default
+          // (Kore for female, Puck for male) when omitted.
+          tts_voice_name: newAgentVoice || undefined,
         },
         (p) => {
           setProgress({ step: p.step, total: p.total, label: p.label })
         },
       )
       setNewAgentName('')
+      setNewAgentVoice('')
       setNewAgentPhone('')
       setPhoneBlurred(false)
       setShowNewAgent(false)
@@ -611,9 +619,9 @@ function DashboardTab({
             ) : (
               /* ── Agent creation form ── */
               <>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-xs font-medium text-text-secondary mb-1">
                       {t({ he: 'שם הסוכן', en: 'Agent name' })}
                     </label>
                     <input
@@ -622,17 +630,18 @@ function DashboardTab({
                       onChange={(e) => setNewAgentName(e.target.value)}
                       placeholder={t({ he: 'שולי', en: 'e.g. Shuli' })}
                       dir={dir}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      autoComplete="off"
+                      className="input-glass w-full px-3 py-2.5 text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t({ he: 'מין', en: 'Gender' })}
+                    <label className="block text-xs font-medium text-text-secondary mb-1">
+                      {t({ he: 'מין הסוכן', en: 'Agent gender' })}
                     </label>
                     <select
                       value={newAgentGender}
                       onChange={(e) => setNewAgentGender(e.target.value as 'female' | 'male')}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                      className="input-glass w-full px-3 py-2.5 text-sm appearance-none"
                     >
                       <option value="female">{t({ he: 'נקבה', en: 'Female' })}</option>
                       <option value="male">{t({ he: 'זכר', en: 'Male' })}</option>
@@ -640,8 +649,8 @@ function DashboardTab({
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    {t({ he: 'מה מספר הטלפון שלך?', en: "What's your phone number?" })}
+                  <label className="block text-xs font-medium text-text-secondary mb-1">
+                    {t({ he: 'מספר הטלפון של הסוכן', en: "Agent's phone number" })}
                   </label>
                   <input
                     type="tel"
@@ -655,26 +664,24 @@ function DashboardTab({
                     autoComplete="tel"
                     inputMode="tel"
                     dir="ltr"
-                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 ${
-                      phoneBlurred && newAgentPhone.trim() && !phoneE164
-                        ? 'border-red-300 focus:ring-red-400'
-                        : 'border-gray-300 focus:ring-indigo-500'
-                    }`}
+                    aria-invalid={phoneBlurred && !!newAgentPhone.trim() && !phoneE164}
+                    aria-describedby="new-agent-phone-help"
+                    className="input-glass w-full px-3 py-2.5 text-sm"
                   />
                   {phoneE164 ? (
-                    <p className="text-[11px] text-gray-500 mt-1">
+                    <p id="new-agent-phone-help" className="text-[11px] text-text-muted mt-1">
                       {t({ he: 'יישמר כ-', en: 'Will save as ' })}
-                      <span dir="ltr" className="font-mono text-gray-700">{phoneE164}</span>
+                      <span dir="ltr" className="font-mono text-text-primary">{phoneE164}</span>
                     </p>
                   ) : phoneBlurred && newAgentPhone.trim() ? (
-                    <p className="text-[11px] text-red-600 mt-1">
+                    <p id="new-agent-phone-help" className="text-[11px] text-red-600 mt-1">
                       {t({
                         he: 'מספר לא תקין — נסה שוב (למשל 050-123-4567)',
                         en: 'Not a valid phone number — try again (e.g. 050-123-4567)',
                       })}
                     </p>
                   ) : (
-                    <p className="text-[11px] text-gray-500 mt-1">
+                    <p id="new-agent-phone-help" className="text-[11px] text-text-muted mt-1">
                       {t({
                         he: 'מספר ישראלי או בינלאומי, כל פורמט. לא המספר המשותף של Agentiko.',
                         en: "Israeli or international, any format. Not Agentiko's shared number.",
@@ -682,20 +689,42 @@ function DashboardTab({
                     </p>
                   )}
                 </div>
+
+                {/* Voice picker — matches the onboarding experience. Backend
+                    defaults to the gender-matched voice (Kore/Puck) when
+                    tts_voice_name is omitted, so the picker stays optional
+                    even though we surface it as a default-selected choice. */}
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">
+                    {t({ he: 'הקול של הסוכן', en: "Agent's voice" })}
+                  </label>
+                  <p className="text-[11px] text-text-muted mb-2">
+                    {t({
+                      he: 'לחץ על קול כדי לשמוע דגימה ולבחור אותו. הסוכן ישתמש בקול הזה בהודעות קוליות בוואטסאפ.',
+                      en: "Tap a voice to preview and select it. Your agent uses it for WhatsApp voice messages.",
+                    })}
+                  </p>
+                  <VoicePicker
+                    value={newAgentVoice}
+                    onChange={setNewAgentVoice}
+                    lockedGender={newAgentGender}
+                  />
+                </div>
+
                 {provisionError && (
-                  <div className="text-sm text-red-700 bg-red-50 p-3 rounded">{provisionError}</div>
+                  <div className="text-sm text-red-700 bg-red-50 dark:bg-red-500/10 p-3 rounded">{provisionError}</div>
                 )}
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <button
                     onClick={handleProvision}
                     disabled={!newAgentName.trim() || !phoneE164}
-                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                    className="btn-brand btn-md flex-1 sm:flex-none disabled:opacity-50"
                   >
                     {t({ he: 'צור סוכן', en: 'Create agent' })}
                   </button>
                   <button
                     onClick={() => setShowNewAgent(false)}
-                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+                    className="btn-secondary btn-md"
                   >
                     {t({ he: 'ביטול', en: 'Cancel' })}
                   </button>

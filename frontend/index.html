@@ -2,13 +2,40 @@
 <html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#D4622B" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#FDF8F4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0F0B08" media="(prefers-color-scheme: dark)" />
     <title>Agentiko</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script>
+      // Resolve the active theme BEFORE React mounts. Single line goal:
+      // no flash of light content on a dark-mode-pinned user, and vice
+      // versa. Must match the resolution order in src/lib/theme.tsx:
+      //   1. localStorage['agentleh.theme'] if it's 'light' or 'dark'
+      //   2. prefers-color-scheme media query (the 'auto' path)
+      (function () {
+        try {
+          var saved = localStorage.getItem('agentleh.theme');
+          var mode;
+          if (saved === 'light' || saved === 'dark') {
+            mode = saved;
+          } else {
+            mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', mode);
+        } catch (e) {
+          // localStorage / matchMedia disabled — default to light so at
+          // least the page renders something sane.
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
     <script>
       // Resolve the active language + direction BEFORE React mounts so
       // the very first paint matches whatever the user will see. Runs
