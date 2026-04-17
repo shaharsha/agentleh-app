@@ -3,7 +3,7 @@ import type { AppUser, TenantMembership } from '../lib/types'
 import TenantSwitcher from './TenantSwitcher'
 import LanguageSwitcher from './LanguageSwitcher'
 import { useI18n } from '../lib/i18n'
-import { LayoutDashboardIcon, LogOutIcon, ShieldCheckIcon } from './icons'
+import { GodModeIcon, LayoutDashboardIcon, LogOutIcon } from './icons'
 
 interface LayoutProps {
   children: ReactNode
@@ -98,7 +98,7 @@ export default function Layout({
                 title={adminLabel}
                 aria-label={adminLabel}
               >
-                {isAdminRoute ? <LayoutDashboardIcon /> : <ShieldCheckIcon />}
+                {isAdminRoute ? <LayoutDashboardIcon /> : <GodModeIcon />}
               </a>
             )}
 
