@@ -888,11 +888,19 @@ class AppDatabase:
         )
 
     def accept_invite(self, invite_id: int, accepted_by_user_id: int) -> dict[str, Any]:
-        """Atomic accept: mark invite accepted + create the membership.
+        """Atomic accept: mark invite accepted + create-or-escalate the membership.
+
+        Monotonic role guarantee: if the user already has a membership on this
+        tenant with equal-or-higher role than the invite, the accept is a
+        no-op on the membership (invite is still marked consumed). An owner
+        accepting a member-invite stays an owner. Escalation (member invited
+        as admin/owner) is allowed and applied.
 
         Raises ValueError if the invite is already accepted, revoked, or
-        expired. Returns the newly-created (or existing) membership row.
+        expired. Returns the final membership row.
         """
+        _ROLE_RANK = {"member": 0, "admin": 1, "owner": 2}
+
         with self.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -918,14 +926,36 @@ class AppDatabase:
 
                 cur.execute(
                     """
-                    INSERT INTO tenant_memberships (tenant_id, user_id, role)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = EXCLUDED.role
-                    RETURNING tenant_id, user_id, role, joined_at
+                    SELECT role, joined_at
+                      FROM tenant_memberships
+                     WHERE tenant_id = %s AND user_id = %s
+                     FOR UPDATE
                     """,
-                    (invite["tenant_id"], accepted_by_user_id, invite["role"]),
+                    (invite["tenant_id"], accepted_by_user_id),
                 )
-                membership = cur.fetchone()
+                existing = cur.fetchone()
+
+                invite_rank = _ROLE_RANK[invite["role"]]
+                existing_rank = _ROLE_RANK[existing["role"]] if existing else -1
+
+                if existing and existing_rank >= invite_rank:
+                    membership = {
+                        "tenant_id": invite["tenant_id"],
+                        "user_id": accepted_by_user_id,
+                        "role": existing["role"],
+                        "joined_at": existing["joined_at"],
+                    }
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO tenant_memberships (tenant_id, user_id, role)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = EXCLUDED.role
+                        RETURNING tenant_id, user_id, role, joined_at
+                        """,
+                        (invite["tenant_id"], accepted_by_user_id, invite["role"]),
+                    )
+                    membership = cur.fetchone()
 
                 cur.execute(
                     """

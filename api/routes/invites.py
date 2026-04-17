@@ -76,12 +76,12 @@ async def accept_invite(
 ) -> dict[str, Any]:
     """Authenticated — creates the membership in one transaction.
 
-    Note: we do NOT hard-enforce that the logged-in user's email
-    matches the invited email. Gmail alias expansion + Supabase Google
-    OAuth mean users often sign up with a slightly different address
-    than the one they received the invite at. The `accepted_by` audit
-    column records the real identity; a mismatch just produces a log
-    warning so ops can review.
+    Invites are bound to the invitee's identity: the signed-in user's
+    email must match the invite email (case-insensitive). Mismatch
+    returns 403 so the UI can prompt the user to switch accounts.
+    This closes the hole where anyone holding a valid token (including
+    the inviter themselves) could accept an invite as whoever happened
+    to be logged in.
     """
     db = request.app.state.db
     invite = db.get_invite_by_token(body.token)
@@ -94,11 +94,20 @@ async def accept_invite(
             status_code=400, detail={"error": f"invite_{status}"}
         )
 
-    if invite["email"].lower() != (user["email"] or "").lower():
+    signed_in_email = (user.get("email") or "").lower()
+    if invite["email"].lower() != signed_in_email:
         logger.warning(
             "invite email mismatch: invite=%s accepted_by=%s",
             invite["email"],
-            user["email"],
+            user.get("email"),
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "invite_email_mismatch",
+                "invite_email": invite["email"],
+                "signed_in_as": user.get("email"),
+            },
         )
 
     try:
