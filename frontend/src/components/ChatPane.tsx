@@ -370,7 +370,14 @@ export default function ChatPane({ tenantId, agentId, agentName }: ChatPaneProps
         </div>
       </div>
 
+      {/* Pin the messages container to LTR so `justify-end`/`justify-start`
+          always mean physical right/left. Without this, the entire
+          user-vs-agent alignment flips when the page language is Hebrew
+          (justify-end → left in RTL). Per-bubble `dir={bubbleDir}` still
+          auto-detects Hebrew vs Latin text and flows the glyphs correctly
+          inside each bubble, so RTL content stays readable. */}
       <div
+        dir="ltr"
         className="flex-1 overflow-y-auto p-4 space-y-3 bg-surface"
         role="log"
         aria-live="polite"
