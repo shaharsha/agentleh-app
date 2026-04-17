@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { TenantMembership, TenantRole } from '../lib/types'
 import { createTenant } from '../lib/api'
 import { useI18n } from '../lib/i18n'
@@ -30,16 +30,29 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  // Escape-key dismiss — complements the backdrop click and keeps
-  // keyboard users from getting stuck in the dropdown.
+  // Escape + outside-click dismiss. Use a window mousedown listener
+  // rather than a `fixed inset-0` backdrop — that pattern is flaky on
+  // iOS Safari where bare-div touch events don't reliably translate
+  // into click handlers without `cursor: pointer`. `containerRef`
+  // + Node.contains works everywhere.
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
+    const onClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onClick)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onClick)
+    }
   }, [open])
 
   const activeTenant = tenants.find((t) => t.id === activeTenantId) || tenants[0] || null
@@ -96,7 +109,7 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
   const anchorClass = dir === 'rtl' ? 'start-0' : 'end-0'
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
@@ -113,7 +126,6 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
 
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div
             className={`absolute ${anchorClass} mt-2 w-[min(18rem,calc(100vw-2rem))] bg-surface rounded-xl shadow-lg border border-border-light z-20 overflow-hidden`}
           >

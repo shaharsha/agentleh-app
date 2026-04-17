@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AppUser } from '../lib/types'
 import { useI18n } from '../lib/i18n'
 import { LogOutIcon } from './icons'
@@ -32,6 +32,7 @@ function getInitials(fullName: string, email: string): string {
 export default function ProfileMenu({ user, onLogout }: Props) {
   const { t, dir } = useI18n()
   const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
   // ProfileMenu sits at the inline-end of the header in both
   // directions, so we always anchor end-0 — the dropdown grows
   // inward toward the header's center, never off-screen.
@@ -41,8 +42,24 @@ export default function ProfileMenu({ user, onLogout }: Props) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
+    // Use a mousedown listener on the window for outside-click dismiss
+    // rather than a `fixed inset-0` backdrop with onClick. The backdrop
+    // approach is flaky on iOS Safari — touch events on a bare div
+    // without `cursor: pointer` don't reliably translate to click
+    // handlers. Checking `containerRef.current.contains` against the
+    // event target works everywhere and matches the pattern used by
+    // ThemeSwitcher / LanguageSwitcher.
+    const onClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onClick)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onClick)
+    }
   }, [open])
 
   const initials = getInitials(user.full_name, user.email)
@@ -53,10 +70,10 @@ export default function ProfileMenu({ user, onLogout }: Props) {
   const signOutLabel = t({ he: 'התנתקות', en: 'Sign out' })
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center justify-center w-9 h-9 rounded-full text-white text-sm font-medium ${avatarColor} hover:ring-2 hover:ring-gray-200 transition-all cursor-pointer`}
+        className={`flex items-center justify-center w-9 h-9 shrink-0 rounded-full text-white text-sm font-medium ${avatarColor} hover:ring-2 hover:ring-gray-200 transition-all cursor-pointer`}
         title={accountMenuLabel}
         aria-label={accountMenuLabel}
         aria-expanded={open}
@@ -67,7 +84,6 @@ export default function ProfileMenu({ user, onLogout }: Props) {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div
             className="absolute end-0 mt-2 w-[min(18rem,calc(100vw-2rem))] bg-surface rounded-xl shadow-lg border border-border-light z-20 overflow-hidden"
             role="menu"
