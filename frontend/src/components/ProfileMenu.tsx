@@ -3,6 +3,8 @@ import type { AppUser } from '../lib/types'
 import { useI18n } from '../lib/i18n'
 import { LogOutIcon } from './icons'
 
+
+
 interface Props {
   user: AppUser
   onLogout: () => void
@@ -30,6 +32,9 @@ function getInitials(fullName: string, email: string): string {
 export default function ProfileMenu({ user, onLogout }: Props) {
   const { t, dir } = useI18n()
   const [open, setOpen] = useState(false)
+  // ProfileMenu sits at the inline-end of the header in both
+  // directions, so we always anchor end-0 — the dropdown grows
+  // inward toward the header's center, never off-screen.
 
   useEffect(() => {
     if (!open) return
@@ -42,7 +47,6 @@ export default function ProfileMenu({ user, onLogout }: Props) {
 
   const initials = getInitials(user.full_name, user.email)
   const avatarColor = AVATAR_PALETTE[user.id % AVATAR_PALETTE.length]
-  const anchorClass = dir === 'rtl' ? 'start-0' : 'end-0'
   const logoutIconClass = dir === 'rtl' ? 'w-[18px] h-[18px] -scale-x-100' : 'w-[18px] h-[18px]'
 
   const accountMenuLabel = t({ he: 'תפריט חשבון', en: 'Account menu' })
@@ -65,7 +69,7 @@ export default function ProfileMenu({ user, onLogout }: Props) {
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div
-            className={`absolute ${anchorClass} mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-200 z-20 overflow-hidden`}
+            className="absolute end-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-200 z-20 overflow-hidden"
             role="menu"
           >
             <div className="p-3 flex items-center gap-3">
