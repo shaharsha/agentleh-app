@@ -31,6 +31,7 @@ from api.routes.integrations import router as integrations_router
 from api.routes.invites import router as invites_router
 from api.routes.onboarding import router as onboarding_router
 from api.routes.tenants import router as tenants_router
+from api.routes.voices import router as voices_router
 from lib.config import get_database_url, settings
 from lib.db import AppDatabase
 
@@ -87,6 +88,7 @@ app.include_router(invites_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(google_oauth_router, prefix="/api")
 app.include_router(integrations_router, prefix="/api")
+app.include_router(voices_router, prefix="/api")
 
 
 @app.get("/health")

@@ -469,6 +469,7 @@ export async function provisionTenantAgent(
     agent_gender?: string
     phone: string
     user_name?: string
+    user_gender?: string
     tts_voice_name?: string
   },
   onProgress?: (progress: ProvisionProgress) => void,

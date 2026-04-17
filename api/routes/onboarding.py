@@ -81,6 +81,11 @@ async def submit(
         user_name=body.full_name or user["full_name"],
         tenant_id=tenant["id"],
         bot_gender=body.agent_gender,
+        # Onboarding already collects user gender for the app_users row
+        # above (db.update_user gender=body.gender). Forward it to the
+        # provisioner too so create-agent.sh can store it in the agent's
+        # OpenClaw workspace for Hebrew personalization.
+        user_gender=body.gender,
         tts_voice_name=body.tts_voice_name or "",
     )
 

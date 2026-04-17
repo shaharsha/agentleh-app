@@ -584,6 +584,12 @@ class AgentCreate(BaseModel):
     agent_gender: str = Field("", max_length=20)
     phone: str = Field(..., min_length=6, max_length=30)
     user_name: str = Field("", max_length=60)
+    # `user_gender` is the gender of the person this agent serves (the
+    # WhatsApp recipient). Needed for Hebrew grammatical personalization —
+    # an agent addresses a male vs female user with different verb
+    # conjugations. Defaults empty; create-agent.sh falls back to 'male'
+    # on the VM side when not specified.
+    user_gender: str = Field("", max_length=20)
     tts_voice_name: str | None = None
 
 
@@ -687,6 +693,7 @@ async def provision_agent(
                 user_name=user_name,
                 tenant_id=tenant_id,
                 bot_gender=body.agent_gender,
+                user_gender=body.user_gender,
                 tts_voice_name=body.tts_voice_name or "",
             ):
                 if event.get("type") == "result":
