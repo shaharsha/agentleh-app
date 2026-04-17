@@ -24,11 +24,22 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# Primary template: Hebrew welcome with the agent's name as {{1}}.
-# Body: "היי! אני {{1}} מ-Agentiko. כדי להתחיל — פשוט לענות כאן."
-# Gender-neutral — the agent's personal name (Shuli, Yuki, etc.) carries
-# identity; we don't say "your agent" which would require masc/fem forms.
-HELLO_TEMPLATE_NAME = "agent_ready_he"
+# Primary template: strict-UTILITY Hebrew notification with the
+# agent's name as {{1}}. Body:
+#   Agentiko: הסוכן "{{1}}" הוקם בחשבונך. כדי להתחיל שיחה, יש לשלוח הודעה.
+#
+# This is intentionally transactional (no first-person warmth, no
+# capabilities list, no persuasive language). The actual warm first
+# response from the agent - identity, capabilities, Gmail/Calendar
+# connect hint - comes in the agent's first conversational reply
+# (driven by AGENTS.md "הודעה ראשונה" section), not this template.
+#
+# Why: Meta's classifier auto-converts warm/first-person templates to
+# MARKETING, which is subject to the 131049 "healthy ecosystem
+# engagement" throttle - causing silent delivery failures we saw on
+# v1/v2. Keeping this strictly UTILITY guarantees reliable delivery;
+# the agent's voice lives in the free-form conversation that follows.
+HELLO_TEMPLATE_NAME = "agent_ready_he_v4"
 HELLO_TEMPLATE_LANGUAGE = "he"
 
 # Fallback for legacy agents where agent_name might be empty — the
