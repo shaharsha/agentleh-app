@@ -1073,7 +1073,7 @@ function MembersTab({
 
         {showInvite && isAdminOrOwner && (
           <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="email"
                 value={inviteEmail}
