@@ -13,12 +13,12 @@ from fastapi.responses import FileResponse
 
 from api.routes.admin import router as admin_router
 from api.routes.auth import router as auth_router
+from api.routes.coupons import router as coupons_router
 from api.routes.dashboard import router as dashboard_router
 from api.routes.google_oauth import router as google_oauth_router
 from api.routes.integrations import router as integrations_router
 from api.routes.invites import router as invites_router
 from api.routes.onboarding import router as onboarding_router
-from api.routes.payment import router as payment_router
 from api.routes.tenants import router as tenants_router
 from lib.config import get_database_url, settings
 from lib.db import AppDatabase
@@ -43,14 +43,12 @@ async def lifespan(app: FastAPI):
     # Initialize services. The provisioner is picked per
     # AGENTLEH_PROVISIONER env var (`mock` or `vm`) so local dev stays
     # fast + deterministic while Cloud Run deploys use the real VM
-    # daemon. Payment + WhatsApp are still mocked — both would drag in
-    # Grow/Meta integration that's out of scope for multi-tenancy.
-    from services.payment import MockPayment
+    # daemon. Payment is gone — plan activation flows through coupon
+    # redemption (see api/routes/coupons.py + lib/coupons.py).
     from services.provisioning import pick_provisioner
     from services.whatsapp import pick_whatsapp
 
     app.state.provisioner = pick_provisioner(db)
-    app.state.payment = MockPayment()
     app.state.whatsapp = pick_whatsapp()
 
     yield
@@ -70,7 +68,7 @@ app.add_middleware(
 
 # API routes
 app.include_router(auth_router, prefix="/api")
-app.include_router(payment_router, prefix="/api")
+app.include_router(coupons_router, prefix="/api")
 app.include_router(onboarding_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(tenants_router, prefix="/api")

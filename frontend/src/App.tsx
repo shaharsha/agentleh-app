@@ -5,7 +5,7 @@ import { useI18n } from './lib/i18n'
 import type { AppUser } from './lib/types'
 import type { Session } from '@supabase/supabase-js'
 import LandingPage from './pages/LandingPage'
-import PaymentPage from './pages/PaymentPage'
+import RedeemCouponPage from './pages/RedeemCouponPage'
 import OnboardingPage from './pages/OnboardingPage'
 import AdminPage from './pages/AdminPage'
 import TenantPage from './pages/TenantPage'
@@ -174,8 +174,10 @@ export default function App() {
         />
       )}
 
-      {route.kind === 'root' && status === 'pending' && <PaymentPage onComplete={refreshUser} />}
-      {route.kind === 'root' && status === 'payment_done' && (
+      {route.kind === 'root' && status === 'pending' && (
+        <RedeemCouponPage user={user} onComplete={refreshUser} />
+      )}
+      {route.kind === 'root' && status === 'plan_active' && (
         <OnboardingPage user={user!} onComplete={refreshUser} />
       )}
       {route.kind === 'root' && status === 'complete' && !user?.default_tenant_id && (

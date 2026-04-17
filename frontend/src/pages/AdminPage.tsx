@@ -17,11 +17,18 @@ import {
   YAxis,
 } from 'recharts'
 import {
+  adminCreateCoupon,
+  adminGrantPlan,
+  adminListCouponRedemptions,
+  adminListCoupons,
+  adminSetCouponDisabled,
   getAdminOverview,
   getAdminAgentDetail,
   getAdminVmStats,
   rotateMeterKey,
   setUserRole,
+  type AdminCouponRedemptionRow,
+  type AdminCouponRow,
 } from '../lib/api'
 import type {
   AdminOverview,
@@ -31,8 +38,8 @@ import type {
   UsageEvent,
 } from '../lib/types'
 
-type AdminTab = 'agents' | 'users' | 'plans' | 'stats'
-const VALID_TABS: readonly AdminTab[] = ['agents', 'users', 'plans', 'stats']
+type AdminTab = 'agents' | 'users' | 'plans' | 'coupons' | 'stats'
+const VALID_TABS: readonly AdminTab[] = ['agents', 'users', 'plans', 'coupons', 'stats']
 
 function readTabFromUrl(): AdminTab {
   if (typeof window === 'undefined') return 'agents'
@@ -168,19 +175,24 @@ export default function AdminPage() {
       </div>
 
       <div className="flex gap-2 border-b">
-        {(['agents', 'users', 'plans'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 capitalize ${
-              tab === t
-                ? 'border-b-2 border-blue-600 text-blue-600 font-semibold'
-                : 'text-gray-500 hover:text-gray-800'
-            }`}
-          >
-            {t} ({(overview[t] as unknown[]).length})
-          </button>
-        ))}
+        {(['agents', 'users', 'plans', 'coupons'] as const).map((t) => {
+          // Coupons are loaded by the tab's own component on mount,
+          // not by the top-level overview, so the count is omitted.
+          const count = t === 'coupons' ? null : (overview[t] as unknown[]).length
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-2 capitalize ${
+                tab === t
+                  ? 'border-b-2 border-blue-600 text-blue-600 font-semibold'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              {t}{count !== null ? ` (${count})` : ''}
+            </button>
+          )
+        })}
         <button
           onClick={() => setTab('stats')}
           className={`px-4 py-2 ${
@@ -196,8 +208,10 @@ export default function AdminPage() {
       {tab === 'agents' && (
         <AgentsTab
           agents={overview.agents}
+          plans={overview.plans}
           onSelect={setSelectedAgentId}
           onRotateKey={handleRotateKey}
+          onGranted={reload}
         />
       )}
 
@@ -206,6 +220,8 @@ export default function AdminPage() {
       )}
 
       {tab === 'plans' && <PlansTab plans={overview.plans} />}
+
+      {tab === 'coupons' && <CouponsTab plans={overview.plans} />}
 
       {tab === 'stats' && <StatsTab />}
 
@@ -221,13 +237,19 @@ export default function AdminPage() {
 
 function AgentsTab({
   agents,
+  plans,
   onSelect,
   onRotateKey,
+  onGranted,
 }: {
   agents: AdminAgentRow[]
+  plans: AdminOverview['plans']
   onSelect: (id: string) => void
   onRotateKey: (id: string) => void
+  onGranted: () => void
 }) {
+  const [grantTenantId, setGrantTenantId] = useState<number | null>(null)
+
   return (
     <div className="glass-card overflow-x-auto">
       <table className="w-full text-sm">
@@ -289,12 +311,472 @@ function AgentsTab({
                   >
                     Rotate key
                   </button>
+                  {a.tenant_id != null && (
+                    <button
+                      onClick={() => setGrantTenantId(a.tenant_id)}
+                      className="btn-secondary btn-sm"
+                    >
+                      Grant plan
+                    </button>
+                  )}
                 </td>
               </tr>
             )
           })}
         </tbody>
       </table>
+      {grantTenantId !== null && (
+        <GrantPlanModal
+          tenantId={grantTenantId}
+          plans={plans}
+          onClose={() => setGrantTenantId(null)}
+          onGranted={() => {
+            setGrantTenantId(null)
+            onGranted()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function GrantPlanModal({
+  tenantId,
+  plans,
+  onClose,
+  onGranted,
+}: {
+  tenantId: number
+  plans: AdminOverview['plans']
+  onClose: () => void
+  onGranted: () => void
+}) {
+  const [planId, setPlanId] = useState(plans[0]?.plan_id || 'minimal')
+  const [durationDays, setDurationDays] = useState(30)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit() {
+    setSubmitting(true)
+    setError(null)
+    try {
+      await adminGrantPlan(tenantId, { plan_id: planId, duration_days: durationDays })
+      onGranted()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold">Grant plan to tenant {tenantId}</h3>
+          <button onClick={onClose} className="text-gray-500 text-2xl">×</button>
+        </div>
+        <div className="space-y-3">
+          <label className="block">
+            <div className="text-xs font-semibold mb-1">Plan</div>
+            <select value={planId} onChange={(e) => setPlanId(e.target.value)} className="input-glass w-full">
+              {plans.map((p) => (
+                <option key={p.plan_id} value={p.plan_id}>
+                  {p.plan_id} — {p.name_he} (₪{(p.price_ils_cents / 100).toFixed(0)})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <div className="text-xs font-semibold mb-1">Duration (days)</div>
+            <input
+              type="number"
+              min={1}
+              max={3650}
+              value={durationDays}
+              onChange={(e) => setDurationDays(Number(e.target.value))}
+              className="input-glass w-full"
+            />
+          </label>
+          <p className="text-xs text-gray-500">
+            Logged as an admin grant (coupon_id=NULL, granted_by_admin=you). Same supersession rules
+            as a coupon: upgrades take effect immediately, downgrades and same-plan renewals queue
+            at the current period end.
+          </p>
+          {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg p-2">{error}</div>}
+          <button onClick={handleSubmit} disabled={submitting} className="btn-brand w-full">
+            {submitting ? 'Granting…' : 'Grant plan'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Coupons tab ────────────────────────────────────────────────────────
+
+function CouponsTab({ plans }: { plans: AdminOverview['plans'] }) {
+  const [coupons, setCoupons] = useState<AdminCouponRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [showCreate, setShowCreate] = useState(false)
+  const [openRedemptionsFor, setOpenRedemptionsFor] = useState<AdminCouponRow | null>(null)
+
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      const r = await adminListCoupons()
+      setCoupons(r.coupons)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  async function handleToggle(coupon: AdminCouponRow) {
+    const willDisable = !coupon.disabled_at
+    if (!confirm(`${willDisable ? 'Disable' : 'Re-enable'} coupon ${coupon.code}?`)) return
+    try {
+      await adminSetCouponDisabled(coupon.id, willDisable)
+      await load()
+    } catch (e) {
+      alert((e as Error).message)
+    }
+  }
+
+  if (loading) return <div className="p-6 text-gray-500">Loading coupons…</div>
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">Coupons</h2>
+        <button onClick={() => setShowCreate((v) => !v)} className="btn-brand btn-sm">
+          {showCreate ? 'Cancel' : 'New coupon'}
+        </button>
+      </div>
+
+      {showCreate && (
+        <CouponCreateForm
+          plans={plans}
+          onCreated={() => {
+            setShowCreate(false)
+            load()
+          }}
+        />
+      )}
+
+      {error && <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+
+      <div className="glass-card overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="text-left p-3">Code</th>
+              <th className="text-left p-3">Plan</th>
+              <th className="text-right p-3">Days</th>
+              <th className="text-right p-3">Used / Cap</th>
+              <th className="text-left p-3">Status</th>
+              <th className="text-left p-3">Valid until</th>
+              <th className="text-left p-3">Notes</th>
+              <th className="text-right p-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {coupons.map((c) => {
+              const status = couponStatus(c)
+              return (
+                <tr key={c.id} className="border-t hover:bg-gray-50">
+                  <td className="p-3 font-mono text-xs">{c.code}</td>
+                  <td className="p-3">{c.plan_name_he} <span className="text-gray-400">({c.plan_id})</span></td>
+                  <td className="p-3 text-right">{c.duration_days}</td>
+                  <td className="p-3 text-right">
+                    {c.redemption_count}/{c.max_redemptions ?? '∞'}
+                  </td>
+                  <td className="p-3">
+                    <span className={statusColor(status)}>{status}</span>
+                  </td>
+                  <td className="p-3 text-xs text-gray-500">
+                    {c.valid_until ? new Date(c.valid_until).toLocaleDateString('en-GB') : '—'}
+                  </td>
+                  <td className="p-3 text-xs text-gray-500 max-w-xs truncate" title={c.notes}>
+                    {c.notes || '—'}
+                  </td>
+                  <td className="p-3 text-right space-x-2">
+                    <button
+                      onClick={() => setOpenRedemptionsFor(c)}
+                      className="btn-secondary btn-sm"
+                    >
+                      Redemptions
+                    </button>
+                    <button onClick={() => handleToggle(c)} className="btn-secondary btn-sm">
+                      {c.disabled_at ? 'Enable' : 'Disable'}
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+            {coupons.length === 0 && (
+              <tr>
+                <td colSpan={8} className="p-6 text-center text-gray-500">
+                  No coupons yet — click "New coupon" to mint one.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {openRedemptionsFor && (
+        <RedemptionsModal
+          coupon={openRedemptionsFor}
+          onClose={() => setOpenRedemptionsFor(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function couponStatus(c: AdminCouponRow): 'active' | 'disabled' | 'expired' | 'exhausted' | 'pending' {
+  if (c.disabled_at) return 'disabled'
+  const now = new Date()
+  if (c.valid_until && new Date(c.valid_until) < now) return 'expired'
+  if (c.valid_from && new Date(c.valid_from) > now) return 'pending'
+  if (c.max_redemptions != null && c.redemption_count >= c.max_redemptions) return 'exhausted'
+  return 'active'
+}
+
+function statusColor(s: string): string {
+  switch (s) {
+    case 'active': return 'text-green-600 font-semibold'
+    case 'disabled': return 'text-gray-400'
+    case 'expired': return 'text-red-600'
+    case 'exhausted': return 'text-amber-600'
+    case 'pending': return 'text-blue-600'
+    default: return 'text-gray-500'
+  }
+}
+
+function CouponCreateForm({
+  plans,
+  onCreated,
+}: {
+  plans: AdminOverview['plans']
+  onCreated: () => void
+}) {
+  const [code, setCode] = useState('')
+  const [planId, setPlanId] = useState(plans[0]?.plan_id || 'minimal')
+  const [durationDays, setDurationDays] = useState(30)
+  const [maxRedemptions, setMaxRedemptions] = useState<string>('')
+  const [validUntil, setValidUntil] = useState('')
+  const [onePerUser, setOnePerUser] = useState(true)
+  const [notes, setNotes] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [createdCode, setCreatedCode] = useState<string | null>(null)
+
+  async function submit() {
+    setSubmitting(true)
+    setError(null)
+    try {
+      const max = maxRedemptions.trim() ? Number(maxRedemptions) : null
+      const validUntilIso = validUntil ? new Date(validUntil + 'T23:59:59').toISOString() : null
+      const created = await adminCreateCoupon({
+        code: code.trim() || undefined,
+        plan_id: planId,
+        duration_days: durationDays,
+        max_redemptions: max,
+        valid_until: validUntilIso,
+        one_per_user: onePerUser,
+        notes: notes.trim(),
+      })
+      setCreatedCode(created.code)
+      // Reset form (keep plan + duration as sensible defaults for the next create)
+      setCode('')
+      setMaxRedemptions('')
+      setValidUntil('')
+      setNotes('')
+      // Don't dismiss yet — show the created code so the admin can copy it.
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="glass-card p-5 space-y-3">
+      {createdCode ? (
+        <>
+          <div className="text-sm">
+            <strong>Created:</strong>{' '}
+            <code className="font-mono bg-green-50 text-green-800 px-2 py-1 rounded">
+              {createdCode}
+            </code>
+            <button
+              onClick={() => navigator.clipboard.writeText(createdCode)}
+              className="btn-secondary btn-sm ml-2"
+            >
+              Copy
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setCreatedCode(null)} className="btn-secondary btn-sm">
+              Create another
+            </button>
+            <button onClick={onCreated} className="btn-brand btn-sm">
+              Done
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <label className="block">
+              <div className="text-xs font-semibold mb-1">Code (optional)</div>
+              <input
+                type="text"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                placeholder="auto-generated if blank"
+                className="input-glass w-full font-mono uppercase"
+              />
+            </label>
+            <label className="block">
+              <div className="text-xs font-semibold mb-1">Plan</div>
+              <select value={planId} onChange={(e) => setPlanId(e.target.value)} className="input-glass w-full">
+                {plans.map((p) => (
+                  <option key={p.plan_id} value={p.plan_id}>
+                    {p.plan_id} — {p.name_he}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <div className="text-xs font-semibold mb-1">Duration (days)</div>
+              <input
+                type="number"
+                min={1}
+                max={3650}
+                value={durationDays}
+                onChange={(e) => setDurationDays(Number(e.target.value))}
+                className="input-glass w-full"
+              />
+            </label>
+            <label className="block">
+              <div className="text-xs font-semibold mb-1">Max redemptions</div>
+              <input
+                type="number"
+                min={1}
+                value={maxRedemptions}
+                onChange={(e) => setMaxRedemptions(e.target.value)}
+                placeholder="unlimited"
+                className="input-glass w-full"
+              />
+            </label>
+            <label className="block">
+              <div className="text-xs font-semibold mb-1">Valid until</div>
+              <input
+                type="date"
+                value={validUntil}
+                onChange={(e) => setValidUntil(e.target.value)}
+                className="input-glass w-full"
+              />
+            </label>
+            <label className="flex items-center gap-2 mt-6">
+              <input
+                type="checkbox"
+                checked={onePerUser}
+                onChange={(e) => setOnePerUser(e.target.checked)}
+              />
+              <span className="text-sm">One per user</span>
+            </label>
+          </div>
+          <label className="block">
+            <div className="text-xs font-semibold mb-1">Notes</div>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className="input-glass w-full"
+              placeholder="Internal note — who/why this coupon was created"
+            />
+          </label>
+          {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg p-2">{error}</div>}
+          <button onClick={submit} disabled={submitting} className="btn-brand">
+            {submitting ? 'Creating…' : 'Create coupon'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+function RedemptionsModal({
+  coupon,
+  onClose,
+}: {
+  coupon: AdminCouponRow
+  onClose: () => void
+}) {
+  const [rows, setRows] = useState<AdminCouponRedemptionRow[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    adminListCouponRedemptions(coupon.id)
+      .then((r) => setRows(r.redemptions))
+      .finally(() => setLoading(false))
+  }, [coupon.id])
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl max-w-3xl w-full max-h-[85vh] overflow-y-auto p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold">
+            Redemptions — <code className="font-mono text-base">{coupon.code}</code>
+          </h3>
+          <button onClick={onClose} className="text-gray-500 text-2xl">×</button>
+        </div>
+        {loading ? (
+          <div className="text-gray-500">Loading…</div>
+        ) : rows.length === 0 ? (
+          <div className="text-gray-500">No redemptions yet.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left p-2">User</th>
+                <th className="text-left p-2">Tenant</th>
+                <th className="text-left p-2">Period</th>
+                <th className="text-left p-2">When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t">
+                  <td className="p-2">{r.user_email}</td>
+                  <td className="p-2">{r.tenant_name}</td>
+                  <td className="p-2 text-xs text-gray-500">
+                    {new Date(r.period_start).toLocaleDateString('en-GB')} →{' '}
+                    {new Date(r.period_end).toLocaleDateString('en-GB')}
+                  </td>
+                  <td className="p-2 text-xs text-gray-500">
+                    {new Date(r.redeemed_at).toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem' })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   )
 }

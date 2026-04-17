@@ -12,6 +12,10 @@ import {
   transferTenantOwner,
   provisionTenantAgent,
   deleteAgent,
+  redeemCoupon,
+  previewCoupon,
+  CouponApiError,
+  type CouponPreview,
 } from '../lib/api'
 import parsePhoneNumberFromString from 'libphonenumber-js'
 import { useI18n, type Bilingual } from '../lib/i18n'
@@ -419,12 +423,29 @@ function DashboardTab({
   // spans so they always read left-to-right.
   const num = (v: string) => <span dir="ltr">{v}</span>
 
+  // Manage-plan drawer (redeem-coupon modal). Surfaces from the
+  // Subscription card or from the no-active-subscription banner. Owner/
+  // admin only — the redeem endpoint enforces this server-side.
+  const [showRedeem, setShowRedeem] = useState(false)
+
   return (
     <div className="space-y-6">
       <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          {t({ he: 'מנוי', en: 'Subscription' })}
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">
+            {t({ he: 'מנוי', en: 'Subscription' })}
+          </h2>
+          {isAdminOrOwner && (
+            <button
+              onClick={() => setShowRedeem(true)}
+              className="px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800"
+            >
+              {subscription
+                ? t({ he: 'נהל / שדרג', en: 'Manage / upgrade' })
+                : t({ he: 'הפעל תוכנית', en: 'Activate plan' })}
+            </button>
+          )}
+        </div>
         {subscription ? (
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
@@ -456,18 +477,42 @@ function DashboardTab({
             </div>
           </div>
         ) : (
-          <p className="text-sm text-gray-500">
-            {t({ he: 'אין מנוי פעיל.', en: 'No active subscription.' })}
-          </p>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500">
+              {t({
+                he: 'אין מנוי פעיל. כדי ליצור סוכנים יש להפעיל תוכנית באמצעות קוד קופון.',
+                en: 'No active subscription. Activate a plan with a coupon code to create agents.',
+              })}
+            </p>
+            {isAdminOrOwner && (
+              <button
+                onClick={() => setShowRedeem(true)}
+                className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+              >
+                {t({ he: 'הפעל תוכנית', en: 'Activate plan' })}
+              </button>
+            )}
+          </div>
         )}
       </div>
+
+      {showRedeem && (
+        <RedeemCouponModal
+          tenantId={tenantId}
+          onClose={() => setShowRedeem(false)}
+          onRedeemed={() => {
+            setShowRedeem(false)
+            onChanged()
+          }}
+        />
+      )}
 
       <div className="bg-white border border-gray-200 rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">
             {t({ he: 'סוכנים', en: 'Agents' })} ({agents.length})
           </h2>
-          {isAdminOrOwner && (
+          {isAdminOrOwner && subscription && (
             <button
               onClick={() => setShowNewAgent(!showNewAgent)}
               className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
@@ -475,9 +520,21 @@ function DashboardTab({
               {t({ he: 'סוכן חדש', en: 'New agent' })}
             </button>
           )}
+          {isAdminOrOwner && !subscription && (
+            <button
+              onClick={() => setShowRedeem(true)}
+              className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+              title={t({
+                he: 'יש להפעיל תוכנית כדי ליצור סוכן',
+                en: 'Activate a plan to create an agent',
+              })}
+            >
+              {t({ he: 'הפעל תוכנית כדי להוסיף סוכן', en: 'Activate plan to add an agent' })}
+            </button>
+          )}
         </div>
 
-        {showNewAgent && isAdminOrOwner && (
+        {showNewAgent && isAdminOrOwner && subscription && (
           <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
             {provisioning ? (
               /* ── Real-time progress driven by backend NDJSON stream ── */
@@ -1236,3 +1293,177 @@ function SettingsTab({
     </div>
   )
 }
+
+// ─── Redeem-coupon modal (used from the Subscription card) ─────────────
+//
+// Matches RedeemCouponPage's behaviour but lives inline so existing
+// tenants can extend / upgrade without leaving the dashboard. Posts
+// against the tenant_id of the page they're currently viewing — the
+// server still enforces owner/admin role.
+
+function RedeemCouponModal({
+  tenantId,
+  onClose,
+  onRedeemed,
+}: {
+  tenantId: number
+  onClose: () => void
+  onRedeemed: () => void
+}) {
+  const { t } = useI18n()
+  const [code, setCode] = useState('')
+  const [preview, setPreview] = useState<CouponPreview | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [redeeming, setRedeeming] = useState(false)
+  const [redeemError, setRedeemError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const trimmed = code.trim()
+    if (trimmed.length < 6) {
+      setPreview(null)
+      setPreviewError(null)
+      return
+    }
+    const handle = setTimeout(async () => {
+      try {
+        const p = await previewCoupon(trimmed, tenantId)
+        setPreview(p)
+        setPreviewError(null)
+      } catch (e) {
+        setPreview(null)
+        if (e instanceof CouponApiError) {
+          setPreviewError(e.code)
+        } else {
+          setPreviewError('preview_failed')
+        }
+      }
+    }, 350)
+    return () => clearTimeout(handle)
+  }, [code, tenantId])
+
+  const errorMsgHe = (key: string): string => ({
+    coupon_not_found: 'הקוד שהזנת לא קיים',
+    coupon_disabled: 'הקופון הושבת',
+    coupon_expired: 'הקופון פג תוקף',
+    coupon_not_yet_valid: 'הקופון עדיין לא פעיל',
+    coupon_exhausted: 'הקופון נוצל במלואו',
+    coupon_already_redeemed: 'כבר השתמשת בקופון הזה',
+    invalid_plan: 'תוכנית הקופון אינה תקפה',
+    rate_limited: 'יותר מדי ניסיונות — נסה שוב בעוד דקה',
+  }[key] || `שגיאה: ${key}`)
+
+  const errorMsgEn = (key: string): string => ({
+    coupon_not_found: 'Coupon code not found',
+    coupon_disabled: 'Coupon is disabled',
+    coupon_expired: 'Coupon has expired',
+    coupon_not_yet_valid: 'Coupon is not yet active',
+    coupon_exhausted: 'Coupon has been fully redeemed',
+    coupon_already_redeemed: 'You have already redeemed this coupon',
+    invalid_plan: 'Coupon plan is invalid',
+    rate_limited: 'Too many attempts — try again in a minute',
+  }[key] || `Error: ${key}`)
+
+  async function handleSubmit() {
+    setRedeeming(true)
+    setRedeemError(null)
+    try {
+      await redeemCoupon(code.trim(), tenantId)
+      onRedeemed()
+    } catch (e) {
+      if (e instanceof CouponApiError) {
+        setRedeemError(e.code)
+      } else {
+        setRedeemError('redeem_failed')
+      }
+    } finally {
+      setRedeeming(false)
+    }
+  }
+
+  const canRedeem = !!preview && !preview.already_redeemed_by_user && !redeeming
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl max-w-md w-full p-6 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold">
+            {t({ he: 'הפעלת קוד קופון', en: 'Redeem coupon code' })}
+          </h3>
+          <button onClick={onClose} className="text-gray-500 text-2xl">×</button>
+        </div>
+
+        <input
+          type="text"
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          placeholder={t({ he: 'הזן קוד קופון', en: 'Enter coupon code' })}
+          className="input-glass w-full font-mono tracking-wider uppercase"
+          dir="ltr"
+          autoFocus
+        />
+
+        {previewError && (
+          <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+            {t({ he: errorMsgHe(previewError), en: errorMsgEn(previewError) })}
+          </div>
+        )}
+
+        {preview && !previewError && (
+          <div className="p-4 rounded-lg bg-gray-50 border border-gray-200">
+            <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">
+              {t({ he: 'קופון זוהה', en: 'Coupon recognized' })}
+            </div>
+            <div className="text-base font-semibold">{preview.plan.name_he}</div>
+            <div className="text-sm text-gray-600 mt-1">
+              {preview.duration_days} {t({ he: 'ימים', en: 'days' })} ·{' '}
+              {preview.schedule.kind === 'immediate' &&
+                t({ he: 'יופעל מיד', en: 'activates immediately' })}
+              {preview.schedule.kind === 'renewal' &&
+                t({ he: 'יתווסף לתום התקופה', en: 'queued at period end' })}
+              {preview.schedule.kind === 'upgrade_immediate' &&
+                t({ he: 'שדרוג מיידי', en: 'immediate upgrade' })}
+              {preview.schedule.kind === 'downgrade_queued' &&
+                t({ he: 'יופעל בתום התקופה', en: 'starts at period end' })}
+            </div>
+            {preview.schedule.kind === 'upgrade_immediate' && (
+              <div className="mt-2 text-xs text-amber-700 bg-amber-50 rounded p-2">
+                {t({
+                  he: 'התוכנית הפעילה כעת תוחלף מיד.',
+                  en: 'Your current active plan will be replaced immediately.',
+                })}
+              </div>
+            )}
+            {preview.already_redeemed_by_user && (
+              <div className="mt-2 text-xs text-red-700">
+                {t({ he: 'כבר השתמשת בקוד זה.', en: 'You have already redeemed this code.' })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {redeemError && (
+          <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+            {t({ he: errorMsgHe(redeemError), en: errorMsgEn(redeemError) })}
+          </div>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={!canRedeem}
+          className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+        >
+          {redeeming
+            ? t({ he: 'מפעיל…', en: 'Redeeming…' })
+            : t({ he: 'הפעל', en: 'Redeem' })}
+        </button>
+      </div>
+    </div>
+  )
+}
+

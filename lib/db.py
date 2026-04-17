@@ -92,16 +92,12 @@ class AppDatabase:
                     ALTER TABLE app_users
                     ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'
                 """)
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS app_subscriptions (
-                        id SERIAL PRIMARY KEY,
-                        user_id INTEGER NOT NULL REFERENCES app_users(id),
-                        plan TEXT NOT NULL DEFAULT 'starter',
-                        status TEXT NOT NULL DEFAULT 'mock_active',
-                        external_id TEXT NOT NULL DEFAULT '',
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                    )
-                """)
+                # NOTE: the legacy `app_subscriptions` table was dropped
+                # by meter migration 017. The real per-tenant subscription
+                # state lives in `agent_subscriptions` (keyed on
+                # tenant_id) which the meter owns. Plan activation now
+                # flows through coupon redemption — see app/lib/coupons.py.
+
                 # Ensure agents table exists (bridge creates it, but
                 # we need it for the FK in app_user_agents)
                 cur.execute("""
@@ -242,22 +238,160 @@ class AppDatabase:
         self._execute(f"UPDATE app_users SET {', '.join(sets)} WHERE id = %s", tuple(params))
         return self.get_user_by_id(user_id)
 
-    # ── Subscriptions ─────────────────────────────────────────────────
+    # ── Per-tenant subscription read helper ───────────────────────────
+    # Mirrors the meter's load_active_subscription query (filtered to
+    # active rows whose [period_start, period_end] window contains now()).
+    # Used by:
+    #   - the agent-creation gate in routes/tenants.py
+    #   - the tenant dashboard "current plan" pill
+    #   - coupons.preview() for projecting supersession outcomes
 
-    def create_subscription(self, user_id: int, plan: str = "starter", status: str = "mock_active") -> dict[str, Any]:
+    def get_active_subscription(self, tenant_id: int) -> dict[str, Any] | None:
+        return self._fetch_one(
+            """
+            SELECT s.id, s.tenant_id, s.plan_id, s.status,
+                   s.period_start, s.period_end,
+                   s.base_allowance_micros, s.used_micros,
+                   s.overage_enabled, s.overage_cap_micros, s.overage_used_micros,
+                   s.plan_has_tts,
+                   p.name_he AS plan_name_he,
+                   p.price_ils_cents, p.billing_mode, p.allows_overage
+              FROM agent_subscriptions s
+              JOIN billing_plans p ON p.plan_id = s.plan_id
+             WHERE s.tenant_id = %s
+               AND s.status = 'active'
+               AND now() BETWEEN s.period_start AND s.period_end
+             ORDER BY s.period_start DESC
+             LIMIT 1
+            """,
+            (tenant_id,),
+        )
+
+    # ── Coupons (admin CRUD) ──────────────────────────────────────────
+    # Coupon redemption logic itself lives in app/lib/coupons.py — these
+    # helpers are the read/list/admin-mutate side. The redemption path
+    # writes to coupons + coupon_redemptions + agent_subscriptions in
+    # one transaction with explicit row locks; bypass these helpers for
+    # that path.
+
+    def list_coupons(self) -> list[dict[str, Any]]:
+        return self._fetch_all(
+            """
+            SELECT c.id, c.code, c.plan_id, c.duration_days,
+                   c.max_redemptions, c.redemption_count,
+                   c.valid_from, c.valid_until, c.one_per_user,
+                   c.notes, c.disabled_at, c.created_by, c.created_at,
+                   p.name_he AS plan_name_he, p.price_ils_cents,
+                   creator.email AS created_by_email
+              FROM coupons c
+              JOIN billing_plans p ON p.plan_id = c.plan_id
+              LEFT JOIN app_users creator ON creator.id = c.created_by
+             ORDER BY c.created_at DESC
+            """
+        )
+
+    def get_coupon(self, coupon_id: int) -> dict[str, Any] | None:
+        return self._fetch_one(
+            """
+            SELECT c.*, p.name_he AS plan_name_he, p.price_ils_cents
+              FROM coupons c
+              JOIN billing_plans p ON p.plan_id = c.plan_id
+             WHERE c.id = %s
+            """,
+            (coupon_id,),
+        )
+
+    def create_coupon(
+        self,
+        *,
+        code: str,
+        plan_id: str,
+        duration_days: int,
+        max_redemptions: int | None,
+        valid_until,
+        one_per_user: bool,
+        notes: str,
+        created_by: int,
+    ) -> dict[str, Any]:
         with self.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO app_subscriptions (user_id, plan, status) VALUES (%s, %s, %s) RETURNING *",
-                    (user_id, plan, status),
+                    """
+                    INSERT INTO coupons (
+                        code, plan_id, duration_days, max_redemptions,
+                        valid_until, one_per_user, notes, created_by
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING *
+                    """,
+                    (
+                        code, plan_id, duration_days, max_redemptions,
+                        valid_until, one_per_user, notes, created_by,
+                    ),
                 )
                 row = cur.fetchone()
             conn.commit()
         return dict(row) if row else {}
 
-    def get_subscription(self, user_id: int) -> dict[str, Any] | None:
-        return self._fetch_one(
-            "SELECT * FROM app_subscriptions WHERE user_id = %s ORDER BY created_at DESC LIMIT 1",
+    def update_coupon(self, coupon_id: int, **fields) -> dict[str, Any] | None:
+        """Update mutable coupon fields. Plan and duration are immutable
+        post-create — changing them would invalidate the redemption
+        history's plan/duration snapshot semantics."""
+        allowed = {"notes", "max_redemptions", "valid_until", "one_per_user"}
+        sets, params = [], []
+        for k, v in fields.items():
+            if k in allowed:
+                sets.append(f"{k} = %s")
+                params.append(v)
+        if not sets:
+            return self.get_coupon(coupon_id)
+        params.append(coupon_id)
+        self._execute(
+            f"UPDATE coupons SET {', '.join(sets)} WHERE id = %s",
+            tuple(params),
+        )
+        return self.get_coupon(coupon_id)
+
+    def set_coupon_disabled(self, coupon_id: int, disabled: bool) -> dict[str, Any] | None:
+        if disabled:
+            self._execute("UPDATE coupons SET disabled_at = now() WHERE id = %s", (coupon_id,))
+        else:
+            self._execute("UPDATE coupons SET disabled_at = NULL WHERE id = %s", (coupon_id,))
+        return self.get_coupon(coupon_id)
+
+    def list_coupon_redemptions(self, coupon_id: int) -> list[dict[str, Any]]:
+        return self._fetch_all(
+            """
+            SELECT r.id, r.coupon_id, r.user_id, r.tenant_id,
+                   r.subscription_id, r.plan_id, r.duration_days,
+                   r.period_start, r.period_end,
+                   r.granted_by_admin, r.redeemed_at,
+                   u.email AS user_email, u.full_name AS user_full_name,
+                   t.name AS tenant_name, t.slug AS tenant_slug,
+                   admin_u.email AS granted_by_admin_email
+              FROM coupon_redemptions r
+              JOIN app_users u ON u.id = r.user_id
+              JOIN tenants t ON t.id = r.tenant_id
+              LEFT JOIN app_users admin_u ON admin_u.id = r.granted_by_admin
+             WHERE r.coupon_id = %s
+             ORDER BY r.redeemed_at DESC
+            """,
+            (coupon_id,),
+        )
+
+    def list_user_redemptions(self, user_id: int) -> list[dict[str, Any]]:
+        return self._fetch_all(
+            """
+            SELECT r.id, r.coupon_id, r.tenant_id, r.subscription_id,
+                   r.plan_id, r.duration_days, r.period_start, r.period_end,
+                   r.granted_by_admin, r.redeemed_at,
+                   c.code AS coupon_code,
+                   t.name AS tenant_name
+              FROM coupon_redemptions r
+              LEFT JOIN coupons c ON c.id = r.coupon_id
+              JOIN tenants t ON t.id = r.tenant_id
+             WHERE r.user_id = %s
+             ORDER BY r.redeemed_at DESC
+            """,
             (user_id,),
         )
 
@@ -311,6 +445,7 @@ class AppDatabase:
                 a.agent_id,
                 a.gateway_url,
                 a.session_scope,
+                a.tenant_id,
                 ua.agent_name,
                 ua.agent_gender,
                 ua.status AS link_status,

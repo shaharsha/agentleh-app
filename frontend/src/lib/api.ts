@@ -44,22 +44,89 @@ export async function syncUser() {
   return res.json()
 }
 
-export async function createCheckout(plan: string) {
-  const res = await authFetch('/api/payment/checkout', {
-    method: 'POST',
-    body: JSON.stringify({ plan }),
-  })
-  if (!res.ok) throw new Error('Checkout failed')
+// ─── Coupons (plan activation) ────────────────────────────────────────
+//
+// Plan activation flows through coupon redemption — no Stripe yet.
+// Both endpoints are user-scoped and rate-limited server-side.
+
+export interface CouponPreview {
+  code: string
+  duration_days: number
+  plan: {
+    plan_id: string
+    name_he: string
+    price_ils_cents: number
+    billing_mode: string
+    base_allowance_micros: number
+    allows_overage: boolean
+    plan_has_tts: boolean
+  }
+  schedule: {
+    kind: 'immediate' | 'renewal' | 'upgrade_immediate' | 'downgrade_queued'
+    period_start: string
+    period_end: string
+    supersedes_subscription_id: number | null
+  }
+  one_per_user: boolean
+  already_redeemed_by_user: boolean
+  max_redemptions: number | null
+  redemption_count: number
+}
+
+export interface CouponRedemption {
+  subscription_id: number
+  redemption_id: number
+  tenant_id: number
+  plan_id: string
+  period_start: string
+  period_end: string
+  is_immediate: boolean
+  superseded_subscription_id: number | null
+}
+
+export class CouponApiError extends Error {
+  status: number
+  code: string
+  detail: Record<string, unknown>
+  constructor(status: number, code: string, detail: Record<string, unknown>, msg?: string) {
+    super(msg || code)
+    this.status = status
+    this.code = code
+    this.detail = detail
+  }
+}
+
+async function _couponCall<T>(url: string, body: unknown): Promise<T> {
+  const res = await authFetch(url, { method: 'POST', body: JSON.stringify(body) })
+  if (!res.ok) {
+    const errBody = (await res.json().catch(() => ({}))) as {
+      detail?: Record<string, unknown> & { error?: string }
+    }
+    const detail = errBody?.detail || {}
+    const code = (detail.error as string) || 'coupon_error'
+    throw new CouponApiError(res.status, code, detail)
+  }
   return res.json()
 }
 
-export async function confirmPayment(sessionId: string) {
-  const res = await authFetch('/api/payment/confirm', {
-    method: 'POST',
-    body: JSON.stringify({ session_id: sessionId }),
+export async function previewCoupon(
+  code: string,
+  tenantId?: number,
+): Promise<CouponPreview> {
+  return _couponCall<CouponPreview>('/api/coupons/preview', {
+    code,
+    tenant_id: tenantId ?? null,
   })
-  if (!res.ok) throw new Error('Confirm failed')
-  return res.json()
+}
+
+export async function redeemCoupon(
+  code: string,
+  tenantId?: number | null,
+): Promise<{ redemption: CouponRedemption }> {
+  return _couponCall<{ redemption: CouponRedemption }>('/api/coupons/redeem', {
+    code,
+    tenant_id: tenantId ?? null,
+  })
 }
 
 export async function submitOnboarding(data: {
@@ -416,6 +483,124 @@ export async function provisionTenantAgent(
 }
 
 // ─── Superadmin ──────────────────────────────────────────────────────
+
+// ─── Superadmin coupons ───────────────────────────────────────────────
+
+export interface AdminCouponRow {
+  id: number
+  code: string
+  plan_id: string
+  plan_name_he: string
+  price_ils_cents: number
+  duration_days: number
+  max_redemptions: number | null
+  redemption_count: number
+  valid_from: string
+  valid_until: string | null
+  one_per_user: boolean
+  notes: string
+  disabled_at: string | null
+  created_by: number | null
+  created_by_email: string | null
+  created_at: string
+}
+
+export interface AdminCouponRedemptionRow {
+  id: number
+  coupon_id: number | null
+  user_id: number
+  user_email: string
+  user_full_name: string
+  tenant_id: number
+  tenant_name: string
+  tenant_slug: string
+  subscription_id: number
+  plan_id: string
+  duration_days: number
+  period_start: string
+  period_end: string
+  granted_by_admin: number | null
+  granted_by_admin_email: string | null
+  redeemed_at: string
+}
+
+export async function adminListCoupons(): Promise<{ coupons: AdminCouponRow[] }> {
+  const res = await authFetch('/api/admin/coupons')
+  if (!res.ok) throw new Error('List coupons failed')
+  return res.json()
+}
+
+export async function adminCreateCoupon(body: {
+  code?: string
+  plan_id: string
+  duration_days: number
+  max_redemptions?: number | null
+  valid_until?: string | null
+  one_per_user?: boolean
+  notes?: string
+}): Promise<AdminCouponRow> {
+  const res = await authFetch('/api/admin/coupons', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.detail?.error || 'Create coupon failed')
+  }
+  return res.json()
+}
+
+export async function adminUpdateCoupon(
+  couponId: number,
+  body: Partial<{
+    notes: string
+    max_redemptions: number | null
+    valid_until: string | null
+    one_per_user: boolean
+  }>,
+): Promise<AdminCouponRow> {
+  const res = await authFetch(`/api/admin/coupons/${couponId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error('Update coupon failed')
+  return res.json()
+}
+
+export async function adminSetCouponDisabled(
+  couponId: number,
+  disabled: boolean,
+): Promise<AdminCouponRow> {
+  const path = disabled
+    ? `/api/admin/coupons/${couponId}/disable`
+    : `/api/admin/coupons/${couponId}/enable`
+  const res = await authFetch(path, { method: 'POST' })
+  if (!res.ok) throw new Error('Toggle coupon failed')
+  return res.json()
+}
+
+export async function adminListCouponRedemptions(
+  couponId: number,
+): Promise<{ redemptions: AdminCouponRedemptionRow[] }> {
+  const res = await authFetch(`/api/admin/coupons/${couponId}/redemptions`)
+  if (!res.ok) throw new Error('List redemptions failed')
+  return res.json()
+}
+
+export async function adminGrantPlan(
+  tenantId: number,
+  body: { plan_id: string; duration_days: number },
+): Promise<{ redemption: CouponRedemption }> {
+  const res = await authFetch(`/api/admin/tenants/${tenantId}/grant-plan`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.detail?.error || 'Grant plan failed')
+  }
+  return res.json()
+}
 
 export async function upsertAgentSubscription(
   agentId: string,

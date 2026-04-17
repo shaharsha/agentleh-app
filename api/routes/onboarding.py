@@ -46,8 +46,23 @@ async def submit(
 ):
     db = request.app.state.db
 
-    if user["onboarding_status"] not in ("payment_done", "pending"):
-        raise HTTPException(status_code=400, detail="Already onboarded or payment required")
+    # Onboarding state machine after the coupon migration:
+    #   pending      → no plan, no agent → must redeem before onboarding
+    #   plan_active  → plan active, no agent → submit creates the agent
+    #   complete     → at least one agent exists
+    # We accept plan_active here. `pending` means the user hasn't redeemed
+    # a coupon yet; the frontend should not have surfaced this form, but
+    # we reject explicitly with the correct error so the UX can recover.
+    if user["onboarding_status"] == "pending":
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "no_active_subscription",
+                "message_he": "יש להפעיל תוכנית לפני הקמת סוכן",
+            },
+        )
+    if user["onboarding_status"] not in ("plan_active",):
+        raise HTTPException(status_code=400, detail="Already onboarded")
 
     # Update user profile
     db.update_user(

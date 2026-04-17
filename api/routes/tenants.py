@@ -140,8 +140,29 @@ async def get_tenant_detail(
     members = db.list_tenant_members(tenant_id)
     agents = db.list_tenant_agents(tenant_id)
     pending_invites = db.list_pending_invites(tenant_id)
+    active_sub = db.get_active_subscription(tenant_id)
+    sub_view = None
+    if active_sub is not None:
+        sub_view = {
+            "id": active_sub["id"],
+            "plan_id": active_sub["plan_id"],
+            "plan_name_he": active_sub["plan_name_he"],
+            "billing_mode": active_sub["billing_mode"],
+            "status": active_sub["status"],
+            "period_start": active_sub["period_start"].isoformat(),
+            "period_end": active_sub["period_end"].isoformat(),
+            "base_allowance_micros": int(active_sub["base_allowance_micros"]),
+            "used_micros": int(active_sub["used_micros"]),
+            "overage_enabled": bool(active_sub["overage_enabled"]),
+            "overage_cap_micros": (
+                int(active_sub["overage_cap_micros"])
+                if active_sub["overage_cap_micros"] is not None else None
+            ),
+            "overage_used_micros": int(active_sub["overage_used_micros"]),
+        }
     return {
         "tenant": _tenant_out(ctx.tenant, role=ctx.role),
+        "subscription": sub_view,
         "members": [
             {
                 "user_id": m["user_id"],
@@ -482,6 +503,25 @@ async def provision_agent(
     import secrets as _secrets
 
     db = request.app.state.db
+
+    # Plan gate: tenant must have an active subscription window covering
+    # now() before we'll spend resources on a VM container. The meter
+    # would also reject the agent's first request with 402 once it ran,
+    # but blocking up-front saves the user from a confusing
+    # "your-fresh-agent-can't-talk" experience.
+    active_sub = db.get_active_subscription(tenant_id)
+    if active_sub is None:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "no_active_subscription",
+                # provisionTenantAgent in lib/api.ts surfaces detail.message;
+                # the Hebrew copy renders inline in the agent-create modal.
+                "message": "יש להפעיל תוכנית כדי ליצור סוכנים",
+                "message_en": "Activate a plan before creating agents",
+                "redeem_path": f"/tenants/{tenant_id}/redeem",
+            },
+        )
 
     # Normalize phone to E.164 before anything touches the DB or the VM.
     # Accepts Israeli local ("050-123-4567") and any international format.

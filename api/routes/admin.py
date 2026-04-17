@@ -15,6 +15,7 @@ import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from api.deps import get_current_user
+from lib import coupons as coupons_lib
 
 logger = logging.getLogger(__name__)
 
@@ -361,3 +362,222 @@ async def admin_vm_stats(
         "tokens_per_hour": tokens_per_hour,
         "model_breakdown_7d": model_breakdown_7d,
     }
+
+
+# ─── Coupons (superadmin CRUD) ──────────────────────────────────────────
+# Codes are 12-char base32 by default; the admin can override on create.
+# Plan + duration are immutable once a coupon exists — changing them
+# would invalidate the redemption history's snapshot semantics. Use
+# disable + create-new instead.
+
+
+@router.get("/coupons")
+async def admin_list_coupons(
+    request: Request,
+    _: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    db = request.app.state.db
+    return {"coupons": db.list_coupons()}
+
+
+@router.post("/coupons", status_code=201)
+async def admin_create_coupon(
+    body: dict[str, Any] = Body(...),
+    request: Request = None,  # type: ignore[assignment]
+    user: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    """Create a coupon. Body fields:
+
+      code           — optional. Server-generates 12-char base32 if absent.
+      plan_id        — required. Must match billing_plans.plan_id.
+      duration_days  — required, 1..3650.
+      max_redemptions — optional int. NULL = unlimited.
+      valid_until    — optional ISO timestamp. NULL = no expiry.
+      one_per_user   — optional bool, default True.
+      notes          — optional string.
+
+    Returns the new coupon row including the resolved code so the
+    superadmin can copy it once. (Codes are also visible in the list
+    afterwards — there's no secrecy here, the index is on upper(code).)
+    """
+    plan_id = body.get("plan_id")
+    duration_days = body.get("duration_days")
+    if not plan_id or not isinstance(plan_id, str):
+        raise HTTPException(400, detail={"error": "plan_id_required"})
+    if not isinstance(duration_days, int) or duration_days <= 0 or duration_days > 3650:
+        raise HTTPException(
+            400, detail={"error": "duration_days_invalid", "range": "1..3650"}
+        )
+
+    code = body.get("code") or coupons_lib.generate_code()
+    code = code.strip().upper()
+    if not code:
+        raise HTTPException(400, detail={"error": "code_invalid"})
+
+    max_redemptions = body.get("max_redemptions")
+    if max_redemptions is not None and (
+        not isinstance(max_redemptions, int) or max_redemptions <= 0
+    ):
+        raise HTTPException(400, detail={"error": "max_redemptions_invalid"})
+
+    valid_until_raw = body.get("valid_until")
+    valid_until = None
+    if valid_until_raw:
+        from datetime import datetime
+        try:
+            valid_until = datetime.fromisoformat(valid_until_raw.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise HTTPException(400, detail={"error": "valid_until_invalid"}) from exc
+
+    one_per_user = bool(body.get("one_per_user", True))
+    notes = (body.get("notes") or "").strip()
+
+    db = request.app.state.db
+    try:
+        row = db.create_coupon(
+            code=code,
+            plan_id=plan_id,
+            duration_days=duration_days,
+            max_redemptions=max_redemptions,
+            valid_until=valid_until,
+            one_per_user=one_per_user,
+            notes=notes,
+            created_by=user["id"],
+        )
+    except Exception as exc:  # noqa: BLE001 — most likely unique-violation on code
+        msg = str(exc)
+        if "coupons_code_key" in msg or "unique" in msg.lower():
+            raise HTTPException(409, detail={"error": "code_already_exists", "code": code}) from exc
+        raise
+
+    return row
+
+
+@router.patch("/coupons/{coupon_id}")
+async def admin_update_coupon(
+    coupon_id: int,
+    body: dict[str, Any] = Body(...),
+    request: Request = None,  # type: ignore[assignment]
+    _: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    """Edit mutable coupon fields: notes, max_redemptions, valid_until,
+    one_per_user. Plan and duration are intentionally immutable."""
+    db = request.app.state.db
+    fields: dict[str, Any] = {}
+    if "notes" in body:
+        fields["notes"] = (body["notes"] or "").strip()
+    if "max_redemptions" in body:
+        v = body["max_redemptions"]
+        if v is not None and (not isinstance(v, int) or v <= 0):
+            raise HTTPException(400, detail={"error": "max_redemptions_invalid"})
+        fields["max_redemptions"] = v
+    if "valid_until" in body:
+        v = body["valid_until"]
+        if v is None:
+            fields["valid_until"] = None
+        else:
+            from datetime import datetime
+            try:
+                fields["valid_until"] = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise HTTPException(400, detail={"error": "valid_until_invalid"}) from exc
+    if "one_per_user" in body:
+        fields["one_per_user"] = bool(body["one_per_user"])
+
+    updated = db.update_coupon(coupon_id, **fields)
+    if updated is None:
+        raise HTTPException(404, detail={"error": "coupon_not_found"})
+    return updated
+
+
+@router.post("/coupons/{coupon_id}/disable")
+async def admin_disable_coupon(
+    coupon_id: int,
+    request: Request,
+    _: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    db = request.app.state.db
+    updated = db.set_coupon_disabled(coupon_id, True)
+    if updated is None:
+        raise HTTPException(404, detail={"error": "coupon_not_found"})
+    return updated
+
+
+@router.post("/coupons/{coupon_id}/enable")
+async def admin_enable_coupon(
+    coupon_id: int,
+    request: Request,
+    _: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    db = request.app.state.db
+    updated = db.set_coupon_disabled(coupon_id, False)
+    if updated is None:
+        raise HTTPException(404, detail={"error": "coupon_not_found"})
+    return updated
+
+
+@router.get("/coupons/{coupon_id}/redemptions")
+async def admin_list_redemptions(
+    coupon_id: int,
+    request: Request,
+    _: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    db = request.app.state.db
+    return {"redemptions": db.list_coupon_redemptions(coupon_id)}
+
+
+# ─── Direct admin grant (no coupon) ────────────────────────────────────
+
+
+@router.post("/tenants/{tenant_id}/grant-plan")
+async def admin_grant_plan(
+    tenant_id: int,
+    body: dict[str, Any] = Body(...),
+    request: Request = None,  # type: ignore[assignment]
+    user: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    """Activate a plan on a tenant directly, without a coupon code.
+
+    Logged in coupon_redemptions with coupon_id=NULL and granted_by_admin
+    set to the calling superadmin's id. Same supersession logic as a
+    coupon redemption (immediate upgrade / queued downgrade / queued
+    same-plan renewal).
+
+    Body: {plan_id, duration_days}.
+    """
+    plan_id = body.get("plan_id")
+    duration_days = body.get("duration_days")
+    if not plan_id or not isinstance(plan_id, str):
+        raise HTTPException(400, detail={"error": "plan_id_required"})
+    if not isinstance(duration_days, int) or duration_days <= 0 or duration_days > 3650:
+        raise HTTPException(
+            400, detail={"error": "duration_days_invalid", "range": "1..3650"}
+        )
+
+    db = request.app.state.db
+    # Resolve the tenant owner — that's the user_id we'll record as the
+    # redemption's user_id (same convention coupons.redeem uses for
+    # tenant ownership). If we recorded the admin as user_id the audit
+    # would be confusing.
+    tenant = db.get_tenant_by_id(tenant_id)
+    if tenant is None:
+        raise HTTPException(404, detail={"error": "tenant_not_found"})
+
+    import asyncio
+    try:
+        result = await asyncio.to_thread(
+            coupons_lib.redeem,
+            db,
+            user_id=int(tenant["owner_user_id"]),
+            tenant_id=tenant_id,
+            code=None,
+            granted_by_admin=user["id"],
+            plan_id_override=plan_id,
+            duration_days_override=duration_days,
+        )
+    except coupons_lib.CouponError as exc:
+        raise HTTPException(
+            status_code=exc.http_status, detail={"error": exc.code, **exc.detail}
+        ) from exc
+
+    return {"redemption": result.to_dict()}
