@@ -72,19 +72,22 @@ export default function ChatPane({ tenantId, agentId, agentName }: ChatPaneProps
   }
 
   /** Turn a gateway `chat` event payload into a consumer-friendly
-   *  assistant bubble update. The gateway emits state "streaming"
-   *  with `text` deltas and eventually "final" with the full text. */
+   *  assistant bubble update. Per OpenClaw's ChatEventSchema:
+   *    state ∈ {"delta", "final", "aborted", "error"}
+   *    message is the opaque assistant-message object — we pull text
+   *    out of its `.content` blocks or its direct `.text` property,
+   *    whichever exists (OpenClaw has evolved both shapes). */
   const handleChatEvent = useCallback(
     (payload: any) => {
       const runId: string | undefined = payload?.runId
       const state: string | undefined = payload?.state
-      const text: string = typeof payload?.text === 'string' ? payload.text : ''
+      const text: string = extractText(payload?.message) || (payload?.errorMessage || '')
       if (!runId) return
+      const terminal = state === 'final' || state === 'aborted' || state === 'error'
 
       setMessages((prev) => {
         const idx = prev.findIndex((m) => m.runId === runId)
         if (idx === -1) {
-          // First event for this run — open a new assistant bubble.
           return [
             ...prev,
             {
@@ -92,23 +95,25 @@ export default function ChatPane({ tenantId, agentId, agentName }: ChatPaneProps
               role: 'assistant',
               text,
               ts: Date.now(),
-              streaming: state !== 'final' && state !== 'error',
+              streaming: !terminal,
               runId,
             },
           ]
         }
         const existing = prev[idx]
+        // OpenClaw's delta events carry the full assistant message
+        // so far (not per-token diffs), so overwrite rather than
+        // append. If a later event lacks text (e.g. a pure-state
+        // terminal event), keep what we've rendered.
         const next: Message = {
           ...existing,
-          // For streaming, gateway sends the whole concatenated text
-          // so far (not deltas), so overwrite rather than append.
-          text,
-          streaming: state !== 'final' && state !== 'error',
+          text: text || existing.text,
+          streaming: !terminal,
         }
         return [...prev.slice(0, idx), next, ...prev.slice(idx + 1)]
       })
 
-      if (state === 'final' || state === 'error') {
+      if (terminal) {
         setStreamingRunId((prevId) => (prevId === runId ? null : prevId))
       }
     },

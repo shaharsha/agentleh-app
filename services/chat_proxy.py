@@ -235,10 +235,21 @@ def _sanitize_outbound_frame(
     # free-form strings so we're free to use our own namespace.
     if method in ("chat.send", "chat.history", "chat.abort"):
         params["sessionKey"] = session_key
-    # Mark every message channel as "webchat" so the downstream agent
-    # can differentiate web traffic from bridge (WhatsApp) / telegram.
+
     if method == "chat.send":
-        params["messageChannel"] = "webchat"
+        # OpenClaw's ChatSendParamsSchema rejects additionalProperties,
+        # REQUIRES idempotencyKey, and uses `originatingChannel` (not
+        # `messageChannel` which we had initially). Fix both:
+        #   - mint an idempotencyKey here so replays are safe AND the
+        #     browser doesn't need to care about the field
+        #   - coerce messageChannel → originatingChannel, hardcoded to
+        #     "webchat" so the downstream agent can tell browser traffic
+        #     from bridge/telegram
+        params.pop("messageChannel", None)
+        params["originatingChannel"] = "webchat"
+        if not params.get("idempotencyKey"):
+            import uuid as _uuid
+            params["idempotencyKey"] = f"webchat-{_uuid.uuid4().hex}"
 
     frame["params"] = params
     return json.dumps(frame), frame, None
