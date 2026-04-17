@@ -192,24 +192,73 @@ class AppDatabase:
 
     # ── Users ─────────────────────────────────────────────────────────
 
-    def upsert_user(self, supabase_uid: str, email: str, full_name: str = "") -> dict[str, Any]:
+    # Auth gate. Returns:
+    #   - the active row if one exists  (normal authenticated request)
+    #   - None if the row exists but is soft-deleted  (revoked account)
+    #   - a freshly-inserted row if no row exists  (first login after signup)
+    #
+    # Intentionally SELECT-first-then-INSERT (not an UPSERT) so a soft-deleted
+    # account cannot silently resurrect itself on the next authenticated
+    # request. The original upsert did that — a user deleted in Supabase whose
+    # still-valid JWT hit /auth/me would be re-created from the JWT claims.
+    def get_user_for_auth(
+        self,
+        supabase_uid: str,
+        email: str,
+        full_name: str = "",
+    ) -> dict[str, Any] | None:
         with self.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
+                    "SELECT * FROM app_users WHERE supabase_uid = %s",
+                    (supabase_uid,),
+                )
+                row = cur.fetchone()
+                if row is not None:
+                    if row["deleted_at"] is not None:
+                        return None
+                    return dict(row)
+                # First sighting of this Supabase UID — insert. ON CONFLICT
+                # DO NOTHING handles the race where two concurrent requests
+                # both hit the SELECT miss; the second INSERT no-ops and the
+                # follow-up SELECT below picks up the winner.
+                cur.execute(
                     """INSERT INTO app_users (supabase_uid, email, full_name)
                        VALUES (%s, %s, %s)
-                       ON CONFLICT (supabase_uid) DO UPDATE SET
-                         email = EXCLUDED.email,
-                         full_name = CASE WHEN app_users.full_name = '' THEN EXCLUDED.full_name ELSE app_users.full_name END
+                       ON CONFLICT (supabase_uid) DO NOTHING
                        RETURNING *""",
                     (supabase_uid, email, full_name),
                 )
                 row = cur.fetchone()
+                if row is None:
+                    cur.execute(
+                        "SELECT * FROM app_users WHERE supabase_uid = %s",
+                        (supabase_uid,),
+                    )
+                    row = cur.fetchone()
+                    if row is not None and row["deleted_at"] is not None:
+                        return None
             conn.commit()
-        return dict(row) if row else {}
+        return dict(row) if row else None
+
+    def soft_delete_user(self, user_id: int) -> dict[str, Any] | None:
+        """Mark the app_users row deleted. Idempotent on already-deleted rows
+        (re-sets deleted_at to now). FK targets (tenants, coupons, audit log,
+        subscriptions) are preserved — soft-delete keeps historical records
+        intact while the auth gate treats the account as revoked."""
+        return self._execute(
+            """UPDATE app_users
+                  SET deleted_at = COALESCE(deleted_at, now())
+                WHERE id = %s
+            RETURNING *""",
+            (user_id,),
+        )
 
     def get_user_by_uid(self, supabase_uid: str) -> dict[str, Any] | None:
-        return self._fetch_one("SELECT * FROM app_users WHERE supabase_uid = %s", (supabase_uid,))
+        return self._fetch_one(
+            "SELECT * FROM app_users WHERE supabase_uid = %s AND deleted_at IS NULL",
+            (supabase_uid,),
+        )
 
     def get_user_by_id(self, user_id: int) -> dict[str, Any] | None:
         return self._fetch_one("SELECT * FROM app_users WHERE id = %s", (user_id,))

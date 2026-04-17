@@ -47,7 +47,15 @@ async def get_current_user(
     request: Request,
     creds: HTTPAuthorizationCredentials = Depends(_bearer),
 ) -> dict[str, Any]:
-    """Decode Supabase JWT → upsert user in DB → return user dict."""
+    """Decode Supabase JWT → resolve active app_users row → return user dict.
+
+    Revoked-account protection: a valid JWT on its own is not enough. The
+    DB gate below distinguishes three cases — active user (return the row),
+    first-time login (insert and return), and soft-deleted (return 401 so
+    the frontend clears its Supabase session and redirects to login). Before
+    this change the call was an unconditional UPSERT, which meant a JWT
+    issued before a user was deleted could silently resurrect them.
+    """
     try:
         payload = decode_supabase_jwt(creds.credentials)
     except ValueError as e:
@@ -61,7 +69,9 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="Missing sub in token")
 
     db = request.app.state.db
-    user = db.upsert_user(supabase_uid=uid, email=email, full_name=name)
+    user = db.get_user_for_auth(supabase_uid=uid, email=email, full_name=name)
+    if user is None:
+        raise HTTPException(status_code=401, detail="account_revoked")
     return user
 
 
