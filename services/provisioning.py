@@ -59,7 +59,7 @@ class AgentProvisioner(Protocol):
     def provision(
         self,
         agent_id: str,
-        phone: str,
+        phone: str,  # "" = no WhatsApp binding; the VM + mock both skip phone_routes on empty
         agent_name: str,
         user_name: str,
         tenant_id: int,
@@ -70,7 +70,7 @@ class AgentProvisioner(Protocol):
     def provision_stream(
         self,
         agent_id: str,
-        phone: str,
+        phone: str,  # "" = no WhatsApp binding
         agent_name: str,
         user_name: str,
         tenant_id: int,
@@ -127,7 +127,15 @@ class MockProvisioner:
         # does on the VM). The full row is written atomically — agent_name,
         # bot_gender, and tts_voice_name are persisted at provision time so
         # downstream readers never see a partially-populated agent.
+        #
+        # Phone routing is optional — when `phone` is empty/blank we insert
+        # the agent row without a phone_routes entry. The Bridges panel
+        # lets the tenant connect WhatsApp later. When a phone IS provided,
+        # we use DO NOTHING + a post-insert check so a race with another
+        # agent claiming the same number fails loudly instead of silently
+        # stealing it (matches create-agent.sh after the Part A fix).
         if self.db:
+            normalized = "".join(c for c in (phone or "") if c.isdigit())
             with self.db.connect() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
@@ -150,14 +158,25 @@ class MockProvisioner:
                             tts_voice_name,
                         ),
                     )
-                    # Normalize phone
-                    normalized = "".join(c for c in phone if c.isdigit())
-                    cur.execute(
-                        """INSERT INTO phone_routes (phone, agent_id)
-                           VALUES (%s, %s)
-                           ON CONFLICT (phone) DO UPDATE SET agent_id = EXCLUDED.agent_id""",
-                        (normalized, agent_id),
-                    )
+                    if normalized:
+                        cur.execute(
+                            """INSERT INTO phone_routes (phone, agent_id)
+                               VALUES (%s, %s)
+                               ON CONFLICT (phone) DO NOTHING""",
+                            (normalized, agent_id),
+                        )
+                        cur.execute(
+                            "SELECT agent_id FROM phone_routes WHERE phone = %s",
+                            (normalized,),
+                        )
+                        row = cur.fetchone()
+                        if row is None or row["agent_id"] != agent_id:
+                            conn.rollback()
+                            return ProvisionResult(
+                                agent_id=agent_id,
+                                success=False,
+                                error=f"phone {normalized} already bound to a different agent",
+                            )
                 conn.commit()
 
         return ProvisionResult(
@@ -214,6 +233,31 @@ class MockProvisioner:
         logger.info("MOCK: Health check for %s → healthy", agent_id)
         return True
 
+    def patch_agent_config(
+        self,
+        agent_id: str,
+        *,
+        openclaw_json_patch: dict[str, Any] | None = None,
+        env_additions: dict[str, str] | None = None,
+        restart: bool = False,
+    ) -> dict[str, Any]:
+        """Mock variant — logs + returns success. The bridges-test code
+        path needs this to exist so we can unit-test the Telegram connect
+        flow without a real VM."""
+        logger.info(
+            "MOCK: patch_agent_config agent=%s patch_keys=%s env_keys=%s restart=%s",
+            agent_id,
+            list((openclaw_json_patch or {}).keys()),
+            list((env_additions or {}).keys()),
+            restart,
+        )
+        return {
+            "success": True,
+            "agent_id": agent_id,
+            "revision": "mock0000",
+            "restarted": restart,
+        }
+
 
 class VmHttpProvisioner:
     """Real provisioner — calls the VM's provision-api.py daemon via
@@ -256,14 +300,19 @@ class VmHttpProvisioner:
             "VmHttpProvisioner: provisioning agent=%s tenant=%s phone=%s",
             agent_id,
             tenant_id,
-            phone,
+            phone or "<none>",
         )
 
         payload: dict[str, object] = {
             "agent_id": agent_id,
-            "phone": phone,
             "tenant_id": tenant_id,
         }
+        # Phone is optional — when omitted, the VM creates the agent
+        # with no phone_routes entry (no WhatsApp binding). The Bridges
+        # panel handles post-hoc connection. Sending an empty string
+        # would trip the VM's required-field check.
+        if phone:
+            payload["phone"] = phone
         if agent_name:
             payload["agent_name"] = agent_name
         if user_name:
@@ -349,14 +398,15 @@ class VmHttpProvisioner:
             "VmHttpProvisioner: streaming provision agent=%s tenant=%s phone=%s",
             agent_id,
             tenant_id,
-            phone,
+            phone or "<none>",
         )
 
         payload: dict[str, object] = {
             "agent_id": agent_id,
-            "phone": phone,
             "tenant_id": tenant_id,
         }
+        if phone:
+            payload["phone"] = phone
         if agent_name:
             payload["agent_name"] = agent_name
         if user_name:
@@ -460,6 +510,56 @@ class VmHttpProvisioner:
         # Daemon doesn't expose a per-agent health endpoint; the app
         # can curl the VM directly via VPC if it ever needs to.
         return True
+
+    def patch_agent_config(
+        self,
+        agent_id: str,
+        *,
+        openclaw_json_patch: dict[str, Any] | None = None,
+        env_additions: dict[str, str] | None = None,
+        restart: bool = False,
+    ) -> dict[str, Any]:
+        """POST /agents/<id>/config/patch on the VM daemon.
+
+        Used by the Telegram bridge connect / disconnect paths to
+        rewrite `channels.telegram` in the agent's openclaw.json +
+        upsert TELEGRAM_BOT_TOKEN_<AGENT> in /opt/agentleh/.env +
+        restart the container.
+
+        Returns the daemon's response dict. On non-2xx or a connection
+        failure, the `success` field is False and `error` + `stdout`/
+        `stderr` carry the diagnostic. Bubbling daemon exit codes to
+        the UI is important so users see real errors (like
+        "Docker restart timed out") instead of a generic 500.
+        """
+        logger.info(
+            "VmHttpProvisioner: patching agent=%s restart=%s", agent_id, restart
+        )
+        payload: dict[str, Any] = {"agent_id": agent_id, "restart": bool(restart)}
+        if openclaw_json_patch is not None:
+            payload["openclaw_json_patch"] = openclaw_json_patch
+        if env_additions:
+            payload["env_additions"] = env_additions
+        try:
+            with httpx.Client(timeout=120.0) as client:
+                resp = client.post(
+                    f"{self.base_url}/config/patch",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {self.token}"},
+                )
+        except httpx.HTTPError as exc:
+            logger.error("config/patch unreachable: %s", exc)
+            return {"success": False, "error": f"provision-api unreachable: {exc}"}
+        try:
+            result = resp.json()
+        except Exception:  # noqa: BLE001
+            return {
+                "success": False,
+                "error": f"non-json response from provision-api (status={resp.status_code})",
+            }
+        if resp.status_code >= 400 and "success" not in result:
+            result["success"] = False
+        return result
 
 
 def pick_provisioner(db) -> AgentProvisioner:

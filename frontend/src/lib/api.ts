@@ -462,12 +462,197 @@ export interface ProvisionSuccess {
   status: string
 }
 
+// Pre-flight duplicate-phone check used by the create-agent form + the
+// Bridges-panel WhatsApp edit modal. Server normalizes input, returns
+// 400 on unparseable numbers. Response intentionally omits which agent
+// owns the conflict so we don't leak cross-tenant existence.
+export async function checkPhoneAvailable(phone: string): Promise<{ available: boolean }> {
+  const res = await authFetch(`/api/agents/check-phone?phone=${encodeURIComponent(phone)}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.detail?.message || body?.detail?.error || 'Invalid phone')
+  }
+  return res.json()
+}
+
+// ─── Bridges panel ──────────────────────────────────────────────────
+
+export interface WhatsappBridge {
+  enabled: boolean
+  status: 'connected' | 'disconnected'
+  phone: string | null
+  actions: Array<'connect' | 'edit_phone' | 'disconnect'>
+}
+export interface TelegramBridge {
+  enabled: boolean
+  status: 'connected' | 'disconnected'
+  bot_username?: string
+  bot_display_name?: string
+  actions: Array<'connect' | 'test' | 'update_token' | 'disconnect'>
+}
+export interface WebBridge {
+  enabled: true
+  status: 'connected'
+  chat_url: string
+  actions: ['open_chat']
+}
+export interface BridgesResponse {
+  agent_id: string
+  bridges: {
+    whatsapp: WhatsappBridge
+    telegram: TelegramBridge
+    web: WebBridge
+  }
+}
+
+export async function getAgentBridges(
+  tenantId: number,
+  agentId: string,
+): Promise<BridgesResponse> {
+  const res = await authFetch(`/api/tenants/${tenantId}/agents/${agentId}/bridges`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.detail || body?.detail?.message || 'Failed to load bridges')
+  }
+  return res.json()
+}
+
+export async function patchWhatsappBridge(
+  tenantId: number,
+  agentId: string,
+  phone: string | null,
+): Promise<BridgesResponse> {
+  const res = await authFetch(`/api/tenants/${tenantId}/agents/${agentId}/bridges/whatsapp`, {
+    method: 'PATCH',
+    body: JSON.stringify({ phone }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.detail?.message || body?.detail?.error || 'Failed to update WhatsApp bridge')
+  }
+  return res.json()
+}
+
+// ── Telegram Managed Bots (one-tap flow) ─────────────────────────
+
+export interface TelegramManagedStart {
+  deep_link: string
+  manager_bot_username: string
+  agent_id: string
+  expires_in_seconds: number
+}
+
+export type TelegramManagedStatus =
+  | { status: 'pending' }
+  | { status: 'connected'; bot_username: string }
+  | { status: 'error'; error: string }
+
+export async function startTelegramManagedConnect(
+  tenantId: number,
+  agentId: string,
+): Promise<TelegramManagedStart> {
+  const res = await authFetch(
+    `/api/tenants/${tenantId}/agents/${agentId}/bridges/telegram/start-managed`,
+    { method: 'POST' },
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.detail?.detail || body?.detail?.error || 'Failed to start Telegram quick-connect')
+  }
+  return res.json()
+}
+
+export async function getTelegramManagedStatus(
+  tenantId: number,
+  agentId: string,
+): Promise<TelegramManagedStatus> {
+  const res = await authFetch(
+    `/api/tenants/${tenantId}/agents/${agentId}/bridges/telegram/managed-status`,
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.detail?.error || 'Failed to poll Telegram connect status')
+  }
+  return res.json()
+}
+
+export async function connectTelegramBridge(
+  tenantId: number,
+  agentId: string,
+  botToken: string,
+): Promise<BridgesResponse> {
+  const res = await authFetch(
+    `/api/tenants/${tenantId}/agents/${agentId}/bridges/telegram/connect`,
+    { method: 'POST', body: JSON.stringify({ bot_token: botToken }) },
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    // Telegram errors come back as {error, detail} — surface the raw
+    // detail so "Unauthorized" from getMe reaches the user verbatim.
+    const detail = body?.detail?.detail || body?.detail?.error || body?.detail
+    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail || {}))
+  }
+  return res.json()
+}
+
+export async function testTelegramBridge(
+  tenantId: number,
+  agentId: string,
+): Promise<{ ok: boolean; error?: string; detail?: string; bot_username?: string; bot_display_name?: string }> {
+  const res = await authFetch(
+    `/api/tenants/${tenantId}/agents/${agentId}/bridges/telegram/test`,
+    { method: 'POST' },
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.detail?.detail || body?.detail?.error || 'Failed to test Telegram bridge')
+  }
+  return res.json()
+}
+
+export async function disconnectTelegramBridge(
+  tenantId: number,
+  agentId: string,
+): Promise<BridgesResponse> {
+  const res = await authFetch(
+    `/api/tenants/${tenantId}/agents/${agentId}/bridges/telegram`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.detail?.message || body?.detail?.error || 'Failed to disconnect Telegram bridge')
+  }
+  return res.json()
+}
+
+// ─── Web chat (WebSocket) ──────────────────────────────────────────
+
+/** Build the wss:// URL for the chat proxy, with access_token in query.
+ *  The ChatPane hook calls this and opens a WebSocket directly. */
+export async function buildChatWebsocketUrl(
+  tenantId: number,
+  agentId: string,
+): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('not_authenticated')
+  // Same origin: wss://app-dev.agentiko.io → location.host. For local
+  // dev with a separate Vite port, we still connect to the Cloud Run
+  // / uvicorn backend — prod deploys have them behind the same host.
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = window.location.host
+  const qs = new URLSearchParams({ access_token: token })
+  return `${proto}//${host}/api/tenants/${tenantId}/agents/${agentId}/chat?${qs.toString()}`
+}
+
 export async function provisionTenantAgent(
   tenantId: number,
   body: {
     agent_name: string
     agent_gender?: string
-    phone: string
+    // Phone is optional — empty/undefined creates an agent without a
+    // WhatsApp bridge. Connect one later via the Bridges panel.
+    phone?: string
     user_name?: string
     user_gender?: string
     tts_voice_name?: string

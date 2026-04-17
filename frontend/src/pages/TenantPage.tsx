@@ -14,6 +14,7 @@ import {
   deleteAgent,
   redeemCoupon,
   previewCoupon,
+  checkPhoneAvailable,
   CouponApiError,
   type CouponPreview,
 } from '../lib/api'
@@ -22,6 +23,8 @@ import { useI18n, type Bilingual } from '../lib/i18n'
 import { planLabel, statusLabel } from '../lib/labels'
 import TenantName from '../components/TenantName'
 import IntegrationsPanel from '../components/IntegrationsPanel'
+import BridgesPanel from '../components/BridgesPanel'
+import ChatPane from '../components/ChatPane'
 import UsageTab from '../components/UsageTab'
 import AuditTab from '../components/AuditTab'
 import VoicePicker from '../components/VoicePicker'
@@ -281,6 +284,14 @@ function DashboardTab({
   const [newAgentUserName, setNewAgentUserName] = useState('')
   const [newAgentUserGender, setNewAgentUserGender] = useState<'' | 'female' | 'male'>('')
   const [phoneBlurred, setPhoneBlurred] = useState(false)
+  // Duplicate-phone check: the create-agent form pre-flights the phone
+  // against /api/agents/check-phone on blur so a collision with another
+  // tenant's agent surfaces before the user hits submit. `null` = not
+  // yet checked, `true` = available, `false` = taken. Checking state
+  // mirrors the debounce window — submit stays disabled while we're
+  // mid-flight so the user can't race the check.
+  const [phoneAvailable, setPhoneAvailable] = useState<boolean | null>(null)
+  const [phoneChecking, setPhoneChecking] = useState(false)
   const [provisioning, setProvisioning] = useState(false)
   const [provisionError, setProvisionError] = useState<string | null>(null)
 
@@ -299,6 +310,38 @@ function DashboardTab({
     return parsePhoneNumberFromString(raw, 'IL') ?? null
   }, [newAgentPhone])
   const phoneE164 = parsedPhone?.isValid() ? parsedPhone.number : null
+
+  // Reset the duplicate-check cache whenever the phone changes so the
+  // old result doesn't get shown against a new number. The effect
+  // below re-fetches after a debounce window.
+  useEffect(() => {
+    setPhoneAvailable(null)
+  }, [phoneE164])
+
+  // Debounced pre-flight duplicate-phone check. Only fires when the
+  // parsed number is valid — invalid input shows its own error path
+  // and there's no point hitting the server. 400ms debounce feels
+  // responsive without spamming during fast typing.
+  useEffect(() => {
+    if (!phoneE164) return
+    setPhoneChecking(true)
+    const handle = setTimeout(async () => {
+      try {
+        const res = await checkPhoneAvailable(phoneE164)
+        setPhoneAvailable(res.available)
+      } catch {
+        // Transient — submit's 409 fallback still catches real
+        // conflicts. Don't block UX on a network blip.
+        setPhoneAvailable(null)
+      } finally {
+        setPhoneChecking(false)
+      }
+    }, 400)
+    return () => {
+      clearTimeout(handle)
+      setPhoneChecking(false)
+    }
+  }, [phoneE164])
 
   const handlePhoneBlur = () => {
     setPhoneBlurred(true)
@@ -384,18 +427,35 @@ function DashboardTab({
     progressPct = 92
   }
 
+  // Submit is allowed when:
+  //   - the agent name is non-empty, AND
+  //   - either the phone field is empty (create without a bridge), OR
+  //     the phone is a valid E.164 AND not currently a duplicate.
+  // We don't require phoneAvailable === true because a transient
+  // /check-phone failure returns null — in that case we let the user
+  // submit and rely on the backend 409 to catch real conflicts.
+  const rawPhoneFilled = newAgentPhone.trim().length > 0
+  const phoneIsOk =
+    !rawPhoneFilled || (phoneE164 !== null && phoneAvailable !== false && !phoneChecking)
+  const canProvision = newAgentName.trim().length > 0 && phoneIsOk
+
   async function handleProvision() {
-    if (!newAgentName.trim() || !phoneE164) return
+    if (!canProvision) return
     setProvisioning(true)
     setProvisionError(null)
-    setProgress({ step: 0, total: 5, label: 'Connecting…' })
+    // When creating without a phone, skip the "Sending welcome message"
+    // tick so the progress bar ends at step 4/4 instead of 5/5.
+    const totalSteps = phoneE164 ? 5 : 4
+    setProgress({ step: 0, total: totalSteps, label: 'Connecting…' })
     try {
       await provisionTenantAgent(
         tenantId,
         {
           agent_name: newAgentName.trim(),
           agent_gender: newAgentGender,
-          phone: phoneE164,
+          // Omit entirely (not empty string) when the user didn't enter
+          // a phone — mirrors the backend's Optional[str] contract.
+          phone: phoneE164 ?? undefined,
           user_name: newAgentUserName.trim() || undefined,
           user_gender: newAgentUserGender || undefined,
           // Optional — backend falls back to the gender-matched default
@@ -412,6 +472,7 @@ function DashboardTab({
       setNewAgentUserName('')
       setNewAgentUserGender('')
       setPhoneBlurred(false)
+      setPhoneAvailable(null)
       setShowNewAgent(false)
       onChanged()
     } catch (err) {
@@ -425,6 +486,12 @@ function DashboardTab({
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null)
   const [deleteInProgress, setDeleteInProgress] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  // ── Web-chat slide-over state ──
+  // Opened from BridgesPanel's "Open chat" action. A single slot — only
+  // one chat at a time. Storing the full row lets us render the agent
+  // name in the chat header without a separate lookup.
+  const [chatAgent, setChatAgent] = useState<{ agent_id: string; agent_name: string } | null>(null)
 
   async function handleDeleteAgent() {
     if (!deletingAgentId) return
@@ -670,7 +737,10 @@ function DashboardTab({
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-text-secondary mb-1">
-                      {t({ he: 'מספר הטלפון של המשתמש (וואטסאפ)', en: "User's phone number (WhatsApp)" })}
+                      {t({
+                        he: 'מספר הטלפון של המשתמש (וואטסאפ) — לא חובה',
+                        en: "User's phone number (WhatsApp) — optional",
+                      })}
                     </label>
                     <input
                       type="tel"
@@ -684,27 +754,53 @@ function DashboardTab({
                       autoComplete="tel"
                       inputMode="tel"
                       dir="ltr"
-                      aria-invalid={phoneBlurred && !!newAgentPhone.trim() && !phoneE164}
+                      aria-invalid={
+                        (phoneBlurred && !!newAgentPhone.trim() && !phoneE164) ||
+                        phoneAvailable === false
+                      }
                       aria-describedby="new-agent-phone-help"
                       className="input-glass w-full px-3 py-2.5 text-sm"
                     />
-                    {phoneE164 ? (
-                      <p id="new-agent-phone-help" className="text-[11px] text-text-muted mt-1">
-                        {t({ he: 'יישמר כ-', en: 'Will save as ' })}
-                        <span dir="ltr" className="font-mono text-text-primary">{phoneE164}</span>
+                    {/* Render the most specific error first:
+                        1. duplicate-phone (backend says taken)
+                        2. invalid phone (libphonenumber can't parse)
+                        3. valid + "will save as …" preview
+                        4. empty + helper description */}
+                    {phoneAvailable === false ? (
+                      <p
+                        id="new-agent-phone-help"
+                        className="text-[11px] text-red-600 dark:text-red-300 mt-1"
+                      >
+                        {t({
+                          he: 'מספר זה כבר משויך לסוכן אחר. כל מספר טלפון יכול להיות מחובר לסוכן אחד בלבד.',
+                          en: 'This phone is already connected to another agent. Each phone can only be connected to one agent.',
+                        })}
                       </p>
-                    ) : phoneBlurred && newAgentPhone.trim() ? (
-                      <p id="new-agent-phone-help" className="text-[11px] text-red-600 dark:text-red-300 mt-1">
+                    ) : phoneBlurred && newAgentPhone.trim() && !phoneE164 ? (
+                      <p
+                        id="new-agent-phone-help"
+                        className="text-[11px] text-red-600 dark:text-red-300 mt-1"
+                      >
                         {t({
                           he: 'מספר לא תקין — נסה שוב (למשל 050-123-4567)',
                           en: 'Not a valid phone number — try again (e.g. 050-123-4567)',
                         })}
                       </p>
+                    ) : phoneE164 ? (
+                      <p id="new-agent-phone-help" className="text-[11px] text-text-muted mt-1">
+                        {t({ he: 'יישמר כ-', en: 'Will save as ' })}
+                        <span dir="ltr" className="font-mono text-text-primary">{phoneE164}</span>
+                        {phoneChecking && (
+                          <span className="ms-2 opacity-60">
+                            {t({ he: '(בודק…)', en: '(checking…)' })}
+                          </span>
+                        )}
+                      </p>
                     ) : (
                       <p id="new-agent-phone-help" className="text-[11px] text-text-muted mt-1">
                         {t({
-                          he: 'המספר שהמשתמש ישלח ממנו הודעות לסוכן. מספר ישראלי או בינלאומי, כל פורמט. לא המספר המשותף של Agentiko.',
-                          en: "The number the user will text from to reach the agent. Israeli or international, any format. Not Agentiko's shared number.",
+                          he: 'אפשר להשאיר ריק ולחבר וואטסאפ מאוחר יותר מתוך לשונית "גשרים" של הסוכן.',
+                          en: 'Leave empty to create without WhatsApp — you can connect it later from the agent\'s Bridges panel.',
                         })}
                       </p>
                     )}
@@ -778,7 +874,7 @@ function DashboardTab({
                 <div className="flex flex-col sm:flex-row gap-2">
                   <button
                     onClick={handleProvision}
-                    disabled={!newAgentName.trim() || !phoneE164}
+                    disabled={!canProvision}
                     className="btn-brand btn-md flex-1 sm:flex-none disabled:opacity-50"
                   >
                     {t({ he: 'צור סוכן', en: 'Create agent' })}
@@ -831,6 +927,12 @@ function DashboardTab({
                   agentId={a.agent_id}
                   onChange={onChanged}
                 />
+                <BridgesPanel
+                  tenantId={tenantId}
+                  agentId={a.agent_id}
+                  canEdit={isAdminOrOwner}
+                  onOpenChat={() => setChatAgent({ agent_id: a.agent_id, agent_name: a.agent_name })}
+                />
               </div>
             ))}
           </div>
@@ -876,6 +978,35 @@ function DashboardTab({
           onConfirm={handleDeleteAgent}
           onCancel={() => { setDeletingAgentId(null); setDeleteError(null) }}
         />
+      )}
+
+      {/* ── Web-chat slide-over ── */}
+      {chatAgent && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex justify-end"
+          onClick={() => setChatAgent(null)}
+        >
+          <div
+            className="bg-surface w-full sm:w-[480px] h-full shadow-xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-2 border-b border-border">
+              <button
+                onClick={() => setChatAgent(null)}
+                className="text-xs text-text-secondary hover:text-text-primary px-2 py-1"
+              >
+                ✕ {t({ he: 'סגור', en: 'Close' })}
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <ChatPane
+                tenantId={tenantId}
+                agentId={chatAgent.agent_id}
+                agentName={chatAgent.agent_name}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
