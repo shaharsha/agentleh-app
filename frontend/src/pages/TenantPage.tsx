@@ -274,6 +274,12 @@ function DashboardTab({
   const [newAgentGender, setNewAgentGender] = useState<'female' | 'male'>('female')
   const [newAgentVoice, setNewAgentVoice] = useState('')
   const [newAgentPhone, setNewAgentPhone] = useState('')
+  // Details about the *end user* this agent will chat with — separate
+  // from the tenant admin filling out this form. Needed for Hebrew
+  // grammar (agents conjugate verbs based on the addressee's gender),
+  // and for personalization in the OpenClaw workspace prompt.
+  const [newAgentUserName, setNewAgentUserName] = useState('')
+  const [newAgentUserGender, setNewAgentUserGender] = useState<'' | 'female' | 'male'>('')
   const [phoneBlurred, setPhoneBlurred] = useState(false)
   const [provisioning, setProvisioning] = useState(false)
   const [provisionError, setProvisionError] = useState<string | null>(null)
@@ -390,6 +396,8 @@ function DashboardTab({
           agent_name: newAgentName.trim(),
           agent_gender: newAgentGender,
           phone: phoneE164,
+          user_name: newAgentUserName.trim() || undefined,
+          user_gender: newAgentUserGender || undefined,
           // Optional — backend falls back to the gender-matched default
           // (Kore for female, Puck for male) when omitted.
           tts_voice_name: newAgentVoice || undefined,
@@ -401,6 +409,8 @@ function DashboardTab({
       setNewAgentName('')
       setNewAgentVoice('')
       setNewAgentPhone('')
+      setNewAgentUserName('')
+      setNewAgentUserGender('')
       setPhoneBlurred(false)
       setShowNewAgent(false)
       onChanged()
@@ -619,6 +629,57 @@ function DashboardTab({
             ) : (
               /* ── Agent creation form ── */
               <>
+                {/* The user — who the agent will chat with on WhatsApp.
+                    Separate from the tenant admin filling out this form
+                    (who may be provisioning this agent for a colleague,
+                    family member, or client). Gender is used for Hebrew
+                    conjugation when the agent addresses them. */}
+                <div className="pb-2">
+                  <div className="text-xs font-semibold text-text-primary mb-2">
+                    {t({ he: 'מי ישוחח עם הסוכן', en: "Who'll chat with this agent" })}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-text-secondary mb-1">
+                        {t({ he: 'שם המשתמש', en: 'User name' })}
+                      </label>
+                      <input
+                        type="text"
+                        value={newAgentUserName}
+                        onChange={(e) => setNewAgentUserName(e.target.value)}
+                        placeholder={t({ he: 'יוסי', en: 'e.g. Yossi' })}
+                        dir={dir}
+                        autoComplete="off"
+                        className="input-glass w-full px-3 py-2.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-text-secondary mb-1">
+                        {t({ he: 'מגדר המשתמש', en: 'User gender' })}
+                      </label>
+                      <select
+                        value={newAgentUserGender}
+                        onChange={(e) => setNewAgentUserGender(e.target.value as '' | 'female' | 'male')}
+                        className="input-glass w-full px-3 py-2.5 text-sm appearance-none"
+                      >
+                        <option value="">{t({ he: 'בחר…', en: 'Select…' })}</option>
+                        <option value="female">{t({ he: 'נקבה', en: 'Female' })}</option>
+                        <option value="male">{t({ he: 'זכר', en: 'Male' })}</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-text-muted mt-1.5">
+                    {t({
+                      he: 'נשתמש במגדר כדי להתאים את פניית הסוכן בעברית (לשון זכר/נקבה).',
+                      en: "Used so the agent addresses them with the correct Hebrew grammar.",
+                    })}
+                  </p>
+                </div>
+
+                {/* The agent itself */}
+                <div className="text-xs font-semibold text-text-primary">
+                  {t({ he: 'פרטי הסוכן', en: 'Agent details' })}
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-text-secondary mb-1">

@@ -64,6 +64,7 @@ class AgentProvisioner(Protocol):
         user_name: str,
         tenant_id: int,
         bot_gender: str = "",
+        user_gender: str = "",
         tts_voice_name: str = "",
     ) -> ProvisionResult: ...
     def provision_stream(
@@ -74,6 +75,7 @@ class AgentProvisioner(Protocol):
         user_name: str,
         tenant_id: int,
         bot_gender: str = "",
+        user_gender: str = "",
         tts_voice_name: str = "",
     ) -> AsyncIterator[dict[str, Any]]: ...
     def deprovision(self, agent_id: str) -> DeprovisionResult: ...
@@ -103,16 +105,18 @@ class MockProvisioner:
         user_name: str,
         tenant_id: int,
         bot_gender: str = "",
+        user_gender: str = "",
         tts_voice_name: str = "",
     ) -> ProvisionResult:
         logger.info(
-            "MOCK: Provisioning agent %s for %s (phone: %s, name: %s, tenant: %s, gender: %s, voice: %s)",
+            "MOCK: Provisioning agent %s for %s (phone: %s, name: %s, tenant: %s, bot_gender: %s, user_gender: %s, voice: %s)",
             agent_id,
             user_name,
             phone,
             agent_name,
             tenant_id,
             bot_gender,
+            user_gender,
             tts_voice_name,
         )
 
@@ -172,6 +176,7 @@ class MockProvisioner:
         user_name: str,
         tenant_id: int,
         bot_gender: str = "",
+        user_gender: str = "",
         tts_voice_name: str = "",
     ) -> AsyncIterator[dict[str, Any]]:
         """Mock streaming provision — emits a few fake progress events
@@ -189,7 +194,7 @@ class MockProvisioner:
 
         result = self.provision(
             agent_id, phone, agent_name, user_name, tenant_id,
-            bot_gender=bot_gender, tts_voice_name=tts_voice_name,
+            bot_gender=bot_gender, user_gender=user_gender, tts_voice_name=tts_voice_name,
         )
         yield {
             "type": "result",
@@ -244,6 +249,7 @@ class VmHttpProvisioner:
         user_name: str,
         tenant_id: int,
         bot_gender: str = "",
+        user_gender: str = "",
         tts_voice_name: str = "",
     ) -> ProvisionResult:
         logger.info(
@@ -264,6 +270,8 @@ class VmHttpProvisioner:
             payload["user_name"] = user_name
         if bot_gender:
             payload["bot_gender"] = bot_gender
+        if user_gender:
+            payload["user_gender"] = user_gender
         if tts_voice_name:
             payload["tts_voice_name"] = tts_voice_name
 
@@ -330,6 +338,7 @@ class VmHttpProvisioner:
         user_name: str,
         tenant_id: int,
         bot_gender: str = "",
+        user_gender: str = "",
         tts_voice_name: str = "",
     ) -> AsyncIterator[dict[str, Any]]:
         """Streaming provision — connects to the daemon's /provision-stream
@@ -354,6 +363,8 @@ class VmHttpProvisioner:
             payload["user_name"] = user_name
         if bot_gender:
             payload["bot_gender"] = bot_gender
+        if user_gender:
+            payload["user_gender"] = user_gender
         if tts_voice_name:
             payload["tts_voice_name"] = tts_voice_name
 
