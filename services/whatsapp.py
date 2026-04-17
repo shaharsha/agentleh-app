@@ -1,17 +1,13 @@
-"""WhatsApp welcome-message service — Protocol, mock, and bridge-backed impl.
+"""WhatsApp welcome-message service - Protocol, mock, and bridge-backed impl.
 
 The bridge (`bridge.py` in the agentleh-bridge repo) exposes `POST /api/send`
 which accepts a `template_name` + `force_template=true` payload to send a
 WhatsApp Business template message. This is the ONLY way to initiate a
 conversation with a phone outside the 24-hour service window.
 
-For agent onboarding, we use the pre-approved `hello_greeting` template
-(body: "Hello! This is Agentleh. How can I help you today?"). The template
-has 0 parameters, so the payload is trivial.
-
 Implementation is picked by `pick_whatsapp()` at app startup:
-  - If BRIDGE_BASE_URL + BRIDGE_API_KEY are both set → BridgeWhatsApp
-  - Otherwise → MockWhatsApp (local dev / tests)
+  - If BRIDGE_BASE_URL + BRIDGE_API_KEY are both set -> BridgeWhatsApp
+  - Otherwise -> MockWhatsApp (local dev / tests)
 """
 
 from __future__ import annotations
@@ -24,47 +20,65 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# Primary template: strict-UTILITY Hebrew notification with the
-# agent's name as {{1}}. Body:
-#   Agentiko: הסוכן "{{1}}" הוקם בחשבונך. כדי להתחיל שיחה, יש לשלוח הודעה.
+# Primary welcome templates - warm, first-person, casual, mentioning the
+# agent's capabilities + Gmail/Calendar connect hint. Two variants needed
+# because Hebrew's role noun and present-tense verb agree with the bot's
+# gender ("הסוכן מטפל" vs "הסוכנת מטפלת").
 #
-# This is intentionally transactional (no first-person warmth, no
-# capabilities list, no persuasive language). The actual warm first
-# response from the agent - identity, capabilities, Gmail/Calendar
-# connect hint - comes in the agent's first conversational reply
-# (driven by AGENTS.md "הודעה ראשונה" section), not this template.
+# Body (male):
+#   היי, אני {{1}}, הסוכן שלך. אני מטפל במיילים, ביומן Google,
+#   בחיפושים ברשת, בזיכרון לטווח ארוך, וגם בהודעות קוליות בעברית.
+#   כדי לחבר Gmail ויומן Google - פשוט לבקש. במה אפשר להתחיל?
 #
-# Why: Meta's classifier auto-converts warm/first-person templates to
-# MARKETING, which is subject to the 131049 "healthy ecosystem
-# engagement" throttle - causing silent delivery failures we saw on
-# v1/v2. Keeping this strictly UTILITY guarantees reliable delivery;
-# the agent's voice lives in the free-form conversation that follows.
-HELLO_TEMPLATE_NAME = "agent_ready_he_v4"
-HELLO_TEMPLATE_LANGUAGE = "he"
+# Body (female): same shape with הסוכנת / מטפלת.
+#
+# These templates will likely be reclassified by Meta to MARKETING because
+# of the warm+capabilities framing. That means they're subject to the
+# 131049 "healthy ecosystem engagement" per-recipient throttle. For fresh
+# users the message should arrive fine; for recipients who've hit the
+# throttle it may be silently dropped - that's a known tradeoff for
+# prioritizing a human-feeling first touch over delivery guarantees.
+WELCOME_TEMPLATE_MALE = "agent_welcome_he_m"
+WELCOME_TEMPLATE_FEMALE = "agent_welcome_he_f"
+WELCOME_TEMPLATE_LANGUAGE = "he"
 
-# Fallback for legacy agents where agent_name might be empty — the
-# original English template with zero parameters.
+# Transactional UTILITY fallback if the gendered template isn't approved
+# yet (or Meta rejects it). Guaranteed delivery, cold tone.
+UTILITY_TEMPLATE_NAME = "agent_ready_he_v4"
+UTILITY_TEMPLATE_LANGUAGE = "he"
+
+# Last-resort fallback for legacy agents where agent_name is empty - the
+# original English zero-parameter template.
 FALLBACK_TEMPLATE_NAME = "hello_greeting"
 FALLBACK_TEMPLATE_LANGUAGE = "en_US"
 
 
 class WhatsAppService(Protocol):
-    def send_welcome(self, phone: str, agent_name: str) -> bool: ...
+    def send_welcome(
+        self, phone: str, agent_name: str, bot_gender: str = ""
+    ) -> bool: ...
 
 
 class MockWhatsApp:
-    def send_welcome(self, phone: str, agent_name: str) -> bool:
-        logger.info("MOCK: Would send welcome message to %s from agent '%s'", phone, agent_name)
+    def send_welcome(
+        self, phone: str, agent_name: str, bot_gender: str = ""
+    ) -> bool:
+        logger.info(
+            "MOCK: Would send welcome message to %s from agent '%s' (gender=%s)",
+            phone,
+            agent_name,
+            bot_gender or "-",
+        )
         return True
 
 
 class BridgeWhatsApp:
-    """Real implementation — sends a WhatsApp template message via the
+    """Real implementation - sends a WhatsApp template message via the
     bridge's authenticated /api/send endpoint.
 
     Non-fatal: if the bridge is unreachable or the send fails, we log
     and return False. Agent creation should NOT fail because a welcome
-    message didn't go through — the user can still message the agent
+    message didn't go through - the user can still message the agent
     directly from their phone.
     """
 
@@ -73,36 +87,35 @@ class BridgeWhatsApp:
         self.api_key = api_key or os.environ.get("BRIDGE_API_KEY", "")
         if not self.base_url or not self.api_key:
             logger.warning(
-                "BridgeWhatsApp: BRIDGE_BASE_URL or BRIDGE_API_KEY not set — "
+                "BridgeWhatsApp: BRIDGE_BASE_URL or BRIDGE_API_KEY not set - "
                 "welcome messages will be no-ops"
             )
 
-    def send_welcome(self, phone: str, agent_name: str) -> bool:
-        if not self.base_url or not self.api_key:
-            logger.info("BridgeWhatsApp: skipping welcome to %s (bridge not configured)", phone)
-            return False
-
-        # Use the Hebrew template with the agent's name as {{1}} when we
-        # have one; fall back to the English zero-param template otherwise
-        # (e.g. legacy agents where agent_name is empty).
+    def _build_payload(self, phone: str, agent_name: str, bot_gender: str) -> dict:
         name = (agent_name or "").strip()
-        if name:
-            payload = {
-                "to": phone,
-                "force_template": True,
-                "template_name": HELLO_TEMPLATE_NAME,
-                "language": HELLO_TEMPLATE_LANGUAGE,
-                "template_params": [name],
-            }
-        else:
-            payload = {
+        gender = (bot_gender or "").strip().lower()
+        if not name:
+            # No agent name -> fall back to the English zero-param template.
+            return {
                 "to": phone,
                 "force_template": True,
                 "template_name": FALLBACK_TEMPLATE_NAME,
                 "language": FALLBACK_TEMPLATE_LANGUAGE,
                 "template_params": [],
             }
+        # Pick the gendered warm template. Default to the masculine
+        # variant if gender isn't set (matches SOUL.md default).
+        template = WELCOME_TEMPLATE_FEMALE if gender == "female" else WELCOME_TEMPLATE_MALE
+        return {
+            "to": phone,
+            "force_template": True,
+            "template_name": template,
+            "language": WELCOME_TEMPLATE_LANGUAGE,
+            "template_params": [name],
+        }
 
+    def _post_send(self, payload: dict, phone: str, agent_name: str) -> tuple[bool, dict | None, int]:
+        """Return (success, bridge_body, status_code). Non-raising."""
         try:
             with httpx.Client(timeout=15.0) as client:
                 resp = client.post(
@@ -111,31 +124,36 @@ class BridgeWhatsApp:
                     headers={"Authorization": f"Bearer {self.api_key}"},
                 )
         except httpx.HTTPError as exc:
-            logger.warning("BridgeWhatsApp: send failed for %s: %s", phone, exc)
-            return False
+            logger.warning(
+                "BridgeWhatsApp: HTTP error sending %s to %s: %s",
+                payload.get("template_name"),
+                phone,
+                exc,
+            )
+            return False, None, 0
+
+        body = None
+        try:
+            body = resp.json()
+        except Exception:  # noqa: BLE001
+            body = {"raw": resp.text[:400]}
 
         if resp.status_code >= 400:
             logger.warning(
-                "BridgeWhatsApp: bridge rejected welcome to %s (%s): %s",
+                "BridgeWhatsApp: bridge rejected %s to %s (%s): %s",
+                payload.get("template_name"),
                 phone,
                 resp.status_code,
                 resp.text[:400],
             )
-            return False
+            return False, body, resp.status_code
 
-        # Parse the bridge response so we can log Meta's wamid + the
-        # resolved wa_id. A wa_id that differs from `phone` is a strong
-        # hint that the number was reformatted by Meta (rare) or that
-        # the template was delivered to a different account than
-        # expected. Missing wamid = Meta didn't accept the send even
-        # though the HTTP status was 200 at some intermediate hop.
-        try:
-            bridge_body = resp.json()
-        except Exception:  # noqa: BLE001
-            bridge_body = {"raw": resp.text[:400]}
-        meta_result = bridge_body.get("result") if isinstance(bridge_body, dict) else None
+        # Parse wamid + wa_id from Meta's response (nested under bridge's
+        # "result" key). A missing wamid means Meta silently dropped the
+        # send even though the HTTP status was 200.
         wamid = None
         wa_id = None
+        meta_result = body.get("result") if isinstance(body, dict) else None
         if isinstance(meta_result, dict):
             msgs = meta_result.get("messages") or []
             contacts = meta_result.get("contacts") or []
@@ -145,15 +163,54 @@ class BridgeWhatsApp:
                 wa_id = contacts[0].get("wa_id")
         logger.info(
             "BridgeWhatsApp: sent %s to phone=%s agent=%s status=%s wa_id=%s wamid=%s bridge_status=%s",
-            payload["template_name"],
+            payload.get("template_name"),
             phone,
             agent_name,
             resp.status_code,
             wa_id,
             wamid,
-            bridge_body.get("status") if isinstance(bridge_body, dict) else None,
+            body.get("status") if isinstance(body, dict) else None,
         )
-        return True
+        return True, body, resp.status_code
+
+    def send_welcome(
+        self, phone: str, agent_name: str, bot_gender: str = ""
+    ) -> bool:
+        if not self.base_url or not self.api_key:
+            logger.info("BridgeWhatsApp: skipping welcome to %s (bridge not configured)", phone)
+            return False
+
+        # Try the primary gendered warm template first. If the bridge
+        # rejects it (usually because the template isn't approved yet
+        # after a new submission), fall back to the transactional
+        # UTILITY template so the user still receives SOMETHING.
+        primary = self._build_payload(phone, agent_name, bot_gender)
+        ok, body, status = self._post_send(primary, phone, agent_name)
+        if ok:
+            return True
+
+        # Only fall back on specific rejection shapes - bridge returning
+        # 400 means Meta rejected (usually "template_name does not exist
+        # or not approved"). Don't fall back on 5xx or network errors
+        # because those might succeed on retry.
+        should_fallback = status == 400 and primary["template_name"] != UTILITY_TEMPLATE_NAME
+        if not should_fallback or not (agent_name or "").strip():
+            return False
+
+        logger.info(
+            "BridgeWhatsApp: primary template %s rejected, falling back to %s",
+            primary["template_name"],
+            UTILITY_TEMPLATE_NAME,
+        )
+        fallback = {
+            "to": phone,
+            "force_template": True,
+            "template_name": UTILITY_TEMPLATE_NAME,
+            "language": UTILITY_TEMPLATE_LANGUAGE,
+            "template_params": [agent_name.strip()],
+        }
+        ok2, _, _ = self._post_send(fallback, phone, agent_name)
+        return ok2
 
 
 def pick_whatsapp() -> WhatsAppService:
