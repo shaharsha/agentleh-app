@@ -258,12 +258,22 @@ async def run_chat_proxy(
     The caller (api/routes/chat.py) handles auth, tenant scoping, and
     passes us the agent's gateway_url + gateway_token + session_key.
     """
+    # IMPORTANT: we authenticate as clientId="gateway-client" + clientMode="backend"
+    # (identical to the agentleh bridge), NOT as clientMode="webchat". Reason:
+    # OpenClaw's gateway treats any "webchat" connection (either by mode OR by
+    # clientId="webchat-ui") as a browser Control UI client and enforces a
+    # Cross-Origin Origin check against gateway.controlUi.allowedOrigins. Our
+    # proxy runs server-side (Cloud Run → agent gateway over VPC), so there's
+    # no meaningful browser Origin to present. Using the bridge's clientMode
+    # bypasses the check, matches the existing paired.json entry, and doesn't
+    # weaken our isolation — the outbound frame sanitizer still enforces the
+    # per-method allowlist and the per-user sessionKey.
     try:
         gateway_ws = await _open_gateway_connection(
             gateway_url,
             gateway_token,
-            client_id="webchat-ui",
-            client_mode="webchat",
+            client_id="gateway-client",
+            client_mode="backend",
             display_name="Agentleh Web Chat",
         )
     except Exception as exc:  # noqa: BLE001
