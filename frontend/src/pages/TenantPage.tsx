@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { TenantDetail, TenantRole } from '../lib/types'
 import {
   getTenantDashboard,
@@ -13,6 +13,7 @@ import {
   provisionTenantAgent,
   deleteAgent,
 } from '../lib/api'
+import parsePhoneNumberFromString from 'libphonenumber-js'
 import { useI18n, type Bilingual } from '../lib/i18n'
 import { planLabel, statusLabel } from '../lib/labels'
 import TenantName from '../components/TenantName'
@@ -260,8 +261,34 @@ function DashboardTab({
   const [newAgentName, setNewAgentName] = useState('')
   const [newAgentGender, setNewAgentGender] = useState<'female' | 'male'>('female')
   const [newAgentPhone, setNewAgentPhone] = useState('')
+  const [phoneBlurred, setPhoneBlurred] = useState(false)
   const [provisioning, setProvisioning] = useState(false)
   const [provisionError, setProvisionError] = useState<string | null>(null)
+
+  // Phone parsing: accept any format (Israeli local, international). Default
+  // region IL so `050-123-4567` → +972501234567. Users can still paste any
+  // country if they include the leading `+`.
+  //
+  // `asYouType` reformats the literal input as the user types so they see
+  // digits grouped naturally. On blur we commit the formatted international
+  // version (e.g. "+972 50 123 4567") to the input. The compact E.164 form
+  // (no spaces) is what the backend stores — shown as a muted preview
+  // below so users understand what we're saving.
+  const parsedPhone = useMemo(() => {
+    const raw = newAgentPhone.trim()
+    if (!raw) return null
+    return parsePhoneNumberFromString(raw, 'IL') ?? null
+  }, [newAgentPhone])
+  const phoneE164 = parsedPhone?.isValid() ? parsedPhone.number : null
+
+  const handlePhoneBlur = () => {
+    setPhoneBlurred(true)
+    if (parsedPhone?.isValid()) {
+      // Pretty-print in the input so the user's "0501234567" becomes
+      // "+972 50 123 4567" — WYSIWYG with what we'll save (minus the spaces).
+      setNewAgentPhone(parsedPhone.formatInternational())
+    }
+  }
 
   // Real progress driven by the NDJSON stream from the backend:
   //   { step: N, total: M, label: "..." }
@@ -339,7 +366,7 @@ function DashboardTab({
   }
 
   async function handleProvision() {
-    if (!newAgentName.trim() || !newAgentPhone.trim()) return
+    if (!newAgentName.trim() || !phoneE164) return
     setProvisioning(true)
     setProvisionError(null)
     setProgress({ step: 0, total: 5, label: 'Connecting…' })
@@ -349,7 +376,7 @@ function DashboardTab({
         {
           agent_name: newAgentName.trim(),
           agent_gender: newAgentGender,
-          phone: newAgentPhone.trim(),
+          phone: phoneE164,
         },
         (p) => {
           setProgress({ step: p.step, total: p.total, label: p.label })
@@ -357,6 +384,7 @@ function DashboardTab({
       )
       setNewAgentName('')
       setNewAgentPhone('')
+      setPhoneBlurred(false)
       setShowNewAgent(false)
       onChanged()
     } catch (err) {
@@ -551,25 +579,46 @@ function DashboardTab({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    {t({
-                      he: 'מספר הוואטסאפ של המשתמש',
-                      en: "User's WhatsApp number",
-                    })}
+                    {t({ he: 'מה מספר הטלפון שלך?', en: "What's your phone number?" })}
                   </label>
                   <input
                     type="tel"
                     value={newAgentPhone}
-                    onChange={(e) => setNewAgentPhone(e.target.value)}
-                    placeholder="+972501234567"
+                    onChange={(e) => {
+                      setNewAgentPhone(e.target.value)
+                      if (phoneBlurred) setPhoneBlurred(false)
+                    }}
+                    onBlur={handlePhoneBlur}
+                    placeholder="050-123-4567"
+                    autoComplete="tel"
+                    inputMode="tel"
                     dir="ltr"
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 ${
+                      phoneBlurred && newAgentPhone.trim() && !phoneE164
+                        ? 'border-red-300 focus:ring-red-400'
+                        : 'border-gray-300 focus:ring-indigo-500'
+                    }`}
                   />
-                  <p className="text-[11px] text-gray-500 mt-1">
-                    {t({
-                      he: 'המספר שממנו ישלח המשתמש הודעות לסוכן (פורמט בינלאומי, לדוגמה +972501234567). לא המספר המשותף של Agentiko.',
-                      en: 'The number the user will message this agent from (E.164, e.g. +972501234567). Not Agentiko\'s shared business number.',
-                    })}
-                  </p>
+                  {phoneE164 ? (
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      {t({ he: 'יישמר כ-', en: 'Will save as ' })}
+                      <span dir="ltr" className="font-mono text-gray-700">{phoneE164}</span>
+                    </p>
+                  ) : phoneBlurred && newAgentPhone.trim() ? (
+                    <p className="text-[11px] text-red-600 mt-1">
+                      {t({
+                        he: 'מספר לא תקין — נסה שוב (למשל 050-123-4567)',
+                        en: 'Not a valid phone number — try again (e.g. 050-123-4567)',
+                      })}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      {t({
+                        he: 'מספר ישראלי או בינלאומי, כל פורמט. לא המספר המשותף של Agentiko.',
+                        en: "Israeli or international, any format. Not Agentiko's shared number.",
+                      })}
+                    </p>
+                  )}
                 </div>
                 {provisionError && (
                   <div className="text-sm text-red-700 bg-red-50 p-3 rounded">{provisionError}</div>
@@ -577,7 +626,7 @@ function DashboardTab({
                 <div className="flex gap-2">
                   <button
                     onClick={handleProvision}
-                    disabled={!newAgentName.trim() || !newAgentPhone.trim()}
+                    disabled={!newAgentName.trim() || !phoneE164}
                     className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
                   >
                     {t({ he: 'צור סוכן', en: 'Create agent' })}
