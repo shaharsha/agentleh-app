@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import type { AppUser, TenantMembership, TenantRole } from '../lib/types'
 import { createTenant } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { useTheme, type Theme } from '../lib/theme'
 import { useBackDismiss } from '../lib/useBackDismiss'
 import TenantName from './TenantName'
 import {
@@ -10,7 +11,10 @@ import {
   GodModeIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  MonitorIcon,
+  MoonIcon,
   PlusIcon,
+  SunIcon,
   XIcon,
 } from './icons'
 
@@ -61,6 +65,7 @@ export default function MobileDrawer({
   isSuperadmin,
 }: Props) {
   const { t, lang, setLang } = useI18n()
+  const { theme, setTheme } = useTheme()
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
@@ -283,6 +288,44 @@ export default function MobileDrawer({
                 <GlobeIcon className="w-4 h-4" />
                 English
               </button>
+            </div>
+          </section>
+
+          <hr className="border-border-light" />
+
+          {/* Theme */}
+          <section>
+            <h3 className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+              {t({ he: 'ערכת נושא', en: 'Theme' })}
+            </h3>
+            <div
+              role="radiogroup"
+              aria-label={t({ he: 'בחירת ערכת נושא', en: 'Theme selection' })}
+              className="flex gap-2 px-1"
+            >
+              {(
+                [
+                  ['auto', <MonitorIcon key="a" className="w-4 h-4" />, t({ he: 'אוטומטי', en: 'Auto' })],
+                  ['light', <SunIcon key="l" className="w-4 h-4" />, t({ he: 'בהיר', en: 'Light' })],
+                  ['dark', <MoonIcon key="d" className="w-4 h-4" />, t({ he: 'כהה', en: 'Dark' })],
+                ] as Array<[Theme, React.ReactNode, string]>
+              ).map(([target, icon, label]) => (
+                <button
+                  key={target}
+                  type="button"
+                  onClick={() => setTheme(target)}
+                  aria-pressed={theme === target}
+                  aria-label={label}
+                  className={`flex-1 inline-flex flex-col items-center justify-center gap-1 min-h-[56px] px-3 rounded-lg text-xs font-medium transition-colors ${
+                    theme === target
+                      ? 'bg-gray-900 text-white dark:bg-white/15 dark:text-text-primary'
+                      : 'bg-black/5 dark:bg-white/5 text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  {icon}
+                  <span>{label}</span>
+                </button>
+              ))}
             </div>
           </section>
 

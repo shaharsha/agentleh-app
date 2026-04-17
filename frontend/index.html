@@ -12,6 +12,31 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <script>
+      // Resolve the active theme BEFORE React mounts. Single line goal:
+      // no flash of light content on a dark-mode-pinned user, and vice
+      // versa. Must match the resolution order in src/lib/theme.tsx:
+      //   1. localStorage['agentleh.theme'] if it's 'light' or 'dark'
+      //   2. prefers-color-scheme media query (the 'auto' path)
+      (function () {
+        try {
+          var saved = localStorage.getItem('agentleh.theme');
+          var mode;
+          if (saved === 'light' || saved === 'dark') {
+            mode = saved;
+          } else {
+            mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', mode);
+        } catch (e) {
+          // localStorage / matchMedia disabled — default to light so at
+          // least the page renders something sane.
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+    <script>
       // Resolve the active language + direction BEFORE React mounts so
       // the very first paint matches whatever the user will see. Runs
       // synchronously in plain JS (no JSX, no modules) so there's no

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import type { AppUser, TenantMembership } from '../lib/types'
 import TenantSwitcher from './TenantSwitcher'
 import LanguageSwitcher from './LanguageSwitcher'
+import ThemeSwitcher from './ThemeSwitcher'
 import MobileDrawer from './MobileDrawer'
 import { useI18n } from '../lib/i18n'
 import { GodModeIcon, LayoutDashboardIcon, MenuIcon } from './icons'
@@ -104,6 +105,8 @@ export default function Layout({
               )}
 
               <LanguageSwitcher />
+
+              <ThemeSwitcher />
 
               {isSuperadmin && (
                 <a

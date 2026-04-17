@@ -69,8 +69,18 @@
   --icon-btn-hover-bg: rgba(0, 0, 0, 0.05);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+/* Dark-mode tokens.
+ *
+ * Activated by `html[data-theme="dark"]` — set by the pre-React script
+ * in index.html (synchronously reads localStorage + matchMedia), then
+ * maintained by ThemeProvider which listens to OS changes while the
+ * user is on 'auto'. We don't gate on @media (prefers-color-scheme)
+ * here because the script always picks the correct value before first
+ * paint — keeping a single source of truth avoids the two-block
+ * duplication problem. `html[data-theme="dark"]` and `:root` match the
+ * same element, so declaring tokens here works exactly like the former
+ * `:root` ruleset but only when data-theme is pinned to dark. */
+html[data-theme="dark"] {
     color-scheme: dark;
 
     /* Override @theme tokens for dark mode */
@@ -111,7 +121,6 @@
     --section-hero-3: #0C0907;
 
     --icon-btn-hover-bg: rgba(255, 255, 255, 0.06);
-  }
 }
 
 body {
