@@ -3,7 +3,8 @@ import type { AppUser, TenantMembership } from '../lib/types'
 import TenantSwitcher from './TenantSwitcher'
 import LanguageSwitcher from './LanguageSwitcher'
 import { useI18n } from '../lib/i18n'
-import { GodModeIcon, LayoutDashboardIcon, LogOutIcon } from './icons'
+import { GodModeIcon, LayoutDashboardIcon } from './icons'
+import ProfileMenu from './ProfileMenu'
 
 interface LayoutProps {
   children: ReactNode
@@ -22,7 +23,7 @@ export default function Layout({
   onTenantSelect,
   onRefreshTenants,
 }: LayoutProps) {
-  const { t, dir } = useI18n()
+  const { t } = useI18n()
   const isAdminRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
   const isTenantRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/tenants')
   const isSuperadmin = user?.role === 'superadmin'
@@ -37,14 +38,9 @@ export default function Layout({
   const iconBtnClass =
     'flex items-center justify-center w-9 h-9 rounded-lg text-text-secondary hover:text-text-primary hover:bg-gray-100 transition-colors cursor-pointer'
 
-  // LogOut icon always points "out" — flip it horizontally in RTL so
-  // the arrow head faces the reading edge rather than the logo.
-  const logoutIconClass = dir === 'rtl' ? 'w-[18px] h-[18px] -scale-x-100' : 'w-[18px] h-[18px]'
-
   const adminLabel = isAdminRoute
     ? t({ he: 'לוח הבקרה', en: 'Dashboard' })
     : t({ he: 'ניהול', en: 'Admin' })
-  const logoutLabel = t({ he: 'התנתקות', en: 'Logout' })
 
   return (
     <div className="min-h-screen section-gradient">
@@ -102,14 +98,7 @@ export default function Layout({
               </a>
             )}
 
-            <button
-              onClick={onLogout}
-              className={iconBtnClass}
-              title={logoutLabel}
-              aria-label={logoutLabel}
-            >
-              <LogOutIcon className={logoutIconClass} />
-            </button>
+            {user && <ProfileMenu user={user} onLogout={onLogout} />}
           </div>
         </div>
       </header>
