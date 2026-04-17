@@ -127,7 +127,7 @@ export interface AdminOverview {
 export interface UsageEvent {
   event_id: number
   ts: string
-  kind: 'llm' | 'search'
+  kind: 'llm' | 'search' | 'tts' | 'embedding'
   upstream: string
   model: string
   input_tokens: number | null
@@ -160,10 +160,12 @@ export interface UsageTotals {
   llm_micros: number
   search_micros: number
   tts_micros: number
+  embedding_micros: number
   llm_input_tokens: number
   llm_output_tokens: number
   search_queries: number
   tts_chars: number
+  embedding_tokens: number
   event_count: number
 }
 
@@ -174,6 +176,7 @@ export interface AgentUsageRow {
   llm_micros: number
   search_micros: number
   tts_micros: number
+  embedding_micros: number
   event_count: number
 }
 
