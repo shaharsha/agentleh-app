@@ -52,7 +52,11 @@ interface VoiceManifestEntry {
 interface VoiceManifest {
   model: string
   language_code: string
-  sample_text: string
+  // Per-gender preview text. Hebrew is gendered, so a female voice saying
+  // the male phrase ("אני הסוכן הדיגיטלי") sounds wrong. The generator
+  // synthesizes each voice speaking the text that matches its gender.
+  sample_text_female: string
+  sample_text_male: string
   default_voice: string
   voices: VoiceManifestEntry[]
 }
@@ -233,9 +237,16 @@ export default function VoicePicker({
         </div>
       )}
 
-      {/* Sample text — same phrase every voice speaks, so users compare apples-to-apples */}
+      {/* Sample text — gender-matched so the phrase agrees with the voice.
+          The Hebrew string is wrapped in <bdi dir="rtl"> so its question
+          mark lands on the correct side even when the surrounding UI is
+          LTR (English). Without the bidi isolation, the LTR layout pushes
+          Hebrew punctuation to the wrong edge. */}
       <div className="text-[12px] text-text-secondary text-center">
-        הקלטת הדגמה: "{manifest.sample_text}"
+        {lang === 'he' ? 'הקלטת הדגמה: ' : 'Audio preview: '}
+        <bdi dir="rtl" lang="he">
+          "{lockedGender === 'male' ? manifest.sample_text_male : manifest.sample_text_female}"
+        </bdi>
       </div>
 
       {/* Grid — single column on narrow phones, two on slightly wider ones,
