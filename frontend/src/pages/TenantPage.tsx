@@ -17,15 +17,17 @@ import { useI18n, type Bilingual } from '../lib/i18n'
 import { planLabel, statusLabel } from '../lib/labels'
 import TenantName from '../components/TenantName'
 import IntegrationsPanel from '../components/IntegrationsPanel'
+import UsageTab from '../components/UsageTab'
+import { microsToUsd } from '../lib/format'
 
 interface Props {
   tenantId: number
-  subpage: 'dashboard' | 'members' | 'settings'
+  subpage: 'dashboard' | 'members' | 'settings' | 'usage'
   onNavigate: (path: string) => void
   onTenantsChanged: () => void
 }
 
-type Tab = 'dashboard' | 'members' | 'settings'
+type Tab = 'dashboard' | 'members' | 'settings' | 'usage'
 
 /**
  * Unified tenant page with three tabs. Fully bilingual via useI18n:
@@ -140,7 +142,9 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
       ? { he: 'לוח בקרה', en: 'Dashboard' }
       : tab === 'members'
         ? { he: 'חברים', en: 'Members' }
-        : { he: 'הגדרות', en: 'Settings' }
+        : tab === 'usage'
+          ? { he: 'שימוש', en: 'Usage' }
+          : { he: 'הגדרות', en: 'Settings' }
 
   const tabButton = (tab: Tab) => (
     <button
@@ -188,6 +192,7 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
       <div className="border-b border-gray-200 mb-6 flex gap-2">
         {tabButton('dashboard')}
         {tabButton('members')}
+        {tabButton('usage')}
         {tabButton('settings')}
       </div>
 
@@ -198,6 +203,7 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
           agents={agents}
           isAdminOrOwner={isAdminOrOwner}
           onChanged={reloadSilent}
+          onNavigate={onNavigate}
         />
       )}
       {activeTab === 'members' && (
@@ -211,6 +217,7 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
           onChanged={reloadSilent}
         />
       )}
+      {activeTab === 'usage' && <UsageTab tenantId={tenantId} />}
       {activeTab === 'settings' && (
         <SettingsTab
           tenantId={tenantId}
@@ -236,12 +243,14 @@ function DashboardTab({
   agents,
   isAdminOrOwner,
   onChanged,
+  onNavigate,
 }: {
   tenantId: number
   dashboard: any
   agents: any[]
   isAdminOrOwner: boolean
   onChanged: () => void
+  onNavigate: (path: string) => void
 }) {
   const { t, dir } = useI18n()
   const subscription = dashboard?.subscription
@@ -380,10 +389,6 @@ function DashboardTab({
   // Numbers + currencies stay in LTR because the bidi algorithm flips
   // "$1.23" in RTL context in confusing ways. We wrap them in dir="ltr"
   // spans so they always read left-to-right.
-  const microsToUsd = (m: number | null | undefined) => {
-    if (m == null) return '—'
-    return `$${(m / 1_000_000).toFixed(2)}`
-  }
   const num = (v: string) => <span dir="ltr">{v}</span>
 
   return (
@@ -650,6 +655,13 @@ function DashboardTab({
               <div className="font-medium">{num(microsToUsd(totals.tts_micros))}</div>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => onNavigate(`/tenants/${tenantId}/usage`)}
+            className="mt-4 text-sm text-indigo-600 hover:text-indigo-700 cursor-pointer"
+          >
+            {t({ he: 'פירוט מלא לפי סוכן ←', en: '→ Full breakdown by agent' })}
+          </button>
         </div>
       )}
 

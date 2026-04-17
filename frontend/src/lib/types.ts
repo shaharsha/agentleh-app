@@ -156,6 +156,52 @@ export interface AdminAgentDetail {
   }
 }
 
+export interface UsageTotals {
+  llm_micros: number
+  search_micros: number
+  tts_micros: number
+  llm_input_tokens: number
+  llm_output_tokens: number
+  search_queries: number
+  tts_chars: number
+  event_count: number
+}
+
+export interface AgentUsageRow {
+  agent_id: string
+  agent_name: string
+  agent_gender: string
+  llm_micros: number
+  search_micros: number
+  tts_micros: number
+  event_count: number
+}
+
+export interface TenantUsage {
+  tenant_id: number
+  range: {
+    from: string
+    to: string
+    kind: 'billing_period' | 'custom'
+  } | null
+  subscription: {
+    plan_id: string
+    plan_name: string
+    status: string
+    period_start: string
+    period_end: string
+    base_allowance_micros: number
+    used_micros: number
+    overage_enabled: boolean
+    overage_cap_micros: number | null
+    overage_used_micros: number
+    wallet_balance_micros: number
+    billing_mode: string
+  } | null
+  totals: Partial<UsageTotals>
+  agents: AgentUsageRow[]
+}
+
 export interface Agent {
   id: number
   agent_id: string

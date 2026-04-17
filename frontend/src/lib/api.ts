@@ -3,6 +3,7 @@ import type {
   IntegrationsResponse,
   GoogleConnectStartResponse,
   GoogleDisconnectResponse,
+  TenantUsage,
 } from './types'
 
 async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
@@ -310,6 +311,19 @@ export async function acceptInvite(token: string) {
 export async function getTenantDashboard(tenantId: number) {
   const res = await authFetch(`/api/dashboard/tenants/${tenantId}`)
   if (!res.ok) throw new Error('Tenant dashboard failed')
+  return res.json()
+}
+
+export async function getTenantUsage(
+  tenantId: number,
+  opts?: { from?: string; to?: string },
+): Promise<TenantUsage> {
+  const qs = new URLSearchParams()
+  if (opts?.from) qs.set('from', opts.from)
+  if (opts?.to) qs.set('to', opts.to)
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  const res = await authFetch(`/api/dashboard/tenants/${tenantId}/usage${suffix}`)
+  if (!res.ok) throw new Error('Tenant usage failed')
   return res.json()
 }
 

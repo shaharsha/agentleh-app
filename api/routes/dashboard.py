@@ -13,7 +13,7 @@ import os
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from api.deps import TenantContext, get_active_tenant_member, get_current_user
 
@@ -56,6 +56,45 @@ async def _fetch_tenant_spend(tenant_id: int) -> dict[str, Any] | None:
         return None
     if resp.status_code >= 400:
         logger.warning("meter %s for tenant=%s: %s", resp.status_code, tenant_id, resp.text[:200])
+        return None
+    return resp.json()
+
+
+async def _fetch_tenant_usage_by_agent(
+    tenant_id: int,
+    from_: str | None,
+    to: str | None,
+) -> dict[str, Any] | None:
+    """Call the meter's GET /admin/spend/tenant/{tenant_id}/by-agent.
+
+    Returns None on 404 (no active subscription) or any transport error;
+    the caller is expected to render an empty/zero state.
+    """
+    token = _meter_admin_token()
+    if not token:
+        logger.warning("APP_METER_ADMIN_TOKEN not set; skipping meter usage lookup")
+        return None
+    params: dict[str, str] = {}
+    if from_ is not None:
+        params["from"] = from_
+    if to is not None:
+        params["to"] = to
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(
+                f"{_meter_base_url().rstrip('/')}/admin/spend/tenant/{tenant_id}/by-agent",
+                headers={"Authorization": f"Bearer {token}"},
+                params=params,
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("meter unreachable for tenant=%s usage: %s", tenant_id, exc)
+        return None
+    if resp.status_code == 404:
+        return None
+    if resp.status_code >= 400:
+        logger.warning(
+            "meter %s for tenant=%s usage: %s", resp.status_code, tenant_id, resp.text[:200]
+        )
         return None
     return resp.json()
 
@@ -161,6 +200,71 @@ async def _build_tenant_dashboard(
         "agents": enriched_agents,
         "subscription": tenant_spend.get("subscription") if tenant_spend else None,
         "totals": tenant_spend.get("totals") if tenant_spend else None,
+    }
+
+
+@router.get("/tenants/{tenant_id}/usage")
+async def tenant_usage(
+    tenant_id: int,
+    request: Request,
+    from_: str | None = Query(default=None, alias="from"),
+    to: str | None = Query(default=None),
+    ctx: TenantContext = Depends(get_active_tenant_member),
+):
+    """Per-agent usage breakdown for a tenant, over a time range.
+
+    - Default range (no ``from``/``to``): the active subscription's billing
+      period. Response includes the ``subscription`` object and the
+      allowance progress numbers.
+    - Custom range: ``from=ISO8601&to=ISO8601``. Capped at 90 days by the
+      meter. Response omits ``subscription`` (period-scoped and meaningless
+      for ad-hoc ranges).
+
+    Agents in the tenant that had zero usage in the range are still
+    included (with zeroed totals) so the UI can render a complete roster.
+    """
+    db = request.app.state.db
+    tenant = ctx.tenant
+    agents = db.list_tenant_agents(tenant["id"])
+    usage = await _fetch_tenant_usage_by_agent(tenant["id"], from_, to)
+
+    # Build a name map so we can enrich meter rows with agent_name.
+    agent_meta: dict[str, dict[str, Any]] = {
+        a["agent_id"]: {"agent_name": a["agent_name"], "agent_gender": a["agent_gender"]}
+        for a in agents
+    }
+
+    meter_agents = (usage or {}).get("agents") or []
+    seen: set[str] = set()
+    enriched: list[dict[str, Any]] = []
+    for row in meter_agents:
+        aid = row["agent_id"]
+        seen.add(aid)
+        meta = agent_meta.get(aid, {"agent_name": aid, "agent_gender": ""})
+        enriched.append({**row, **meta})
+
+    # Include agents with zero usage so the UI shows a complete roster.
+    for a in agents:
+        if a["agent_id"] in seen:
+            continue
+        enriched.append(
+            {
+                "agent_id": a["agent_id"],
+                "agent_name": a["agent_name"],
+                "agent_gender": a["agent_gender"],
+                "llm_micros": 0,
+                "search_micros": 0,
+                "tts_micros": 0,
+                "event_count": 0,
+            }
+        )
+
+    return {
+        "tenant_id": tenant["id"],
+        "range": (usage or {}).get("range"),
+        "subscription": (usage or {}).get("subscription"),
+        "totals": (usage or {}).get("totals") or {},
+        "agents": enriched,
     }
 
 
