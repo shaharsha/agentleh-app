@@ -142,15 +142,20 @@ export default function ChatPane({ tenantId, agentId, agentName }: ChatPaneProps
         return
       }
       if (frame.type === 'error') {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `err-${Date.now()}`,
-            role: 'system',
-            text: `Proxy error: ${frame.error}`,
-            ts: Date.now(),
-          },
-        ])
+        // Dedupe: a failing gateway handshake loops the reconnect
+        // attempts, which would pile up identical system bubbles. Only
+        // append if the last system message was a different error.
+        setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          const text = `Proxy error: ${frame.error}`
+          if (last && last.role === 'system' && last.text === text) {
+            return prev
+          }
+          return [
+            ...prev,
+            { id: `err-${Date.now()}`, role: 'system', text, ts: Date.now() },
+          ]
+        })
         return
       }
 
