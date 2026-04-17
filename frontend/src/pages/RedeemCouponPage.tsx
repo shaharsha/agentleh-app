@@ -13,12 +13,20 @@ interface RedeemCouponPageProps {
   onComplete: () => void
 }
 
-const PLANS = [
+interface PlanCard {
+  id: string
+  name: string
+  price: string
+  badge?: string
+  features: string[]
+}
+
+const PLANS: PlanCard[] = [
   { id: 'minimal', name: 'מינימלי', price: '99', features: ['עוזר אישי בסיסי', 'בלי קול', 'בדיקות מהירות'] },
   { id: 'starter', name: 'סטארטר', price: '399', features: ['עוזר אישי בוואטסאפ', 'הודעות קוליות', 'תמיכה בעברית'] },
   { id: 'business', name: 'עסקי', price: '699', badge: 'הכי פופולרי', features: ['הכל בסטארטר', 'אינטגרציות (Gmail, Calendar)', 'תמיכה מועדפת'] },
   { id: 'premium', name: 'פרימיום', price: '1199', features: ['הכל בעסקי', 'מכסה גבוהה במיוחד', 'התאמה אישית מלאה'] },
-] as const
+]
 
 const ERROR_MSG_HE: Record<string, string> = {
   coupon_not_found: 'הקוד שהזנת לא קיים',
