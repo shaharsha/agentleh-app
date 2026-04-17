@@ -21,6 +21,7 @@ import {
   adminGrantPlan,
   adminListCouponRedemptions,
   adminListCoupons,
+  adminListTenants,
   adminSetCouponDisabled,
   getAdminOverview,
   getAdminAgentDetail,
@@ -29,6 +30,7 @@ import {
   setUserRole,
   type AdminCouponRedemptionRow,
   type AdminCouponRow,
+  type AdminTenantRow,
 } from '../lib/api'
 import type {
   AdminOverview,
@@ -39,8 +41,8 @@ import type {
 } from '../lib/types'
 import { useI18n } from '../lib/i18n'
 
-type AdminTab = 'agents' | 'users' | 'plans' | 'coupons' | 'stats'
-const VALID_TABS: readonly AdminTab[] = ['agents', 'users', 'plans', 'coupons', 'stats']
+type AdminTab = 'agents' | 'users' | 'plans' | 'coupons' | 'tenants' | 'stats'
+const VALID_TABS: readonly AdminTab[] = ['agents', 'users', 'plans', 'coupons', 'tenants', 'stats']
 
 function readTabFromUrl(): AdminTab {
   if (typeof window === 'undefined') return 'agents'
@@ -183,6 +185,7 @@ export default function AdminPage() {
     users: { he: 'משתמשים', en: 'Users' },
     plans: { he: 'תוכניות', en: 'Plans' },
     coupons: { he: 'קופונים', en: 'Coupons' },
+    tenants: { he: 'סביבות עבודה', en: 'Tenants' },
     stats: { he: 'סטטיסטיקות', en: 'Stats' },
   }
 
@@ -201,10 +204,13 @@ export default function AdminPage() {
       </div>
 
       <div className="flex gap-2 border-b">
-        {(['agents', 'users', 'plans', 'coupons'] as const).map((name) => {
-          // Coupons are loaded by the tab's own component on mount,
-          // not by the top-level overview, so the count is omitted.
-          const count = name === 'coupons' ? null : (overview[name] as unknown[]).length
+        {(['agents', 'users', 'plans', 'coupons', 'tenants'] as const).map((name) => {
+          // Coupons + tenants load on tab mount via their own components,
+          // so the parent overview doesn't carry counts for them.
+          const count =
+            name === 'coupons' || name === 'tenants'
+              ? null
+              : (overview[name] as unknown[]).length
           return (
             <button
               key={name}
@@ -248,6 +254,8 @@ export default function AdminPage() {
       {tab === 'plans' && <PlansTab plans={overview.plans} />}
 
       {tab === 'coupons' && <CouponsTab plans={overview.plans} />}
+
+      {tab === 'tenants' && <TenantsTab />}
 
       {tab === 'stats' && <StatsTab />}
 
@@ -2091,6 +2099,146 @@ function AgentDetailModal({
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── Tenants tab (T1.3 admin frontend) ──────────────────────────────────
+// Cross-tenant list. Each row links into /tenants/{id} where the existing
+// TenantContext resolver auto-grants superadmin access (no JWT minting).
+// "View" is the impersonation lever — the superadmin sees the tenant's
+// own UI exactly as a member would, plus their normal admin overlays.
+
+function TenantsTab() {
+  const { t } = useI18n()
+  const [rows, setRows] = useState<AdminTenantRow[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    adminListTenants()
+      .then((data) => { if (!cancelled) setRows(data.tenants) })
+      .catch((err) => { if (!cancelled) setError((err as Error).message) })
+    return () => { cancelled = true }
+  }, [])
+
+  if (error) {
+    return (
+      <div className="text-red-600 py-6">
+        {t({ he: 'שגיאה: ', en: 'Error: ' })}{error}
+      </div>
+    )
+  }
+  if (rows === null) {
+    return (
+      <div className="text-gray-500 py-6">
+        {t({ he: 'טוען…', en: 'Loading…' })}
+      </div>
+    )
+  }
+
+  const q = filter.trim().toLowerCase()
+  const visible = q
+    ? rows.filter((r) =>
+        (r.name || '').toLowerCase().includes(q) ||
+        (r.owner_email || '').toLowerCase().includes(q) ||
+        (r.slug || '').toLowerCase().includes(q),
+      )
+    : rows
+
+  function fmtDate(iso: string | null): string {
+    if (!iso) return '—'
+    return new Date(iso).toLocaleDateString('en-GB')
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <input
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder={t({ he: 'סינון לפי שם / אימייל / slug…', en: 'Filter by name / email / slug…' })}
+          className="input-glass w-full max-w-sm px-3 py-2 text-sm"
+        />
+        <span className="text-sm text-gray-500 shrink-0">
+          {visible.length === rows.length
+            ? t({ he: `${rows.length} סביבות`, en: `${rows.length} tenants` })
+            : t({ he: `${visible.length} מתוך ${rows.length}`, en: `${visible.length} of ${rows.length}` })}
+        </span>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-gray-200">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="text-start p-3 font-medium text-gray-700">{t({ he: 'שם', en: 'Name' })}</th>
+              <th className="text-start p-3 font-medium text-gray-700">{t({ he: 'בעלים', en: 'Owner' })}</th>
+              <th className="text-start p-3 font-medium text-gray-700">{t({ he: 'תוכנית', en: 'Plan' })}</th>
+              <th className="text-end p-3 font-medium text-gray-700">{t({ he: 'חברים', en: 'Members' })}</th>
+              <th className="text-end p-3 font-medium text-gray-700">{t({ he: 'סוכנים', en: 'Agents' })}</th>
+              <th className="text-start p-3 font-medium text-gray-700">{t({ he: 'מצב חבילה', en: 'Sub status' })}</th>
+              <th className="text-start p-3 font-medium text-gray-700">{t({ he: 'תוקף עד', en: 'Period end' })}</th>
+              <th className="text-end p-3 font-medium text-gray-700"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((r) => (
+              <tr key={r.id} className="border-t border-gray-100 hover:bg-gray-50">
+                <td className="p-3">
+                  <div className="font-medium text-gray-900">{r.name}</div>
+                  <code className="text-xs text-gray-500 font-mono">{r.slug}</code>
+                </td>
+                <td className="p-3">
+                  <div className="text-gray-900">{r.owner_full_name || r.owner_email || `#${r.owner_user_id}`}</div>
+                  {r.owner_full_name && r.owner_email && (
+                    <div className="text-xs text-gray-500">{r.owner_email}</div>
+                  )}
+                </td>
+                <td className="p-3 text-gray-700">
+                  {r.plan_id ? (
+                    <span>{r.plan_name_he || r.plan_id}</span>
+                  ) : (
+                    <span className="text-gray-400 italic">
+                      {t({ he: 'אין תוכנית פעילה', en: 'No active plan' })}
+                    </span>
+                  )}
+                </td>
+                <td className="p-3 text-end tabular-nums">{r.member_count}</td>
+                <td className="p-3 text-end tabular-nums">{r.agent_count}</td>
+                <td className="p-3 text-gray-700">
+                  {r.subscription_status || '—'}
+                </td>
+                <td className="p-3 text-gray-700 tabular-nums" dir="ltr">
+                  {fmtDate(r.subscription_period_end)}
+                </td>
+                <td className="p-3 text-end">
+                  <a
+                    href={`/tenants/${r.id}`}
+                    className="text-blue-600 hover:underline text-sm"
+                  >
+                    {t({ he: 'פתח/י', en: 'Open' })}
+                  </a>
+                </td>
+              </tr>
+            ))}
+            {visible.length === 0 && (
+              <tr>
+                <td colSpan={8} className="p-6 text-center text-gray-500">
+                  {t({ he: 'אין סביבות תואמות', en: 'No matching tenants' })}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-xs text-gray-500">
+        {t({
+          he: 'לחיצה על "פתח" מובילה לסביבת העבודה — אתה תראה אותה כפי שחבר רגיל רואה אותה (עם הרשאות superadmin).',
+          en: '"Open" navigates into the workspace — you see it as a regular member would, with your superadmin overlay.',
+        })}
+      </p>
     </div>
   )
 }

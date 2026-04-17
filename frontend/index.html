@@ -25,7 +25,17 @@
       (function () {
         try {
           var lang;
-          var saved = localStorage.getItem('agentleh.lang');
+          // 0. ?lang= handoff from the landing page (different origin,
+          //    so localStorage isn't shared). If present, honor it and
+          //    persist — the React-side pickInitialLang also strips the
+          //    param via replaceState so it never leaks into bookmarks.
+          var params = new URLSearchParams(window.location.search);
+          var param = params.get('lang');
+          if (param === 'he' || param === 'en') {
+            localStorage.setItem('agentleh.lang', param);
+            lang = param;
+          }
+          var saved = lang || localStorage.getItem('agentleh.lang');
           if (saved === 'he' || saved === 'en') {
             lang = saved;
           } else {

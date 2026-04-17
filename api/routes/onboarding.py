@@ -89,7 +89,7 @@ async def submit(
 
     # Send welcome message (mocked)
     whatsapp = request.app.state.whatsapp
-    whatsapp.send_welcome(body.phone, body.agent_name)
+    whatsapp.send_welcome(body.phone, body.agent_name, body.agent_gender)
 
     # Mark onboarding complete
     db.update_user(user["id"], onboarding_status="complete")
