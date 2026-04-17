@@ -23,21 +23,6 @@ class OnboardingSubmit(BaseModel):
     tts_voice_name: str | None = None
 
 
-@router.get("/status")
-async def status(user: dict = Depends(get_current_user), request: Request = None):
-    db = request.app.state.db
-    agents = db.get_user_agents(user["id"])
-    return {
-        "onboarding_status": user["onboarding_status"],
-        "user": {
-            "full_name": user["full_name"],
-            "phone": user["phone"],
-            "gender": user["gender"],
-        },
-        "agents": agents,
-    }
-
-
 @router.post("/submit")
 async def submit(
     body: OnboardingSubmit,
@@ -95,33 +80,12 @@ async def submit(
         agent_name=body.agent_name,
         user_name=body.full_name or user["full_name"],
         tenant_id=tenant["id"],
+        bot_gender=body.agent_gender,
+        tts_voice_name=body.tts_voice_name or "",
     )
 
     if not result.success:
         raise HTTPException(status_code=500, detail=f"Provisioning failed: {result.error}")
-
-    # Persist user's voice pick — runs AFTER provisioning so the row
-    # already exists. Done as a separate UPDATE (not a provisioner param)
-    # because the Protocol is co-owned with the multi-tenancy refactor;
-    # adding kwargs there would ripple through every implementation. The
-    # agents.tts_voice_name column defaults to 'Kore' (see meter migration
-    # 008), so older onboarding clients that don't send the field produce
-    # agents with the default voice — no regression.
-    if body.tts_voice_name:
-        db._execute(
-            "UPDATE agents SET tts_voice_name = %s WHERE agent_id = %s",
-            (body.tts_voice_name, result.agent_id),
-        )
-
-    # Create legacy user-agent link via the compat view (which has an
-    # INSTEAD OF INSERT trigger writing to app_user_agents_legacy). Kept
-    # through Phase 3 so existing admin dashboard joins keep working.
-    user_agent = db.create_user_agent(
-        user_id=user["id"],
-        agent_id=result.agent_id,
-        agent_name=body.agent_name,
-        agent_gender=body.agent_gender,
-    )
 
     # Send welcome message (mocked)
     whatsapp = request.app.state.whatsapp
@@ -133,6 +97,11 @@ async def submit(
     return {
         "agent_id": result.agent_id,
         "status": "active",
-        "agent": user_agent,
+        "agent": {
+            "agent_id": result.agent_id,
+            "agent_name": body.agent_name,
+            "agent_gender": body.agent_gender,
+            "status": "active",
+        },
         "tenant_id": tenant["id"],
     }

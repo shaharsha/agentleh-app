@@ -551,6 +551,8 @@ async def provision_agent(
                 agent_name=body.agent_name,
                 user_name=user_name,
                 tenant_id=tenant_id,
+                bot_gender=body.agent_gender,
+                tts_voice_name=body.tts_voice_name or "",
             ):
                 if event.get("type") == "result":
                     vm_result = event
@@ -575,31 +577,10 @@ async def provision_agent(
             }) + "\n"
             return
 
-        # Post-provision DB work — same as the old blocking path.
-        # agent_id from the VM result is authoritative.
+        # agent_name, bot_gender, and tts_voice_name were persisted
+        # atomically by create-agent.sh during the INSERT — no follow-up
+        # UPDATE needed. agent_id from the VM result is authoritative.
         result_agent_id = vm_result.get("agent_id") or agent_id
-        if body.tts_voice_name:
-            db._execute(  # noqa: SLF001
-                "UPDATE agents SET tts_voice_name = %s WHERE agent_id = %s",
-                (body.tts_voice_name, result_agent_id),
-            )
-        if body.agent_gender:
-            db._execute(  # noqa: SLF001
-                """
-                UPDATE app_user_agents_legacy SET agent_gender = %s
-                 WHERE agent_id = %s
-                """,
-                (body.agent_gender, result_agent_id),
-            )
-        try:
-            db.create_user_agent(
-                user_id=ctx.user_id,
-                agent_id=result_agent_id,
-                agent_name=body.agent_name,
-                agent_gender=body.agent_gender,
-            )
-        except Exception:  # noqa: BLE001
-            logger.warning("create_user_agent link failed for %s", result_agent_id)
 
         # Kick off the WhatsApp template hello message. Emit a progress
         # event so the browser gets a visual tick while the bridge

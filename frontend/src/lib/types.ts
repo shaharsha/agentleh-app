@@ -238,8 +238,7 @@ export interface Agent {
   status: string
   gateway_url: string
   created_at: string
-  // Added by db.get_user_agents JOIN on agents — populated on recent agents
-  // (created post-meter-migration-008) but may be absent for legacy rows.
+  // Sourced directly from the `agents` row (post-Phase-4 cleanup).
   tenant_id?: number
   tts_voice_name?: string
 }

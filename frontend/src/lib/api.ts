@@ -212,18 +212,6 @@ export async function updateAgentVoice(
   return res.json()
 }
 
-export async function getOnboardingStatus() {
-  const res = await authFetch('/api/onboarding/status')
-  if (!res.ok) throw new Error('Status failed')
-  return res.json()
-}
-
-export async function getDashboard() {
-  const res = await authFetch('/api/dashboard')
-  if (!res.ok) throw new Error('Dashboard failed')
-  return res.json()
-}
-
 // ─── Superadmin ──────────────────────────────────────────────────────
 
 export async function getAdminOverview() {
