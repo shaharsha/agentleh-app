@@ -124,6 +124,14 @@ async def create_tenant_route(
         billing_email=body.billing_email or user["email"],
     )
     logger.info("tenant created id=%s by user=%s", tenant["id"], user["id"])
+    db.log_audit(
+        tenant_id=tenant["id"],
+        actor_user_id=user["id"],
+        action="tenant.create",
+        target_type="tenant",
+        target_id=str(tenant["id"]),
+        metadata={"name": tenant["name"], "slug": tenant["slug"]},
+    )
     return _tenant_out(tenant, role="owner")
 
 
@@ -209,7 +217,19 @@ async def update_tenant_route(
         fields["billing_email"] = body.billing_email
     if not fields:
         return _tenant_out(ctx.tenant, role=ctx.role)
+    before = ctx.tenant
     updated = db.update_tenant(tenant_id, **fields)
+    db.log_audit(
+        tenant_id=tenant_id,
+        actor_user_id=ctx.user_id,
+        action="tenant.rename" if "name" in fields else "tenant.update",
+        target_type="tenant",
+        target_id=str(tenant_id),
+        metadata={
+            k: {"old": before.get(k), "new": updated.get(k) if updated else None}
+            for k in fields
+        },
+    )
     return _tenant_out(updated, role=ctx.role)
 
 
@@ -233,6 +253,14 @@ async def delete_tenant_route(
             },
         )
     db.soft_delete_tenant(tenant_id)
+    db.log_audit(
+        tenant_id=tenant_id,
+        actor_user_id=ctx.user_id,
+        action="tenant.delete",
+        target_type="tenant",
+        target_id=str(tenant_id),
+        metadata={"name": ctx.tenant.get("name")},
+    )
     logger.info("tenant soft-deleted id=%s by user=%s", tenant_id, ctx.user_id)
 
 
@@ -252,6 +280,17 @@ async def transfer_owner_route(
         db.transfer_tenant_owner(tenant_id, body.new_owner_user_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"error": str(exc)})
+    db.log_audit(
+        tenant_id=tenant_id,
+        actor_user_id=ctx.user_id,
+        action="tenant.transfer_owner",
+        target_type="user",
+        target_id=str(body.new_owner_user_id),
+        metadata={
+            "old_owner_user_id": ctx.tenant.get("owner_user_id"),
+            "new_owner_user_id": body.new_owner_user_id,
+        },
+    )
     return {"tenant_id": tenant_id, "new_owner_user_id": body.new_owner_user_id}
 
 
@@ -294,12 +333,24 @@ async def change_member_role(
             status_code=400,
             detail={"error": "cannot_demote_owner_use_transfer"},
         )
+    previous = db.get_tenant_membership(tenant_id, user_id)
     try:
         updated = db.set_member_role(tenant_id, user_id, body.role)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"error": str(exc)})
     if updated is None:
         raise HTTPException(status_code=404, detail={"error": "member_not_found"})
+    db.log_audit(
+        tenant_id=tenant_id,
+        actor_user_id=ctx.user_id,
+        action="member.change_role",
+        target_type="user",
+        target_id=str(user_id),
+        metadata={
+            "old_role": previous["role"] if previous else None,
+            "new_role": updated["role"],
+        },
+    )
     return {"user_id": user_id, "role": updated["role"]}
 
 
@@ -316,7 +367,16 @@ async def remove_member(
             status_code=400,
             detail={"error": "cannot_remove_owner"},
         )
+    previous = db.get_tenant_membership(tenant_id, user_id)
     db.remove_tenant_member(tenant_id, user_id)
+    db.log_audit(
+        tenant_id=tenant_id,
+        actor_user_id=ctx.user_id,
+        action="member.remove",
+        target_type="user",
+        target_id=str(user_id),
+        metadata={"role_at_removal": previous["role"] if previous else None},
+    )
 
 
 # ─── Invites ────────────────────────────────────────────────────────────
@@ -371,6 +431,19 @@ async def create_invite_route(
         logger.warning("invite email send failed: %s", exc)
         email_error = str(exc)
 
+    db.log_audit(
+        tenant_id=tenant_id,
+        actor_user_id=ctx.user_id,
+        action="member.invite",
+        target_type="invite",
+        target_id=str(invite_row["id"]),
+        metadata={
+            "email": invite_row["email"],
+            "role": invite_row["role"],
+            "email_sent": email_sent,
+        },
+    )
+
     return {
         "invite": {
             "id": invite_row["id"],
@@ -415,6 +488,54 @@ async def revoke_invite_route(
 ) -> None:
     db = request.app.state.db
     db.revoke_invite(invite_id)
+    db.log_audit(
+        tenant_id=tenant_id,
+        actor_user_id=ctx.user_id,
+        action="invite.revoke",
+        target_type="invite",
+        target_id=str(invite_id),
+    )
+
+
+# ─── Audit log ─────────────────────────────────────────────────────────
+
+
+@router.get("/{tenant_id}/audit")
+async def list_audit(
+    tenant_id: int,
+    request: Request,
+    limit: int = 100,
+    offset: int = 0,
+    ctx: TenantContext = Depends(require_tenant_role("admin")),
+) -> dict[str, Any]:
+    """Time-descending audit feed for this tenant. Visible to admin+
+    (owners + admins); members don't see audit history.
+
+    Each row carries the action name, target, metadata, actor (email +
+    name for humans, NULL for system-initiated actions), and timestamp.
+    """
+    db = request.app.state.db
+    limit = max(1, min(int(limit), 500))
+    offset = max(0, int(offset))
+    rows = db.list_tenant_audit(tenant_id, limit=limit, offset=offset)
+    return {
+        "events": [
+            {
+                "id": r["id"],
+                "actor_user_id": r["actor_user_id"],
+                "actor_email": r.get("actor_email"),
+                "actor_full_name": r.get("actor_full_name"),
+                "action": r["action"],
+                "target_type": r.get("target_type"),
+                "target_id": r.get("target_id"),
+                "metadata": r.get("metadata"),
+                "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
+            }
+            for r in rows
+        ],
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 # ─── Tenant-scoped agents ───────────────────────────────────────────────
@@ -582,6 +703,20 @@ async def provision_agent(
         # UPDATE needed. agent_id from the VM result is authoritative.
         result_agent_id = vm_result.get("agent_id") or agent_id
 
+        db.log_audit(
+            tenant_id=tenant_id,
+            actor_user_id=ctx.user_id,
+            action="agent.create",
+            target_type="agent",
+            target_id=result_agent_id,
+            metadata={
+                "agent_name": body.agent_name,
+                "agent_gender": body.agent_gender,
+                "phone": phone_e164,
+                "tts_voice_name": body.tts_voice_name,
+            },
+        )
+
         # Kick off the WhatsApp template hello message. Emit a progress
         # event so the browser gets a visual tick while the bridge
         # round-trips to Meta, then fire the actual send in a thread so
@@ -661,6 +796,15 @@ async def delete_agent(
 
     # Step 2: DB soft-delete (tombstone + clear live state)
     db.soft_delete_agent(agent_id)
+
+    db.log_audit(
+        tenant_id=tenant_id,
+        actor_user_id=ctx.user_id,
+        action="agent.delete",
+        target_type="agent",
+        target_id=agent_id,
+        metadata={"backup_path": result.backup_path},
+    )
 
     logger.info(
         "agent deleted agent_id=%s tenant=%s by user=%s backup=%s",

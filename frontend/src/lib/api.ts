@@ -382,6 +382,31 @@ export async function getTenantUsage(
   return res.json()
 }
 
+export interface AuditEvent {
+  id: number
+  actor_user_id: number | null
+  actor_email: string | null
+  actor_full_name: string | null
+  action: string
+  target_type: string | null
+  target_id: string | null
+  metadata: Record<string, unknown> | null
+  created_at: string | null
+}
+
+export async function listTenantAudit(
+  tenantId: number,
+  opts?: { limit?: number; offset?: number },
+): Promise<{ events: AuditEvent[]; limit: number; offset: number }> {
+  const qs = new URLSearchParams()
+  if (opts?.limit !== undefined) qs.set('limit', String(opts.limit))
+  if (opts?.offset !== undefined) qs.set('offset', String(opts.offset))
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  const res = await authFetch(`/api/tenants/${tenantId}/audit${suffix}`)
+  if (!res.ok) throw new Error('Audit log failed')
+  return res.json()
+}
+
 export interface ProvisionProgress {
   step: number
   total: number

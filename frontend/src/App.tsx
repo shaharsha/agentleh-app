@@ -14,17 +14,25 @@ import Layout from './components/Layout'
 
 const LS_ACTIVE_TENANT = 'agentleh.activeTenantId'
 
+function markHasAccountCookie() {
+  const host = window.location.hostname
+  const parts = host.split('.')
+  if (parts.length < 2) return
+  const domain = '.' + parts.slice(-2).join('.')
+  document.cookie = `agentleh_has_account=1; Domain=${domain}; Path=/; Max-Age=31536000; SameSite=Lax; Secure`
+}
+
 // Parse the current pathname into a routed page + tenant context.
 // Kept intentionally homemade (no react-router) — the app is small and
 // a regex match on window.location is all we need.
 function parseRoute(pathname: string): {
   kind: 'invite-accept' | 'admin' | 'tenant' | 'root'
   tenantId?: number
-  subpage?: 'dashboard' | 'members' | 'settings' | 'usage'
+  subpage?: 'dashboard' | 'members' | 'settings' | 'usage' | 'audit'
 } {
   if (pathname.startsWith('/invites/accept')) return { kind: 'invite-accept' }
   if (pathname.startsWith('/admin')) return { kind: 'admin' }
-  const m = pathname.match(/^\/tenants\/(\d+)(?:\/(dashboard|members|settings|usage))?/)
+  const m = pathname.match(/^\/tenants\/(\d+)(?:\/(dashboard|members|settings|usage|audit))?/)
   if (m) {
     return {
       kind: 'tenant',
@@ -49,14 +57,18 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      if (session) loadUser()
-      else setLoading(false)
+      if (session) {
+        markHasAccountCookie()
+        loadUser()
+      } else setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      if (session) loadUser()
-      else {
+      if (session) {
+        markHasAccountCookie()
+        loadUser()
+      } else {
         setUser(null)
         setLoading(false)
       }
