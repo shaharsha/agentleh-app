@@ -25,6 +25,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { useI18n } from '../lib/i18n'
 
 /* ───────────────────────────────────────────────────────────
  * Types + fetch are inlined here rather than imported from
@@ -36,6 +37,10 @@ import { useEffect, useRef, useState } from 'react'
 
 interface VoiceManifestEntry {
   name: string
+  // Hebrew transliteration of the voice name. Optional so the component
+  // gracefully falls back to the Latin-script `name` if a manifest is
+  // served without it (older GCS upload, third-party manifest, etc.).
+  name_he?: string
   gender: 'female' | 'male'
   is_default: boolean
   sample_path: string
@@ -82,6 +87,7 @@ export default function VoicePicker({
   fallbackDefault,
   lockedGender,
 }: VoicePickerProps) {
+  const { lang } = useI18n()
   const [manifest, setManifest] = useState<VoiceManifest | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<GenderFilter>('all')
@@ -165,9 +171,20 @@ export default function VoicePicker({
       .catch(() => setPlaying(null))
   }
 
+  function pauseSample() {
+    if (audioRef.current) audioRef.current.pause()
+    setPlaying(null)
+  }
+
   function selectVoice(voice: VoiceManifestEntry) {
     onChange(voice.name)
-    playSample(voice)
+    // Toggle: clicking the currently-playing card pauses instead of
+    // restarting from t=0. Re-clicking after pause replays from start.
+    if (playing === voice.name) {
+      pauseSample()
+    } else {
+      playSample(voice)
+    }
   }
 
   if (error) {
@@ -242,11 +259,17 @@ export default function VoicePicker({
               <div className="flex items-center justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="text-[14px] font-semibold truncate">
-                    {voice.name}
+                    {lang === 'he' ? (voice.name_he ?? voice.name) : voice.name}
                   </div>
-                  <div className="text-[11px] text-text-secondary">
-                    {voice.gender === 'female' ? 'נשי' : 'גברי'}
-                  </div>
+                  {/* Per-card gender label only adds info when the grid is mixed.
+                      When the parent locks gender (the only call sites today),
+                      every visible voice has the same gender — the label becomes
+                      noise. Hide it in that case. */}
+                  {!lockedGender && (
+                    <div className="text-[11px] text-text-secondary">
+                      {voice.gender === 'female' ? 'נשי' : 'גברי'}
+                    </div>
+                  )}
                 </div>
                 <PlayIcon playing={isPlaying} />
               </div>
