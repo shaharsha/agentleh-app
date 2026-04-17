@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.deps import (
@@ -430,20 +431,25 @@ class AgentCreate(BaseModel):
     tts_voice_name: str | None = None
 
 
-@router.post("/{tenant_id}/agents", status_code=201)
+@router.post("/{tenant_id}/agents")
 async def provision_agent(
     tenant_id: int,
     body: AgentCreate,
     request: Request,
     ctx: TenantContext = Depends(require_tenant_role("admin")),
-) -> dict[str, Any]:
-    """Spawn a real OpenClaw container in an existing tenant.
+) -> StreamingResponse:
+    """Spawn a real OpenClaw container in an existing tenant (streaming).
 
-    Calls the provisioner (MockProvisioner locally, VmHttpProvisioner on
-    Cloud Run), which shells out to the VM's create-agent.sh via the
-    provision-api.py daemon. The agent_id is derived from the tenant +
-    a slug of the agent name so collisions across tenants are impossible.
+    Returns an NDJSON stream of events so the browser can render real
+    progress (not a fake timer). Event shapes:
+
+      {"type": "progress", "step": 1, "total": 4, "label": "Preparing workspace"}
+      {"type": "result",   "success": true,  "agent_id": "...", "gateway_url": "...", "port": 18791}
+      {"type": "result",   "success": false, "error": "..."}
+
+    The final event is always a "result" — either success or failure.
     """
+    import json as _json
     import re
     import secrets as _secrets
 
@@ -457,54 +463,151 @@ async def provision_agent(
     agent_id = f"t{tenant_id}-{slug}-{suffix}"
 
     provisioner = request.app.state.provisioner
-    result = provisioner.provision(
-        agent_id=agent_id,
-        phone=body.phone,
-        agent_name=body.agent_name,
-        user_name=body.user_name or ctx.user.get("full_name") or "",
-        tenant_id=tenant_id,
+    user_name = body.user_name or ctx.user.get("full_name") or ""
+
+    async def event_stream():
+        vm_result: dict[str, Any] | None = None
+
+        # Forward progress events from the VM daemon, capture the final
+        # result so we can do post-provision DB work before telling the
+        # browser we're done. The VM emits 4 steps; we add a 5th for the
+        # welcome-message send, so rewrite `total` here for consistency.
+        try:
+            async for event in provisioner.provision_stream(
+                agent_id=agent_id,
+                phone=body.phone,
+                agent_name=body.agent_name,
+                user_name=user_name,
+                tenant_id=tenant_id,
+            ):
+                if event.get("type") == "result":
+                    vm_result = event
+                else:
+                    if event.get("type") == "progress":
+                        event["total"] = 5
+                    yield _json.dumps(event) + "\n"
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("provision_stream failed for %s", agent_id)
+            yield _json.dumps({
+                "type": "result",
+                "success": False,
+                "error": f"provision_stream error: {exc}",
+            }) + "\n"
+            return
+
+        if vm_result is None or not vm_result.get("success"):
+            yield _json.dumps({
+                "type": "result",
+                "success": False,
+                "error": (vm_result or {}).get("error", "provision_failed"),
+            }) + "\n"
+            return
+
+        # Post-provision DB work — same as the old blocking path.
+        # agent_id from the VM result is authoritative.
+        result_agent_id = vm_result.get("agent_id") or agent_id
+        if body.tts_voice_name:
+            db._execute(  # noqa: SLF001
+                "UPDATE agents SET tts_voice_name = %s WHERE agent_id = %s",
+                (body.tts_voice_name, result_agent_id),
+            )
+        if body.agent_gender:
+            db._execute(  # noqa: SLF001
+                """
+                UPDATE app_user_agents_legacy SET agent_gender = %s
+                 WHERE agent_id = %s
+                """,
+                (body.agent_gender, result_agent_id),
+            )
+        try:
+            db.create_user_agent(
+                user_id=ctx.user_id,
+                agent_id=result_agent_id,
+                agent_name=body.agent_name,
+                agent_gender=body.agent_gender,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("create_user_agent link failed for %s", result_agent_id)
+
+        # Kick off the WhatsApp template hello message. Emit a progress
+        # event so the browser gets a visual tick while the bridge
+        # round-trips to Meta, then fire the actual send in a thread so
+        # a slow Meta response doesn't block the stream completion.
+        yield _json.dumps({
+            "type": "progress",
+            "step": 5,
+            "total": 5,
+            "label": "Sending welcome message",
+        }) + "\n"
+
+        import asyncio as _asyncio
+
+        whatsapp = request.app.state.whatsapp
+        try:
+            sent = await _asyncio.wait_for(
+                _asyncio.to_thread(whatsapp.send_welcome, body.phone, body.agent_name),
+                timeout=15.0,
+            )
+            if not sent:
+                logger.info("welcome message not sent for agent=%s phone=%s", result_agent_id, body.phone)
+        except Exception:  # noqa: BLE001
+            # Non-fatal — agent is live regardless of welcome-message success
+            logger.warning("welcome send errored for agent=%s", result_agent_id, exc_info=True)
+
+        yield _json.dumps({
+            "type": "result",
+            "success": True,
+            "agent_id": result_agent_id,
+            "gateway_url": vm_result.get("gateway_url") or "",
+            "port": vm_result.get("port") or 0,
+            "status": "active",
+        }) + "\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache, no-store, no-transform", "X-Accel-Buffering": "no"},
     )
+
+
+@router.delete("/{tenant_id}/agents/{agent_id}", status_code=204)
+async def delete_agent(
+    tenant_id: int,
+    agent_id: str,
+    request: Request,
+    ctx: TenantContext = Depends(require_tenant_role("admin")),
+) -> None:
+    """Hard-delete an agent: VM cleanup (backup + teardown) then DB delete.
+
+    Order: VM first, DB second. If VM cleanup fails, the agent row stays
+    intact and the user can retry. If DB first, VM resources become
+    permanently orphaned.
+    """
+    import asyncio
+
+    db = request.app.state.db
+
+    # Verify agent belongs to this tenant
+    agent_tenant_id = db.get_agent_tenant_id(agent_id)
+    if agent_tenant_id is None or agent_tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail={"error": "agent_not_found"})
+
+    # Step 1: VM deprovision (backup to GCS + container teardown)
+    provisioner = request.app.state.provisioner
+    result = await asyncio.to_thread(provisioner.deprovision, agent_id)
     if not result.success:
         raise HTTPException(
             status_code=502,
-            detail={"error": "provision_failed", "message": result.error},
+            detail={"error": "deprovision_failed", "message": result.error},
         )
 
-    # Stamp optional fields that the provisioner doesn't thread through
-    # the Protocol (tts_voice_name, agent_gender). Same pattern the
-    # onboarding flow uses — done as a plain UPDATE after the row exists.
-    if body.tts_voice_name:
-        db._execute(  # noqa: SLF001 — private helper on the same repo
-            "UPDATE agents SET tts_voice_name = %s WHERE agent_id = %s",
-            (body.tts_voice_name, result.agent_id),
-        )
-    if body.agent_gender:
-        db._execute(  # noqa: SLF001
-            """
-            UPDATE app_user_agents_legacy SET agent_gender = %s
-             WHERE agent_id = %s
-            """,
-            (body.agent_gender, result.agent_id),
-        )
+    # Step 2: DB hard-delete (cascading)
+    db.hard_delete_agent(agent_id)
 
-    # Register the user→agent legacy link via the compat view so the
-    # existing admin panel joins keep working. The INSTEAD OF INSERT
-    # trigger redirects this to app_user_agents_legacy.
-    try:
-        db.create_user_agent(
-            user_id=ctx.user_id,
-            agent_id=result.agent_id,
-            agent_name=body.agent_name,
-            agent_gender=body.agent_gender,
-        )
-    except Exception:  # noqa: BLE001
-        # Non-fatal — the real agent exists, the legacy link is just
-        # metadata for admin reads during the Phase 3 transition.
-        logger.warning("create_user_agent link failed for %s", result.agent_id)
-
-    return {
-        "agent_id": result.agent_id,
-        "gateway_url": result.gateway_url,
-        "port": result.port,
-        "status": "active",
-    }
+    logger.info(
+        "agent deleted agent_id=%s tenant=%s by user=%s backup=%s",
+        agent_id,
+        tenant_id,
+        ctx.user_id,
+        result.backup_path,
+    )

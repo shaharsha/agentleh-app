@@ -47,11 +47,11 @@ async def lifespan(app: FastAPI):
     # Grow/Meta integration that's out of scope for multi-tenancy.
     from services.payment import MockPayment
     from services.provisioning import pick_provisioner
-    from services.whatsapp import MockWhatsApp
+    from services.whatsapp import pick_whatsapp
 
     app.state.provisioner = pick_provisioner(db)
     app.state.payment = MockPayment()
-    app.state.whatsapp = MockWhatsApp()
+    app.state.whatsapp = pick_whatsapp()
 
     yield
 

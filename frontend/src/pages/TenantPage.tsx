@@ -11,20 +11,23 @@ import {
   deleteTenant,
   transferTenantOwner,
   provisionTenantAgent,
+  deleteAgent,
 } from '../lib/api'
 import { useI18n, type Bilingual } from '../lib/i18n'
 import { planLabel, statusLabel } from '../lib/labels'
 import TenantName from '../components/TenantName'
 import IntegrationsPanel from '../components/IntegrationsPanel'
+import UsageTab from '../components/UsageTab'
+import { microsToUsd } from '../lib/format'
 
 interface Props {
   tenantId: number
-  subpage: 'dashboard' | 'members' | 'settings'
+  subpage: 'dashboard' | 'members' | 'settings' | 'usage'
   onNavigate: (path: string) => void
   onTenantsChanged: () => void
 }
 
-type Tab = 'dashboard' | 'members' | 'settings'
+type Tab = 'dashboard' | 'members' | 'settings' | 'usage'
 
 /**
  * Unified tenant page with three tabs. Fully bilingual via useI18n:
@@ -44,8 +47,13 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
 
   const activeTab: Tab = (subpage || 'dashboard') as Tab
 
-  const reload = async () => {
-    setLoading(true)
+  // reload({ silent: true }) refetches in the background without flipping
+  // the loading flag — keeps the UI mounted so the user doesn't see a
+  // "Loading workspace…" screen every time something changes (e.g. after
+  // creating an agent). Full-screen loader only fires on the initial
+  // mount where we have nothing to show.
+  const reload = async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true)
     setError(null)
     try {
       const [d, dash] = await Promise.all([
@@ -57,9 +65,11 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
     } catch (err) {
       setError((err as Error).message)
     } finally {
-      setLoading(false)
+      if (!opts.silent) setLoading(false)
     }
   }
+
+  const reloadSilent = () => { reload({ silent: true }) }
 
   useEffect(() => {
     reload()
@@ -132,7 +142,9 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
       ? { he: 'לוח בקרה', en: 'Dashboard' }
       : tab === 'members'
         ? { he: 'חברים', en: 'Members' }
-        : { he: 'הגדרות', en: 'Settings' }
+        : tab === 'usage'
+          ? { he: 'שימוש', en: 'Usage' }
+          : { he: 'הגדרות', en: 'Settings' }
 
   const tabButton = (tab: Tab) => (
     <button
@@ -180,6 +192,7 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
       <div className="border-b border-gray-200 mb-6 flex gap-2">
         {tabButton('dashboard')}
         {tabButton('members')}
+        {tabButton('usage')}
         {tabButton('settings')}
       </div>
 
@@ -189,7 +202,8 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
           dashboard={dashboard}
           agents={agents}
           isAdminOrOwner={isAdminOrOwner}
-          onChanged={reload}
+          onChanged={reloadSilent}
+          onNavigate={onNavigate}
         />
       )}
       {activeTab === 'members' && (
@@ -200,16 +214,17 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
           isAdminOrOwner={isAdminOrOwner}
           isOwner={isOwner}
           ownerUserId={tenant.owner_user_id}
-          onChanged={reload}
+          onChanged={reloadSilent}
         />
       )}
+      {activeTab === 'usage' && <UsageTab tenantId={tenantId} />}
       {activeTab === 'settings' && (
         <SettingsTab
           tenantId={tenantId}
           tenant={tenant}
           members={members}
           isOwner={isOwner}
-          onChanged={reload}
+          onChanged={reloadSilent}
           onDeleted={() => {
             onTenantsChanged()
             onNavigate('/')
@@ -228,12 +243,14 @@ function DashboardTab({
   agents,
   isAdminOrOwner,
   onChanged,
+  onNavigate,
 }: {
   tenantId: number
   dashboard: any
   agents: any[]
   isAdminOrOwner: boolean
   onChanged: () => void
+  onNavigate: (path: string) => void
 }) {
   const { t, dir } = useI18n()
   const subscription = dashboard?.subscription
@@ -246,16 +263,98 @@ function DashboardTab({
   const [provisioning, setProvisioning] = useState(false)
   const [provisionError, setProvisionError] = useState<string | null>(null)
 
+  // Real progress driven by the NDJSON stream from the backend:
+  //   { step: N, total: M, label: "..." }
+  // step ≤ 0 means "connecting / waiting for first event"
+  const [progress, setProgress] = useState<{ step: number; total: number; label: string }>({
+    step: 0,
+    total: 5,
+    label: '',
+  })
+
+  // Translate backend English labels → bilingual display. The step number
+  // is the source of truth; label text is for screen readers / fallback.
+  // The VM emits sub-step labels like "Waiting for agent to be ready (3/30)"
+  // during the health check; we surface those verbatim so the user sees
+  // continuous activity even during the long wait.
+  function stepLabel(_step: number, _total: number, rawLabel: string): { he: string; en: string } {
+    const match = /Waiting for agent to be ready(?:\s*\((\d+)\/(\d+)\))?/.exec(rawLabel)
+    if (match) {
+      const sub = match[1] ? ` (${match[1]}/${match[2]})` : ''
+      return { he: `בודק תקינות${sub}…`, en: `Waiting for agent to be ready${sub}…` }
+    }
+    if (/Preparing workspace/i.test(rawLabel)) return { he: 'מכין סביבת עבודה…', en: 'Preparing workspace…' }
+    if (/Setting up database/i.test(rawLabel)) return { he: 'מעדכן בסיס נתונים…', en: 'Setting up database…' }
+    if (/Starting container/i.test(rawLabel)) return { he: 'מפעיל קונטיינר…', en: 'Starting container…' }
+    if (/welcome message/i.test(rawLabel)) return { he: 'שולח הודעת ברוכים הבאים…', en: 'Sending welcome message…' }
+    return { he: rawLabel, en: rawLabel }
+  }
+
+  // Default label for a step that is not yet the active one (we haven't
+  // seen its progress event yet). Keeps the checklist readable.
+  function defaultStepLabel(step: number): string {
+    return (
+      [
+        'Preparing workspace',
+        'Setting up database',
+        'Starting container',
+        'Waiting for agent to be ready',
+        'Sending welcome message',
+      ][step - 1] || `Step ${step}`
+    )
+  }
+
+  // Weighted progress — step 4 (health-check wait) dominates the real
+  // elapsed time (~60-90s out of ~80-100s total), so give it a matching
+  // slice of the bar. Never show 100% while still provisioning; reserve
+  // the final % for the "done" moment when the success event arrives.
+  //
+  //   step 0 (connecting)    →  3%
+  //   step 1 (workspace)     → 15%
+  //   step 2 (database)      → 25%
+  //   step 3 (container up)  → 35%
+  //   step 4 (N/30 ticks)    → 35% + (N/30) * 50%  (up to 85%)
+  //   step 5 (welcome send)  → 92%
+  //   result(success)        → 100%
+  const subMatch = /\((\d+)\/(\d+)\)/.exec(progress.label || '')
+  const subTick = subMatch ? parseInt(subMatch[1], 10) : 0
+  const subTotal = subMatch ? parseInt(subMatch[2], 10) : 30
+
+  let progressPct: number
+  if (!provisioning) {
+    progressPct = 0
+  } else if (progress.step === 0) {
+    progressPct = 3
+  } else if (progress.step === 1) {
+    progressPct = 15
+  } else if (progress.step === 2) {
+    progressPct = 25
+  } else if (progress.step === 3) {
+    progressPct = 35
+  } else if (progress.step === 4) {
+    const sub = subTotal > 0 ? Math.min(1, subTick / subTotal) : 0
+    progressPct = Math.round(35 + sub * 50)
+  } else {
+    progressPct = 92
+  }
+
   async function handleProvision() {
     if (!newAgentName.trim() || !newAgentPhone.trim()) return
     setProvisioning(true)
     setProvisionError(null)
+    setProgress({ step: 0, total: 5, label: 'Connecting…' })
     try {
-      await provisionTenantAgent(tenantId, {
-        agent_name: newAgentName.trim(),
-        agent_gender: newAgentGender,
-        phone: newAgentPhone.trim(),
-      })
+      await provisionTenantAgent(
+        tenantId,
+        {
+          agent_name: newAgentName.trim(),
+          agent_gender: newAgentGender,
+          phone: newAgentPhone.trim(),
+        },
+        (p) => {
+          setProgress({ step: p.step, total: p.total, label: p.label })
+        },
+      )
       setNewAgentName('')
       setNewAgentPhone('')
       setShowNewAgent(false)
@@ -267,13 +366,29 @@ function DashboardTab({
     }
   }
 
+  // ── Agent deletion state ──
+  const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null)
+  const [deleteInProgress, setDeleteInProgress] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  async function handleDeleteAgent() {
+    if (!deletingAgentId) return
+    setDeleteInProgress(true)
+    setDeleteError(null)
+    try {
+      await deleteAgent(tenantId, deletingAgentId)
+      setDeletingAgentId(null)
+      onChanged()
+    } catch (err) {
+      setDeleteError((err as Error).message)
+    } finally {
+      setDeleteInProgress(false)
+    }
+  }
+
   // Numbers + currencies stay in LTR because the bidi algorithm flips
   // "$1.23" in RTL context in confusing ways. We wrap them in dir="ltr"
   // spans so they always read left-to-right.
-  const microsToUsd = (m: number | null | undefined) => {
-    if (m == null) return '—'
-    return `$${(m / 1_000_000).toFixed(2)}`
-  }
   const num = (v: string) => <span dir="ltr">{v}</span>
 
   return (
@@ -336,93 +451,146 @@ function DashboardTab({
 
         {showNewAgent && isAdminOrOwner && (
           <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  {t({ he: 'שם הסוכן', en: 'Agent name' })}
-                </label>
-                {/* Explicit dir from useI18n instead of dir="auto": an
-                    empty input with dir="auto" falls back to parent
-                    direction for the VALUE, but the placeholder still
-                    renders via the ::placeholder pseudo-element whose
-                    direction rules don't always honor auto-detect, so
-                    Hebrew placeholders ended up LTR-aligned. Following
-                    the active UI language is predictable and matches
-                    the user's expectation on keystroke. */}
-                <input
-                  type="text"
-                  value={newAgentName}
-                  onChange={(e) => setNewAgentName(e.target.value)}
-                  placeholder={t({ he: 'שולי', en: 'e.g. Shuli' })}
-                  dir={dir}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+            {provisioning ? (
+              /* ── Real-time progress driven by backend NDJSON stream ── */
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm text-gray-700">
+                  <span className="font-medium">
+                    {t({ he: 'מקים סוכן…', en: 'Creating agent…' })}
+                  </span>
+                  <span className="tabular-nums text-gray-500">{progressPct}%</span>
+                </div>
+                {/* Long CSS transition (700ms) smooths out burst-delivered
+                    events from GCP Cloud Run, which sometimes buffers a
+                    few seconds of progress ticks before flushing them as
+                    a batch. Without this the bar would teleport. */}
+                <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-500 rounded-full transition-all duration-700 ease-out"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+                <ul className="space-y-2 text-sm">
+                  {Array.from({ length: progress.total || 5 }).map((_, i) => {
+                    const stepNum = i + 1
+                    const done = progress.step > stepNum
+                    const active = progress.step === stepNum
+                    const label = active
+                      ? stepLabel(stepNum, progress.total, progress.label)
+                      : stepLabel(stepNum, progress.total, defaultStepLabel(stepNum))
+                    // For the active health-check step (step 4, the long
+                    // wait), extract the (N/30) sub-tick and render it as
+                    // a small secondary bar so the user sees continuous
+                    // motion during the 60-90s wait even when the main
+                    // bar's range is small.
+                    const isHealthStep = active && stepNum === 4 && subMatch
+                    return (
+                      <li key={i} className="flex items-start gap-2">
+                        <div className="mt-0.5 shrink-0">
+                          {done ? (
+                            <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          ) : active ? (
+                            <svg className="w-4 h-4 text-indigo-500 animate-spin" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          ) : (
+                            <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className={done ? 'text-gray-400' : active ? 'text-gray-900 font-medium' : 'text-gray-400'}>
+                            {t(label)}
+                          </div>
+                          {isHealthStep && (
+                            <div className="mt-1 h-0.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-indigo-400 rounded-full transition-all duration-700 ease-out"
+                                style={{ width: `${Math.round((subTick / subTotal) * 100)}%` }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  {t({ he: 'מין', en: 'Gender' })}
-                </label>
-                <select
-                  value={newAgentGender}
-                  onChange={(e) => setNewAgentGender(e.target.value as 'female' | 'male')}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                >
-                  <option value="female">{t({ he: 'נקבה', en: 'Female' })}</option>
-                  <option value="male">{t({ he: 'זכר', en: 'Male' })}</option>
-                </select>
-              </div>
-            </div>
-            {/* The phone field is the END USER's phone — the person who
-                will send WhatsApp messages to this agent — NOT the
-                agent's phone (there's no such thing; our Meta WABA
-                business number is a single shared endpoint for all
-                inbound traffic and the bridge routes by the sender's
-                phone number to the right agent). Labels reflect that
-                explicitly to avoid the "why isn't this my business
-                number" confusion we had on dev. */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                {t({
-                  he: 'מספר הוואטסאפ של המשתמש',
-                  en: "User's WhatsApp number",
-                })}
-              </label>
-              <input
-                type="tel"
-                value={newAgentPhone}
-                onChange={(e) => setNewAgentPhone(e.target.value)}
-                placeholder="+972501234567"
-                dir="ltr"
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-              <p className="text-[11px] text-gray-500 mt-1">
-                {t({
-                  he: 'המספר שממנו ישלח המשתמש הודעות לסוכן (פורמט בינלאומי, לדוגמה +972501234567). לא המספר המשותף של Agentiko.',
-                  en: 'The number the user will message this agent from (E.164, e.g. +972501234567). Not Agentiko\'s shared business number.',
-                })}
-              </p>
-            </div>
-            {provisionError && (
-              <div className="text-sm text-red-700 bg-red-50 p-3 rounded">{provisionError}</div>
+            ) : (
+              /* ── Agent creation form ── */
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      {t({ he: 'שם הסוכן', en: 'Agent name' })}
+                    </label>
+                    <input
+                      type="text"
+                      value={newAgentName}
+                      onChange={(e) => setNewAgentName(e.target.value)}
+                      placeholder={t({ he: 'שולי', en: 'e.g. Shuli' })}
+                      dir={dir}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      {t({ he: 'מין', en: 'Gender' })}
+                    </label>
+                    <select
+                      value={newAgentGender}
+                      onChange={(e) => setNewAgentGender(e.target.value as 'female' | 'male')}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                    >
+                      <option value="female">{t({ he: 'נקבה', en: 'Female' })}</option>
+                      <option value="male">{t({ he: 'זכר', en: 'Male' })}</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    {t({
+                      he: 'מספר הוואטסאפ של המשתמש',
+                      en: "User's WhatsApp number",
+                    })}
+                  </label>
+                  <input
+                    type="tel"
+                    value={newAgentPhone}
+                    onChange={(e) => setNewAgentPhone(e.target.value)}
+                    placeholder="+972501234567"
+                    dir="ltr"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    {t({
+                      he: 'המספר שממנו ישלח המשתמש הודעות לסוכן (פורמט בינלאומי, לדוגמה +972501234567). לא המספר המשותף של Agentiko.',
+                      en: 'The number the user will message this agent from (E.164, e.g. +972501234567). Not Agentiko\'s shared business number.',
+                    })}
+                  </p>
+                </div>
+                {provisionError && (
+                  <div className="text-sm text-red-700 bg-red-50 p-3 rounded">{provisionError}</div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleProvision}
+                    disabled={!newAgentName.trim() || !newAgentPhone.trim()}
+                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {t({ he: 'צור סוכן', en: 'Create agent' })}
+                  </button>
+                  <button
+                    onClick={() => setShowNewAgent(false)}
+                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+                  >
+                    {t({ he: 'ביטול', en: 'Cancel' })}
+                  </button>
+                </div>
+              </>
             )}
-            <div className="flex gap-2">
-              <button
-                onClick={handleProvision}
-                disabled={provisioning || !newAgentName.trim() || !newAgentPhone.trim()}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {provisioning
-                  ? t({ he: 'מקים… (30–60 שניות)', en: 'Provisioning… (30–60s)' })
-                  : t({ he: 'צור סוכן', en: 'Create agent' })}
-              </button>
-              <button
-                onClick={() => setShowNewAgent(false)}
-                disabled={provisioning}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
-              >
-                {t({ he: 'ביטול', en: 'Cancel' })}
-              </button>
-            </div>
           </div>
         )}
 
@@ -443,9 +611,19 @@ function DashboardTab({
                       {a.agent_id}
                     </div>
                   </div>
-                  <span className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded">
-                    {t(statusLabel(a.status))}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded">
+                      {t(statusLabel(a.status))}
+                    </span>
+                    {isAdminOrOwner && (
+                      <button
+                        onClick={() => { setDeletingAgentId(a.agent_id); setDeleteError(null) }}
+                        className="text-xs text-red-500 hover:text-red-700"
+                      >
+                        {t({ he: 'מחיקה', en: 'Delete' })}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <IntegrationsPanel
                   tenantId={tenantId}
@@ -477,11 +655,131 @@ function DashboardTab({
               <div className="font-medium">{num(microsToUsd(totals.tts_micros))}</div>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => onNavigate(`/tenants/${tenantId}/usage`)}
+            className="mt-4 text-sm text-indigo-600 hover:text-indigo-700 cursor-pointer"
+          >
+            {t({ he: 'פירוט מלא לפי סוכן ←', en: '→ Full breakdown by agent' })}
+          </button>
         </div>
+      )}
+
+      {/* ── Delete Agent Confirmation Modal ── */}
+      {deletingAgentId && (
+        <DeleteAgentModal
+          agentId={deletingAgentId}
+          agentName={agents.find((a) => a.agent_id === deletingAgentId)?.agent_name || deletingAgentId}
+          inProgress={deleteInProgress}
+          error={deleteError}
+          onConfirm={handleDeleteAgent}
+          onCancel={() => { setDeletingAgentId(null); setDeleteError(null) }}
+        />
       )}
     </div>
   )
 }
+
+
+function DeleteAgentModal({
+  agentId,
+  agentName,
+  inProgress,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  agentId: string
+  agentName: string
+  inProgress: boolean
+  error: string | null
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const { t } = useI18n()
+  const [confirmText, setConfirmText] = useState('')
+  const confirmed = confirmText === agentId
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40" onClick={inProgress ? undefined : onCancel} />
+      {/* Modal */}
+      <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6 space-y-4">
+        {/* Warning icon */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">
+              {t({ he: 'מחיקת סוכן', en: 'Delete agent' })}
+            </h3>
+            <p className="text-sm text-gray-500" dir="auto">{agentName}</p>
+          </div>
+        </div>
+
+        <p className="text-sm text-gray-700">
+          {t({
+            he: 'פעולה זו תמחק לצמיתות את הסוכן, הקונטיינר שלו, כל הנתונים וההגדרות. גיבוי ישמר ב-GCS למשך 90 יום. לא ניתן לבטל פעולה זו.',
+            en: 'This will permanently delete the agent, its container, all data and configuration. A backup will be saved to GCS for 90 days. This cannot be undone.',
+          })}
+        </p>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">
+            {t({
+              he: 'הקלד את מזהה הסוכן לאישור:',
+              en: 'Type the agent ID to confirm:',
+            })}
+          </label>
+          <div className="text-xs text-gray-400 font-mono mb-1.5" dir="ltr">{agentId}</div>
+          <input
+            type="text"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder={agentId}
+            dir="ltr"
+            disabled={inProgress}
+            className="w-full px-3 py-2 text-sm font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+          />
+        </div>
+
+        {error && (
+          <div className="text-sm text-red-700 bg-red-50 p-3 rounded">{error}</div>
+        )}
+
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={onCancel}
+            disabled={inProgress}
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+          >
+            {t({ he: 'ביטול', en: 'Cancel' })}
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!confirmed || inProgress}
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {inProgress && (
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+            {inProgress
+              ? t({ he: 'מוחק…', en: 'Deleting…' })
+              : t({ he: 'מחק לצמיתות', en: 'Delete permanently' })}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 // ─── Members tab ──────────────────────────────────────────────────────
 

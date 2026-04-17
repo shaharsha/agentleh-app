@@ -37,4 +37,4 @@ RUN useradd -m -u 1000 appuser && chown -R appuser /app
 USER appuser
 
 EXPOSE 8080
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log", "--workers", "2"]

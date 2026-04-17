@@ -23,11 +23,14 @@ The implementation is picked via the `AGENTLEH_PROVISIONER` env var:
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
 import secrets
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 import httpx
 
@@ -44,6 +47,14 @@ class ProvisionResult:
     error: str = ""
 
 
+@dataclass
+class DeprovisionResult:
+    agent_id: str
+    success: bool = True
+    error: str = ""
+    backup_path: str = ""
+
+
 class AgentProvisioner(Protocol):
     def provision(
         self,
@@ -53,6 +64,15 @@ class AgentProvisioner(Protocol):
         user_name: str,
         tenant_id: int,
     ) -> ProvisionResult: ...
+    def provision_stream(
+        self,
+        agent_id: str,
+        phone: str,
+        agent_name: str,
+        user_name: str,
+        tenant_id: int,
+    ) -> AsyncIterator[dict[str, Any]]: ...
+    def deprovision(self, agent_id: str) -> DeprovisionResult: ...
     def check_health(self, agent_id: str) -> bool: ...
 
 
@@ -123,6 +143,42 @@ class MockProvisioner:
             port=18800,
             success=True,
         )
+
+    async def provision_stream(
+        self,
+        agent_id: str,
+        phone: str,
+        agent_name: str,
+        user_name: str,
+        tenant_id: int,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Mock streaming provision — emits a few fake progress events
+        then the actual DB insert + result. Useful for local dev UI work
+        without spinning up the VM daemon."""
+        steps = [
+            (1, 4, "Preparing workspace"),
+            (2, 4, "Setting up database"),
+            (3, 4, "Starting container"),
+            (4, 4, "Waiting for agent to be ready"),
+        ]
+        for step, total, label in steps:
+            yield {"type": "progress", "step": step, "total": total, "label": label}
+            await asyncio.sleep(0.3)
+
+        result = self.provision(agent_id, phone, agent_name, user_name, tenant_id)
+        yield {
+            "type": "result",
+            "success": result.success,
+            "agent_id": result.agent_id,
+            "gateway_url": result.gateway_url,
+            "gateway_token": result.gateway_token,
+            "port": result.port,
+            "error": result.error,
+        }
+
+    def deprovision(self, agent_id: str) -> DeprovisionResult:
+        logger.info("MOCK: Deprovisioning agent %s", agent_id)
+        return DeprovisionResult(agent_id=agent_id, backup_path="gs://mock-backup/")
 
     def check_health(self, agent_id: str) -> bool:
         logger.info("MOCK: Health check for %s → healthy", agent_id)
@@ -204,18 +260,27 @@ class VmHttpProvisioner:
             except Exception:  # noqa: BLE001
                 err = {"error": "http_error", "status": resp.status_code, "body": resp.text[:400]}
             logger.error("provision-api %s: %s", resp.status_code, err)
+            # Prefer stdout (where create-agent.sh sends diagnostic messages
+            # like "health check not passing") over stderr (where Docker
+            # compose sends progress output like "Container Creating/Started").
+            # Take the tail — the real diagnostic is at the end of stdout.
+            diag = (err.get("stdout") or "").strip() or (err.get("stderr") or err.get("detail", "")).strip()
             return ProvisionResult(
                 agent_id=agent_id,
                 success=False,
-                error=f"{err.get('error', 'unknown')}: {err.get('stderr', err.get('detail', ''))[:400]}",
+                error=f"{err.get('error', 'unknown')}: {diag[-400:]}",
             )
 
         result = resp.json()
         if not result.get("success"):
+            diag = (result.get("stdout") or "").strip() or (result.get("stderr") or "").strip()
+            error_msg = result.get("error", "unknown")
+            if diag:
+                error_msg = f"{error_msg}: {diag[-400:]}"
             return ProvisionResult(
                 agent_id=agent_id,
                 success=False,
-                error=result.get("error", "unknown"),
+                error=error_msg,
             )
 
         return ProvisionResult(
@@ -224,6 +289,123 @@ class VmHttpProvisioner:
             gateway_token=result.get("gateway_token") or "",
             port=int(result.get("port") or 0),
             success=True,
+        )
+
+    async def provision_stream(
+        self,
+        agent_id: str,
+        phone: str,
+        agent_name: str,
+        user_name: str,
+        tenant_id: int,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Streaming provision — connects to the daemon's /provision-stream
+        endpoint and yields NDJSON events (progress + final result) as
+        they arrive. Does not block the event loop (httpx.AsyncClient).
+        """
+        logger.info(
+            "VmHttpProvisioner: streaming provision agent=%s tenant=%s phone=%s",
+            agent_id,
+            tenant_id,
+            phone,
+        )
+
+        payload: dict[str, object] = {
+            "agent_id": agent_id,
+            "phone": phone,
+            "tenant_id": tenant_id,
+        }
+        if agent_name:
+            payload["agent_name"] = agent_name
+        if user_name:
+            payload["user_name"] = user_name
+
+        try:
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/provision-stream",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {self.token}"},
+                ) as resp:
+                    if resp.status_code >= 400:
+                        body_text = await resp.aread()
+                        try:
+                            err = json.loads(body_text.decode("utf-8"))
+                        except Exception:  # noqa: BLE001
+                            err = {"error": "http_error", "body": body_text.decode("utf-8", "replace")[:400]}
+                        logger.error("provision-stream %s: %s", resp.status_code, err)
+                        yield {
+                            "type": "result",
+                            "success": False,
+                            "error": f"{err.get('error', 'unknown')}: {err.get('detail', '')[:400]}",
+                        }
+                        return
+
+                    async for line in resp.aiter_lines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            event = json.loads(line)
+                        except json.JSONDecodeError:
+                            logger.warning("malformed stream line: %s", line[:200])
+                            continue
+                        yield event
+        except httpx.HTTPError as exc:
+            logger.error("provision-stream unreachable: %s", exc)
+            yield {
+                "type": "result",
+                "success": False,
+                "error": f"provision-api unreachable: {exc}",
+            }
+
+    def deprovision(self, agent_id: str) -> DeprovisionResult:
+        logger.info("VmHttpProvisioner: deprovisioning agent=%s", agent_id)
+
+        try:
+            with httpx.Client(timeout=150.0) as client:
+                resp = client.post(
+                    f"{self.base_url}/deprovision",
+                    json={"agent_id": agent_id},
+                    headers={"Authorization": f"Bearer {self.token}"},
+                )
+        except httpx.HTTPError as exc:
+            logger.error("provision-api unreachable (deprovision): %s", exc)
+            return DeprovisionResult(
+                agent_id=agent_id,
+                success=False,
+                error=f"provision-api unreachable: {exc}",
+            )
+
+        if resp.status_code >= 400:
+            try:
+                err = resp.json()
+            except Exception:  # noqa: BLE001
+                err = {"error": "http_error", "status": resp.status_code, "body": resp.text[:400]}
+            logger.error("provision-api deprovision %s: %s", resp.status_code, err)
+            diag = (err.get("stdout") or "").strip() or (err.get("stderr") or err.get("detail", "")).strip()
+            return DeprovisionResult(
+                agent_id=agent_id,
+                success=False,
+                error=f"{err.get('error', 'unknown')}: {diag[-400:]}",
+            )
+
+        result = resp.json()
+        if not result.get("success"):
+            diag = (result.get("stdout") or "").strip() or (result.get("stderr") or "").strip()
+            error_msg = result.get("error", "unknown")
+            if diag:
+                error_msg = f"{error_msg}: {diag[-400:]}"
+            return DeprovisionResult(
+                agent_id=agent_id,
+                success=False,
+                error=error_msg,
+            )
+
+        return DeprovisionResult(
+            agent_id=agent_id,
+            backup_path=result.get("backup_path") or "",
         )
 
     def check_health(self, agent_id: str) -> bool:

@@ -20,11 +20,11 @@ const LS_ACTIVE_TENANT = 'agentleh.activeTenantId'
 function parseRoute(pathname: string): {
   kind: 'invite-accept' | 'admin' | 'tenant' | 'root'
   tenantId?: number
-  subpage?: 'dashboard' | 'members' | 'settings'
+  subpage?: 'dashboard' | 'members' | 'settings' | 'usage'
 } {
   if (pathname.startsWith('/invites/accept')) return { kind: 'invite-accept' }
   if (pathname.startsWith('/admin')) return { kind: 'admin' }
-  const m = pathname.match(/^\/tenants\/(\d+)(?:\/(dashboard|members|settings))?/)
+  const m = pathname.match(/^\/tenants\/(\d+)(?:\/(dashboard|members|settings|usage))?/)
   if (m) {
     return {
       kind: 'tenant',
