@@ -634,8 +634,8 @@ function DashboardTab({
                     (who may be provisioning this agent for a colleague,
                     family member, or client). Gender is used for Hebrew
                     conjugation when the agent addresses them. */}
-                <div className="pb-2">
-                  <div className="text-xs font-semibold text-text-primary mb-2">
+                <div className="pb-2 space-y-3">
+                  <div className="text-xs font-semibold text-text-primary">
                     {t({ he: 'מי ישוחח עם הסוכן', en: "Who'll chat with this agent" })}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -668,7 +668,48 @@ function DashboardTab({
                       </select>
                     </div>
                   </div>
-                  <p className="text-[11px] text-text-muted mt-1.5">
+                  <div>
+                    <label className="block text-xs font-medium text-text-secondary mb-1">
+                      {t({ he: 'מספר הטלפון של המשתמש (וואטסאפ)', en: "User's phone number (WhatsApp)" })}
+                    </label>
+                    <input
+                      type="tel"
+                      value={newAgentPhone}
+                      onChange={(e) => {
+                        setNewAgentPhone(e.target.value)
+                        if (phoneBlurred) setPhoneBlurred(false)
+                      }}
+                      onBlur={handlePhoneBlur}
+                      placeholder="050-123-4567"
+                      autoComplete="tel"
+                      inputMode="tel"
+                      dir="ltr"
+                      aria-invalid={phoneBlurred && !!newAgentPhone.trim() && !phoneE164}
+                      aria-describedby="new-agent-phone-help"
+                      className="input-glass w-full px-3 py-2.5 text-sm"
+                    />
+                    {phoneE164 ? (
+                      <p id="new-agent-phone-help" className="text-[11px] text-text-muted mt-1">
+                        {t({ he: 'יישמר כ-', en: 'Will save as ' })}
+                        <span dir="ltr" className="font-mono text-text-primary">{phoneE164}</span>
+                      </p>
+                    ) : phoneBlurred && newAgentPhone.trim() ? (
+                      <p id="new-agent-phone-help" className="text-[11px] text-red-600 dark:text-red-300 mt-1">
+                        {t({
+                          he: 'מספר לא תקין — נסה שוב (למשל 050-123-4567)',
+                          en: 'Not a valid phone number — try again (e.g. 050-123-4567)',
+                        })}
+                      </p>
+                    ) : (
+                      <p id="new-agent-phone-help" className="text-[11px] text-text-muted mt-1">
+                        {t({
+                          he: 'המספר שהמשתמש ישלח ממנו הודעות לסוכן. מספר ישראלי או בינלאומי, כל פורמט. לא המספר המשותף של Agentiko.',
+                          en: "The number the user will text from to reach the agent. Israeli or international, any format. Not Agentiko's shared number.",
+                        })}
+                      </p>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-text-muted">
                     {t({
                       he: 'נשתמש במגדר כדי להתאים את פניית הסוכן בעברית (לשון זכר/נקבה).',
                       en: "Used so the agent addresses them with the correct Hebrew grammar.",
@@ -708,47 +749,6 @@ function DashboardTab({
                       <option value="male">{t({ he: 'זכר', en: 'Male' })}</option>
                     </select>
                   </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1">
-                    {t({ he: 'מספר הטלפון של הסוכן', en: "Agent's phone number" })}
-                  </label>
-                  <input
-                    type="tel"
-                    value={newAgentPhone}
-                    onChange={(e) => {
-                      setNewAgentPhone(e.target.value)
-                      if (phoneBlurred) setPhoneBlurred(false)
-                    }}
-                    onBlur={handlePhoneBlur}
-                    placeholder="050-123-4567"
-                    autoComplete="tel"
-                    inputMode="tel"
-                    dir="ltr"
-                    aria-invalid={phoneBlurred && !!newAgentPhone.trim() && !phoneE164}
-                    aria-describedby="new-agent-phone-help"
-                    className="input-glass w-full px-3 py-2.5 text-sm"
-                  />
-                  {phoneE164 ? (
-                    <p id="new-agent-phone-help" className="text-[11px] text-text-muted mt-1">
-                      {t({ he: 'יישמר כ-', en: 'Will save as ' })}
-                      <span dir="ltr" className="font-mono text-text-primary">{phoneE164}</span>
-                    </p>
-                  ) : phoneBlurred && newAgentPhone.trim() ? (
-                    <p id="new-agent-phone-help" className="text-[11px] text-red-600 mt-1">
-                      {t({
-                        he: 'מספר לא תקין — נסה שוב (למשל 050-123-4567)',
-                        en: 'Not a valid phone number — try again (e.g. 050-123-4567)',
-                      })}
-                    </p>
-                  ) : (
-                    <p id="new-agent-phone-help" className="text-[11px] text-text-muted mt-1">
-                      {t({
-                        he: 'מספר ישראלי או בינלאומי, כל פורמט. לא המספר המשותף של Agentiko.',
-                        en: "Israeli or international, any format. Not Agentiko's shared number.",
-                      })}
-                    </p>
-                  )}
                 </div>
 
                 {/* Voice picker — matches the onboarding experience. Backend
