@@ -63,6 +63,8 @@ class AgentProvisioner(Protocol):
         agent_name: str,
         user_name: str,
         tenant_id: int,
+        bot_gender: str = "",
+        tts_voice_name: str = "",
     ) -> ProvisionResult: ...
     def provision_stream(
         self,
@@ -71,6 +73,8 @@ class AgentProvisioner(Protocol):
         agent_name: str,
         user_name: str,
         tenant_id: int,
+        bot_gender: str = "",
+        tts_voice_name: str = "",
     ) -> AsyncIterator[dict[str, Any]]: ...
     def deprovision(self, agent_id: str) -> DeprovisionResult: ...
     def check_health(self, agent_id: str) -> bool: ...
@@ -98,33 +102,49 @@ class MockProvisioner:
         agent_name: str,
         user_name: str,
         tenant_id: int,
+        bot_gender: str = "",
+        tts_voice_name: str = "",
     ) -> ProvisionResult:
         logger.info(
-            "MOCK: Provisioning agent %s for %s (phone: %s, name: %s, tenant: %s)",
+            "MOCK: Provisioning agent %s for %s (phone: %s, name: %s, tenant: %s, gender: %s, voice: %s)",
             agent_id,
             user_name,
             phone,
             agent_name,
             tenant_id,
+            bot_gender,
+            tts_voice_name,
         )
 
         token = secrets.token_urlsafe(32)
         gateway_url = self.gateway_base_url
 
         # Insert into agents + phone_routes tables (same as create-agent.sh
-        # does on the VM). Stamps agents.tenant_id with the caller's tenant
-        # so the meter hot-path JOIN works.
+        # does on the VM). The full row is written atomically — agent_name,
+        # bot_gender, and tts_voice_name are persisted at provision time so
+        # downstream readers never see a partially-populated agent.
         if self.db:
             with self.db.connect() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        """INSERT INTO agents (agent_id, gateway_url, gateway_token, session_scope, tenant_id)
-                           VALUES (%s, %s, %s, 'per-peer', %s)
+                        """INSERT INTO agents
+                               (agent_id, gateway_url, gateway_token, session_scope,
+                                tenant_id, agent_name, bot_gender, tts_voice_name)
+                           VALUES (%s, %s, %s, 'per-peer', %s, %s, %s,
+                                   COALESCE(NULLIF(%s, ''), 'Kore'))
                            ON CONFLICT (agent_id) DO UPDATE SET
                                gateway_url = EXCLUDED.gateway_url,
                                gateway_token = EXCLUDED.gateway_token,
-                               tenant_id = EXCLUDED.tenant_id""",
-                        (agent_id, gateway_url, token, tenant_id),
+                               tenant_id = EXCLUDED.tenant_id,
+                               agent_name = EXCLUDED.agent_name,
+                               bot_gender = EXCLUDED.bot_gender,
+                               tts_voice_name = EXCLUDED.tts_voice_name""",
+                        (
+                            agent_id, gateway_url, token, tenant_id,
+                            agent_name or agent_id,
+                            bot_gender or "male",
+                            tts_voice_name,
+                        ),
                     )
                     # Normalize phone
                     normalized = "".join(c for c in phone if c.isdigit())
@@ -151,6 +171,8 @@ class MockProvisioner:
         agent_name: str,
         user_name: str,
         tenant_id: int,
+        bot_gender: str = "",
+        tts_voice_name: str = "",
     ) -> AsyncIterator[dict[str, Any]]:
         """Mock streaming provision — emits a few fake progress events
         then the actual DB insert + result. Useful for local dev UI work
@@ -165,7 +187,10 @@ class MockProvisioner:
             yield {"type": "progress", "step": step, "total": total, "label": label}
             await asyncio.sleep(0.3)
 
-        result = self.provision(agent_id, phone, agent_name, user_name, tenant_id)
+        result = self.provision(
+            agent_id, phone, agent_name, user_name, tenant_id,
+            bot_gender=bot_gender, tts_voice_name=tts_voice_name,
+        )
         yield {
             "type": "result",
             "success": result.success,
@@ -218,6 +243,8 @@ class VmHttpProvisioner:
         agent_name: str,
         user_name: str,
         tenant_id: int,
+        bot_gender: str = "",
+        tts_voice_name: str = "",
     ) -> ProvisionResult:
         logger.info(
             "VmHttpProvisioner: provisioning agent=%s tenant=%s phone=%s",
@@ -235,6 +262,10 @@ class VmHttpProvisioner:
             payload["agent_name"] = agent_name
         if user_name:
             payload["user_name"] = user_name
+        if bot_gender:
+            payload["bot_gender"] = bot_gender
+        if tts_voice_name:
+            payload["tts_voice_name"] = tts_voice_name
 
         try:
             # httpx.Client (sync) — the onboarding route is async but
@@ -298,6 +329,8 @@ class VmHttpProvisioner:
         agent_name: str,
         user_name: str,
         tenant_id: int,
+        bot_gender: str = "",
+        tts_voice_name: str = "",
     ) -> AsyncIterator[dict[str, Any]]:
         """Streaming provision — connects to the daemon's /provision-stream
         endpoint and yields NDJSON events (progress + final result) as
@@ -319,6 +352,10 @@ class VmHttpProvisioner:
             payload["agent_name"] = agent_name
         if user_name:
             payload["user_name"] = user_name
+        if bot_gender:
+            payload["bot_gender"] = bot_gender
+        if tts_voice_name:
+            payload["tts_voice_name"] = tts_voice_name
 
         try:
             async with httpx.AsyncClient(timeout=180.0) as client:

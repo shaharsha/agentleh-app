@@ -92,18 +92,16 @@ class AppDatabase:
                     ALTER TABLE app_users
                     ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'
                 """)
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS app_subscriptions (
-                        id SERIAL PRIMARY KEY,
-                        user_id INTEGER NOT NULL REFERENCES app_users(id),
-                        plan TEXT NOT NULL DEFAULT 'starter',
-                        status TEXT NOT NULL DEFAULT 'mock_active',
-                        external_id TEXT NOT NULL DEFAULT '',
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                    )
-                """)
-                # Ensure agents table exists (bridge creates it, but
-                # we need it for the FK in app_user_agents)
+                # NOTE: the legacy `app_subscriptions` table was dropped
+                # by meter migration 017. The real per-tenant subscription
+                # state lives in `agent_subscriptions` (keyed on
+                # tenant_id) which the meter owns. Plan activation now
+                # flows through coupon redemption — see app/lib/coupons.py.
+
+                # Ensure agents + phone_routes exist (bridge owns these,
+                # but we bootstrap them here too so a fresh app database
+                # can run the FK-bearing CREATEs above without ordering
+                # against the bridge's startup).
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS agents (
                         agent_id TEXT PRIMARY KEY,
@@ -116,18 +114,6 @@ class AppDatabase:
                     CREATE TABLE IF NOT EXISTS phone_routes (
                         phone TEXT PRIMARY KEY,
                         agent_id TEXT NOT NULL REFERENCES agents(agent_id) ON DELETE CASCADE
-                    )
-                """)
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS app_user_agents (
-                        id SERIAL PRIMARY KEY,
-                        user_id INTEGER NOT NULL REFERENCES app_users(id),
-                        agent_id TEXT NOT NULL REFERENCES agents(agent_id),
-                        agent_name TEXT NOT NULL DEFAULT '',
-                        agent_gender TEXT NOT NULL DEFAULT '',
-                        status TEXT NOT NULL DEFAULT 'provisioning',
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                        UNIQUE(user_id, agent_id)
                     )
                 """)
                 # Short-URL table for WhatsApp connect links. Maps a
@@ -242,63 +228,189 @@ class AppDatabase:
         self._execute(f"UPDATE app_users SET {', '.join(sets)} WHERE id = %s", tuple(params))
         return self.get_user_by_id(user_id)
 
-    # ── Subscriptions ─────────────────────────────────────────────────
+    # ── Per-tenant subscription read helper ───────────────────────────
+    # Mirrors the meter's load_active_subscription query (filtered to
+    # active rows whose [period_start, period_end] window contains now()).
+    # Used by:
+    #   - the agent-creation gate in routes/tenants.py
+    #   - the tenant dashboard "current plan" pill
+    #   - coupons.preview() for projecting supersession outcomes
 
-    def create_subscription(self, user_id: int, plan: str = "starter", status: str = "mock_active") -> dict[str, Any]:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO app_subscriptions (user_id, plan, status) VALUES (%s, %s, %s) RETURNING *",
-                    (user_id, plan, status),
-                )
-                row = cur.fetchone()
-            conn.commit()
-        return dict(row) if row else {}
-
-    def get_subscription(self, user_id: int) -> dict[str, Any] | None:
+    def get_active_subscription(self, tenant_id: int) -> dict[str, Any] | None:
         return self._fetch_one(
-            "SELECT * FROM app_subscriptions WHERE user_id = %s ORDER BY created_at DESC LIMIT 1",
-            (user_id,),
+            """
+            SELECT s.id, s.tenant_id, s.plan_id, s.status,
+                   s.period_start, s.period_end,
+                   s.base_allowance_micros, s.used_micros,
+                   s.overage_enabled, s.overage_cap_micros, s.overage_used_micros,
+                   s.plan_has_tts,
+                   p.name_he AS plan_name_he,
+                   p.price_ils_cents, p.billing_mode, p.allows_overage
+              FROM agent_subscriptions s
+              JOIN billing_plans p ON p.plan_id = s.plan_id
+             WHERE s.tenant_id = %s
+               AND s.status = 'active'
+               AND now() BETWEEN s.period_start AND s.period_end
+             ORDER BY s.period_start DESC
+             LIMIT 1
+            """,
+            (tenant_id,),
         )
 
-    # ── User Agents ───────────────────────────────────────────────────
+    # ── Coupons (admin CRUD) ──────────────────────────────────────────
+    # Coupon redemption logic itself lives in app/lib/coupons.py — these
+    # helpers are the read/list/admin-mutate side. The redemption path
+    # writes to coupons + coupon_redemptions + agent_subscriptions in
+    # one transaction with explicit row locks; bypass these helpers for
+    # that path.
 
-    def create_user_agent(self, user_id: int, agent_id: str, agent_name: str, agent_gender: str) -> dict[str, Any]:
+    def list_coupons(self) -> list[dict[str, Any]]:
+        return self._fetch_all(
+            """
+            SELECT c.id, c.code, c.plan_id, c.duration_days,
+                   c.max_redemptions, c.redemption_count,
+                   c.valid_from, c.valid_until, c.one_per_user,
+                   c.notes, c.disabled_at, c.created_by, c.created_at,
+                   p.name_he AS plan_name_he, p.price_ils_cents,
+                   creator.email AS created_by_email
+              FROM coupons c
+              JOIN billing_plans p ON p.plan_id = c.plan_id
+              LEFT JOIN app_users creator ON creator.id = c.created_by
+             ORDER BY c.created_at DESC
+            """
+        )
+
+    def get_coupon(self, coupon_id: int) -> dict[str, Any] | None:
+        return self._fetch_one(
+            """
+            SELECT c.*, p.name_he AS plan_name_he, p.price_ils_cents
+              FROM coupons c
+              JOIN billing_plans p ON p.plan_id = c.plan_id
+             WHERE c.id = %s
+            """,
+            (coupon_id,),
+        )
+
+    def create_coupon(
+        self,
+        *,
+        code: str,
+        plan_id: str,
+        duration_days: int,
+        max_redemptions: int | None,
+        valid_until,
+        one_per_user: bool,
+        notes: str,
+        created_by: int,
+    ) -> dict[str, Any]:
         with self.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """INSERT INTO app_user_agents (user_id, agent_id, agent_name, agent_gender, status)
-                       VALUES (%s, %s, %s, %s, 'active') RETURNING *""",
-                    (user_id, agent_id, agent_name, agent_gender),
+                    """
+                    INSERT INTO coupons (
+                        code, plan_id, duration_days, max_redemptions,
+                        valid_until, one_per_user, notes, created_by
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING *
+                    """,
+                    (
+                        code, plan_id, duration_days, max_redemptions,
+                        valid_until, one_per_user, notes, created_by,
+                    ),
                 )
                 row = cur.fetchone()
             conn.commit()
         return dict(row) if row else {}
 
-    def get_user_agents(self, user_id: int) -> list[dict[str, Any]]:
+    def update_coupon(self, coupon_id: int, **fields) -> dict[str, Any] | None:
+        """Update mutable coupon fields. Plan and duration are immutable
+        post-create — changing them would invalidate the redemption
+        history's plan/duration snapshot semantics."""
+        allowed = {"notes", "max_redemptions", "valid_until", "one_per_user"}
+        sets, params = [], []
+        for k, v in fields.items():
+            if k in allowed:
+                sets.append(f"{k} = %s")
+                params.append(v)
+        if not sets:
+            return self.get_coupon(coupon_id)
+        params.append(coupon_id)
+        self._execute(
+            f"UPDATE coupons SET {', '.join(sets)} WHERE id = %s",
+            tuple(params),
+        )
+        return self.get_coupon(coupon_id)
+
+    def set_coupon_disabled(self, coupon_id: int, disabled: bool) -> dict[str, Any] | None:
+        if disabled:
+            self._execute("UPDATE coupons SET disabled_at = now() WHERE id = %s", (coupon_id,))
+        else:
+            self._execute("UPDATE coupons SET disabled_at = NULL WHERE id = %s", (coupon_id,))
+        return self.get_coupon(coupon_id)
+
+    def list_coupon_redemptions(self, coupon_id: int) -> list[dict[str, Any]]:
         return self._fetch_all(
-            """SELECT ua.*, a.gateway_url, a.tenant_id, a.tts_voice_name
-               FROM app_user_agents ua
-               JOIN agents a ON a.agent_id = ua.agent_id
-               WHERE ua.user_id = %s
-               ORDER BY ua.created_at DESC""",
+            """
+            SELECT r.id, r.coupon_id, r.user_id, r.tenant_id,
+                   r.subscription_id, r.plan_id, r.duration_days,
+                   r.period_start, r.period_end,
+                   r.granted_by_admin, r.redeemed_at,
+                   u.email AS user_email, u.full_name AS user_full_name,
+                   t.name AS tenant_name, t.slug AS tenant_slug,
+                   admin_u.email AS granted_by_admin_email
+              FROM coupon_redemptions r
+              JOIN app_users u ON u.id = r.user_id
+              JOIN tenants t ON t.id = r.tenant_id
+              LEFT JOIN app_users admin_u ON admin_u.id = r.granted_by_admin
+             WHERE r.coupon_id = %s
+             ORDER BY r.redeemed_at DESC
+            """,
+            (coupon_id,),
+        )
+
+    def list_user_redemptions(self, user_id: int) -> list[dict[str, Any]]:
+        return self._fetch_all(
+            """
+            SELECT r.id, r.coupon_id, r.tenant_id, r.subscription_id,
+                   r.plan_id, r.duration_days, r.period_start, r.period_end,
+                   r.granted_by_admin, r.redeemed_at,
+                   c.code AS coupon_code,
+                   t.name AS tenant_name
+              FROM coupon_redemptions r
+              LEFT JOIN coupons c ON c.id = r.coupon_id
+              JOIN tenants t ON t.id = r.tenant_id
+             WHERE r.user_id = %s
+             ORDER BY r.redeemed_at DESC
+            """,
             (user_id,),
         )
 
     # ── Admin (superadmin panel) ──────────────────────────────────────
-    # Read-through helpers that join across app_users, app_user_agents,
+    # Read-through helpers that join across app_users, tenant_memberships,
     # agents, agent_subscriptions, and billing_plans. The meter owns writes
     # to agent_subscriptions + usage_events — these methods are READ ONLY.
+    # Post-Phase-4 (meter migration 018) the legacy `app_user_agents`
+    # junction is gone; agent_name lives on `agents.agent_name`,
+    # agent_gender on `agents.bot_gender`, and "owner" is derived via
+    # `agents.tenant_id → tenants.owner_user_id`.
 
     def list_all_users_with_agent_counts(self) -> list[dict[str, Any]]:
+        # Count agents owned by tenants the user owns (mirrors the previous
+        # semantics: pre-Phase-4 each agent had exactly one user via the
+        # legacy junction; post-Phase-4 each agent belongs to exactly one
+        # tenant which has exactly one owner).
         return self._fetch_all(
             """
             SELECT
                 u.id, u.email, u.full_name, u.phone, u.role,
                 u.onboarding_status, u.created_at,
-                COUNT(DISTINCT ua.agent_id) AS agent_count
+                COUNT(DISTINCT a.agent_id) FILTER (WHERE a.deleted_at IS NULL)
+                    AS agent_count
             FROM app_users u
-            LEFT JOIN app_user_agents ua ON ua.user_id = u.id
+            LEFT JOIN tenants t
+                   ON t.owner_user_id = u.id AND t.deleted_at IS NULL
+            LEFT JOIN agents a
+                   ON a.tenant_id = t.id
             GROUP BY u.id
             ORDER BY u.created_at DESC
             """
@@ -311,9 +423,11 @@ class AppDatabase:
                 a.agent_id,
                 a.gateway_url,
                 a.session_scope,
-                ua.agent_name,
-                ua.agent_gender,
-                ua.status AS link_status,
+                a.tenant_id,
+                a.agent_name,
+                a.bot_gender                            AS agent_gender,
+                CASE WHEN a.deleted_at IS NULL
+                     THEN 'active' ELSE 'deleted' END   AS link_status,
                 u.id        AS user_id,
                 u.email     AS user_email,
                 u.full_name AS user_full_name,
@@ -333,12 +447,12 @@ class AppDatabase:
                 p.billing_mode,
                 p.price_ils_cents
             FROM agents a
-            LEFT JOIN app_user_agents ua ON ua.agent_id = a.agent_id
-            LEFT JOIN app_users       u  ON u.id = ua.user_id
+            LEFT JOIN tenants   t ON t.id = a.tenant_id
+            LEFT JOIN app_users u ON u.id = t.owner_user_id
             LEFT JOIN LATERAL (
                 SELECT *
                 FROM agent_subscriptions s
-                WHERE s.agent_id = a.agent_id
+                WHERE s.tenant_id = a.tenant_id
                   AND s.status = 'active'
                   AND now() BETWEEN s.period_start AND s.period_end
                 ORDER BY s.period_start DESC
@@ -355,12 +469,15 @@ class AppDatabase:
             """
             SELECT
                 a.agent_id, a.gateway_url, a.session_scope, a.tenant_id,
-                ua.agent_name, ua.agent_gender, ua.status AS link_status,
+                a.agent_name,
+                a.bot_gender                            AS agent_gender,
+                CASE WHEN a.deleted_at IS NULL
+                     THEN 'active' ELSE 'deleted' END   AS link_status,
                 u.id AS user_id, u.email AS user_email,
                 u.full_name AS user_full_name, u.role AS user_role
             FROM agents a
-            LEFT JOIN app_user_agents ua ON ua.agent_id = a.agent_id
-            LEFT JOIN app_users       u  ON u.id = ua.user_id
+            LEFT JOIN tenants   t ON t.id = a.tenant_id
+            LEFT JOIN app_users u ON u.id = t.owner_user_id
             WHERE a.agent_id = %s AND a.deleted_at IS NULL
             """,
             (agent_id,),
@@ -640,19 +757,17 @@ class AppDatabase:
     def soft_delete_agent(self, agent_id: str) -> None:
         """Tombstone the agent: stamp ``deleted_at`` and clear live-routing
         state. Preserves billing-relevant rows (usage_events, agents_meter_keys
-        as revoked, app_user_agents_legacy for the display name, legacy
-        agent-keyed agent_subscriptions) so the Usage tab can render
-        historical per-agent spend with a "(deleted)" label.
+        as revoked, the agents row itself with its `agent_name`) so the
+        Usage tab can render historical per-agent spend with a "(deleted)"
+        label.
 
         What we keep
         ────────────
         - ``agents`` row itself (just `deleted_at` set, `gateway_url` cleared
-          so any leftover routing code fails fast).
-        - ``app_user_agents_legacy`` — source of `agent_name` for the
-          breakdown UI.
+          so any leftover routing code fails fast). Its `agent_name` +
+          `bot_gender` columns remain populated and are the only source of
+          the human-readable label for the Usage breakdown.
         - ``usage_events`` — append-only, source of truth for billing.
-        - ``agent_subscriptions`` legacy agent-keyed rows (modern subs are
-          tenant-keyed and unaffected by per-agent delete).
 
         What we remove (live-state, security/PII)
         ─────────────────────────────────────────
@@ -754,6 +869,11 @@ class AppDatabase:
         """Active agents for this tenant — soft-deleted agents are filtered.
         For the Usage tab's per-agent breakdown (which must show deleted
         agents alongside live ones), use ``list_tenant_agents_with_deleted``.
+
+        Post-Phase-4 (meter migration 018) the legacy junction is gone;
+        agent_name + bot_gender live on the `agents` row directly and are
+        written atomically by create-agent.sh during INSERT, so no
+        defensive coalescing is needed here.
         """
         return self._fetch_all(
             """
@@ -761,14 +881,13 @@ class AppDatabase:
                    a.gateway_url,
                    a.session_scope,
                    a.tenant_id,
-                   COALESCE(ual.agent_name,   a.agent_id) AS agent_name,
-                   COALESCE(ual.agent_gender, '')         AS agent_gender,
-                   COALESCE(ual.status,       'active')   AS status,
-                   COALESCE(ual.created_at,   now())      AS created_at
+                   a.agent_name,
+                   a.bot_gender   AS agent_gender,
+                   'active'       AS status,
+                   a.created_at   AS created_at
               FROM agents a
-              LEFT JOIN app_user_agents_legacy ual ON ual.agent_id = a.agent_id
              WHERE a.tenant_id = %s AND a.deleted_at IS NULL
-             ORDER BY created_at DESC
+             ORDER BY a.created_at DESC
             """,
             (tenant_id,),
         )
@@ -791,16 +910,16 @@ class AppDatabase:
                    a.session_scope,
                    a.tenant_id,
                    a.deleted_at,
-                   COALESCE(ual.agent_name,   a.agent_id) AS agent_name,
-                   COALESCE(ual.agent_gender, '')         AS agent_gender,
-                   COALESCE(ual.status,       'active')   AS status,
-                   COALESCE(ual.created_at,   now())      AS created_at
+                   a.agent_name,
+                   a.bot_gender   AS agent_gender,
+                   CASE WHEN a.deleted_at IS NULL
+                        THEN 'active' ELSE 'deleted' END   AS status,
+                   a.created_at   AS created_at
               FROM agents a
-              LEFT JOIN app_user_agents_legacy ual ON ual.agent_id = a.agent_id
              WHERE a.tenant_id = %s
              ORDER BY (a.deleted_at IS NULL) DESC,
                       a.deleted_at DESC NULLS LAST,
-                      created_at DESC
+                      a.created_at DESC
             """,
             (tenant_id,),
         )

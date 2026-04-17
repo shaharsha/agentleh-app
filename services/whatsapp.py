@@ -24,11 +24,22 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# Primary template: Hebrew welcome with the agent's name as {{1}}.
-# Body: "היי! אני {{1}} מ-Agentiko. כדי להתחיל — פשוט לענות כאן."
-# Gender-neutral — the agent's personal name (Shuli, Yuki, etc.) carries
-# identity; we don't say "your agent" which would require masc/fem forms.
-HELLO_TEMPLATE_NAME = "agent_ready_he"
+# Primary template: strict-UTILITY Hebrew notification with the
+# agent's name as {{1}}. Body:
+#   Agentiko: הסוכן "{{1}}" הוקם בחשבונך. כדי להתחיל שיחה, יש לשלוח הודעה.
+#
+# This is intentionally transactional (no first-person warmth, no
+# capabilities list, no persuasive language). The actual warm first
+# response from the agent - identity, capabilities, Gmail/Calendar
+# connect hint - comes in the agent's first conversational reply
+# (driven by AGENTS.md "הודעה ראשונה" section), not this template.
+#
+# Why: Meta's classifier auto-converts warm/first-person templates to
+# MARKETING, which is subject to the 131049 "healthy ecosystem
+# engagement" throttle - causing silent delivery failures we saw on
+# v1/v2. Keeping this strictly UTILITY guarantees reliable delivery;
+# the agent's voice lives in the free-form conversation that follows.
+HELLO_TEMPLATE_NAME = "agent_ready_he_v4"
 HELLO_TEMPLATE_LANGUAGE = "he"
 
 # Fallback for legacy agents where agent_name might be empty — the
@@ -112,11 +123,35 @@ class BridgeWhatsApp:
             )
             return False
 
+        # Parse the bridge response so we can log Meta's wamid + the
+        # resolved wa_id. A wa_id that differs from `phone` is a strong
+        # hint that the number was reformatted by Meta (rare) or that
+        # the template was delivered to a different account than
+        # expected. Missing wamid = Meta didn't accept the send even
+        # though the HTTP status was 200 at some intermediate hop.
+        try:
+            bridge_body = resp.json()
+        except Exception:  # noqa: BLE001
+            bridge_body = {"raw": resp.text[:400]}
+        meta_result = bridge_body.get("result") if isinstance(bridge_body, dict) else None
+        wamid = None
+        wa_id = None
+        if isinstance(meta_result, dict):
+            msgs = meta_result.get("messages") or []
+            contacts = meta_result.get("contacts") or []
+            if msgs and isinstance(msgs[0], dict):
+                wamid = msgs[0].get("id")
+            if contacts and isinstance(contacts[0], dict):
+                wa_id = contacts[0].get("wa_id")
         logger.info(
-            "BridgeWhatsApp: sent %s template to %s (agent=%s)",
+            "BridgeWhatsApp: sent %s to phone=%s agent=%s status=%s wa_id=%s wamid=%s bridge_status=%s",
             payload["template_name"],
             phone,
             agent_name,
+            resp.status_code,
+            wa_id,
+            wamid,
+            bridge_body.get("status") if isinstance(bridge_body, dict) else None,
         )
         return True
 

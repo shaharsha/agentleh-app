@@ -4,7 +4,7 @@ export interface AppUser {
   full_name: string
   phone: string
   gender: string
-  onboarding_status: 'pending' | 'payment_done' | 'complete'
+  onboarding_status: 'pending' | 'plan_active' | 'complete'
   role: 'user' | 'superadmin'
   tenants?: TenantMembership[]
   default_tenant_id?: number | null
@@ -49,6 +49,21 @@ export interface TenantInvite {
   expires_at: string
 }
 
+export interface TenantSubscriptionSummary {
+  id: number
+  plan_id: string
+  plan_name_he: string
+  billing_mode: 'plan_hardblock' | 'plan_overage' | 'wallet'
+  status: string
+  period_start: string
+  period_end: string
+  base_allowance_micros: number
+  used_micros: number
+  overage_enabled: boolean
+  overage_cap_micros: number | null
+  overage_used_micros: number
+}
+
 export interface TenantDetail {
   tenant: {
     id: number
@@ -60,6 +75,9 @@ export interface TenantDetail {
     created_at: string | null
     role: TenantRole
   }
+  /** Per-tenant active subscription pulled from agent_subscriptions —
+   *  null means no active plan, which gates agent provisioning with 402. */
+  subscription: TenantSubscriptionSummary | null
   members: TenantMember[]
   agents: TenantAgent[]
   pending_invites: TenantInvite[]
@@ -90,6 +108,7 @@ export interface AdminUserRow {
 export interface AdminAgentRow {
   agent_id: string
   gateway_url: string
+  tenant_id: number | null
   agent_name: string | null
   agent_gender: string | null
   user_id: number | null
@@ -116,6 +135,7 @@ export interface BillingPlan {
   allows_overage: boolean
   default_overage_cap_micros: number | null
   rate_limit_rpm: number
+  plan_has_tts?: boolean
 }
 
 export interface AdminOverview {
@@ -165,7 +185,7 @@ export interface UsageTotals {
   llm_output_tokens: number
   search_queries: number
   tts_chars: number
-  embedding_chars: number
+  embedding_tokens: number
   event_count: number
 }
 
@@ -218,8 +238,7 @@ export interface Agent {
   status: string
   gateway_url: string
   created_at: string
-  // Added by db.get_user_agents JOIN on agents — populated on recent agents
-  // (created post-meter-migration-008) but may be absent for legacy rows.
+  // Sourced directly from the `agents` row (post-Phase-4 cleanup).
   tenant_id?: number
   tts_voice_name?: string
 }
