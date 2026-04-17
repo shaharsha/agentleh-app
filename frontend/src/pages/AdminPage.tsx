@@ -454,6 +454,7 @@ interface VmStatsResponse {
     requests: number
     llm_requests: number
     search_requests: number
+    embedding_requests: number
     input_tokens: number
     output_tokens: number
     cached_tokens: number
@@ -461,13 +462,16 @@ interface VmStatsResponse {
     cost_micros: number
     llm_cost_micros: number
     search_cost_micros: number
+    embedding_cost_micros: number
   } | null
   cost_by_kind_per_hour: Array<{
     hour: string
     llm_cost_micros: number
     search_cost_micros: number
+    embedding_cost_micros: number
     llm_events: number
     search_events: number
+    embedding_events: number
   }>
   tokens_per_hour: Array<{
     hour: string
@@ -477,7 +481,7 @@ interface VmStatsResponse {
   }>
   model_breakdown_7d: Array<{
     model: string
-    kind: 'llm' | 'search'
+    kind: 'llm' | 'search' | 'tts' | 'embedding'
     events: number
     cost_micros: number
     total_tokens: number
@@ -741,6 +745,8 @@ const CHART_COLORS = {
   containers: '#10b981',  // green  — VM containers
   llm: '#3b82f6',         // blue   — LLM / chat / input tokens
   search: '#10b981',      // green  — grounding search
+  tts: '#f59e0b',         // amber  — voice / TTS
+  embedding: '#ec4899',   // pink   — memory-search embeddings
   output: '#8b5cf6',      // purple — output tokens
   cached: '#f59e0b',      // amber  — cached tokens
   events: '#0ea5e9',      // sky    — request volume
@@ -831,9 +837,9 @@ function TodayUsageTotals({ totals }: { totals: VmStatsResponse['today_totals'] 
         <UsageTile
           label="Requests"
           value={fmtCompactNumber(totals.requests)}
-          sub={`${fmtCompactNumber(totals.llm_requests)} LLM · ${fmtCompactNumber(totals.search_requests)} search`}
+          sub={`${fmtCompactNumber(totals.llm_requests)} LLM · ${fmtCompactNumber(totals.search_requests)} search · ${fmtCompactNumber(totals.embedding_requests)} embed`}
           accent="#0ea5e9"
-          info="Total upstream calls routed through agentleh-meter in the last 24 hours: chat completions (kind=llm) plus grounding-search queries (kind=search)."
+          info="Total upstream calls routed through agentleh-meter in the last 24 hours: chat completions (kind=llm), grounding-search queries (kind=search), and memory-search embeddings (kind=embedding)."
         />
         <UsageTile
           label="Input tokens"
@@ -863,7 +869,7 @@ function TodayUsageTotals({ totals }: { totals: VmStatsResponse['today_totals'] 
         <UsageTile
           label="Cost"
           value={fmtUsdMicros(totals.cost_micros, 3)}
-          sub={`${fmtUsdMicros(totals.llm_cost_micros, 3)} LLM · ${fmtUsdMicros(totals.search_cost_micros, 3)} search · ${llmShare}% LLM`}
+          sub={`${fmtUsdMicros(totals.llm_cost_micros, 3)} LLM · ${fmtUsdMicros(totals.search_cost_micros, 3)} search · ${fmtUsdMicros(totals.embedding_cost_micros, 3)} embed · ${llmShare}% LLM`}
           accent="#ef4444"
           info="Total cost across all agents in the last 24h, billed by the upstream Google API and recorded by agentleh-meter. Split by kind in the sub-line."
         />
@@ -884,21 +890,25 @@ function CostByKindChart({ hours }: { hours: VmStatsResponse['cost_by_kind_per_h
     hour: fmtHourOnly(h.hour),
     llm: Number(h.llm_cost_micros) / 1_000_000,
     search: Number(h.search_cost_micros) / 1_000_000,
+    embedding: Number(h.embedding_cost_micros) / 1_000_000,
   }))
   const totalLlm = data.reduce((a, b) => a + b.llm, 0)
   const totalSearch = data.reduce((a, b) => a + b.search, 0)
+  const totalEmbedding = data.reduce((a, b) => a + b.embedding, 0)
   return (
     <div className="glass-card p-6">
       <div className="flex items-baseline justify-between mb-3">
         <div className="flex items-baseline gap-2">
           <h3 className="text-base font-semibold">Cost by kind — last 24h</h3>
-          <InfoTip text="Per-hour stacked cost split between LLM (chat completions, billed per token) and grounding search (billed per query at $14/1k for Gemini 3). The most actionable cost lever you have." />
+          <InfoTip text="Per-hour stacked cost split between LLM (chat completions, per-token), grounding search (per-query, ~$14/1k on Gemini 3), and memory-search embeddings (per-token on gemini-embedding-001, ~$0.15/Mtok). Grounding search is usually the biggest cost lever." />
         </div>
         <div className="text-xs text-gray-600">
           <span className="font-mono font-semibold" style={{ color: CHART_COLORS.llm }}>${totalLlm.toFixed(4)}</span>
           {' '}LLM ·{' '}
           <span className="font-mono font-semibold" style={{ color: CHART_COLORS.search }}>${totalSearch.toFixed(4)}</span>
-          {' '}search
+          {' '}search ·{' '}
+          <span className="font-mono font-semibold" style={{ color: CHART_COLORS.embedding }}>${totalEmbedding.toFixed(4)}</span>
+          {' '}embed
         </div>
       </div>
       <ResponsiveContainer width="100%" height={260}>
@@ -922,7 +932,8 @@ function CostByKindChart({ hours }: { hours: VmStatsResponse['cost_by_kind_per_h
           />
           <Legend wrapperStyle={legendStyle} iconType="circle" />
           <Bar dataKey="llm" name="LLM" stackId="cost" fill={CHART_COLORS.llm} maxBarSize={48} isAnimationActive={false} />
-          <Bar dataKey="search" name="Search" stackId="cost" fill={CHART_COLORS.search} radius={[4, 4, 0, 0]} maxBarSize={48} isAnimationActive={false} />
+          <Bar dataKey="search" name="Search" stackId="cost" fill={CHART_COLORS.search} maxBarSize={48} isAnimationActive={false} />
+          <Bar dataKey="embedding" name="Embedding" stackId="cost" fill={CHART_COLORS.embedding} radius={[4, 4, 0, 0]} maxBarSize={48} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -1025,11 +1036,13 @@ function ModelBreakdownCard({ rows }: { rows: VmStatsResponse['model_breakdown_7
       <div className="flex items-baseline justify-between mb-3">
         <div className="flex items-baseline gap-2">
           <h3 className="text-base font-semibold">Cost by model — last 7 days</h3>
-          <InfoTip text="Per-(model, kind) spend over the last 7 days. Bar color encodes kind: blue = LLM/chat, green = grounding search. Any unexpected model at the top means an accidental fallback — fix it before it compounds." />
+          <InfoTip text="Per-(model, kind) spend over the last 7 days. Bar color encodes kind: blue = LLM/chat, green = grounding search, amber = voice/TTS, pink = memory-search embeddings. Any unexpected model at the top means an accidental fallback — fix it before it compounds." />
         </div>
         <div className="text-xs text-gray-500">
           <span className="inline-block w-2 h-2 rounded-full mr-1 align-middle" style={{ background: CHART_COLORS.llm }} />LLM
           <span className="inline-block w-2 h-2 rounded-full mr-1 ml-2 align-middle" style={{ background: CHART_COLORS.search }} />Search
+          <span className="inline-block w-2 h-2 rounded-full mr-1 ml-2 align-middle" style={{ background: CHART_COLORS.tts }} />TTS
+          <span className="inline-block w-2 h-2 rounded-full mr-1 ml-2 align-middle" style={{ background: CHART_COLORS.embedding }} />Embed
         </div>
       </div>
       <ResponsiveContainer width="100%" height={chartHeight}>
@@ -1064,7 +1077,12 @@ function ModelBreakdownCard({ rows }: { rows: VmStatsResponse['model_breakdown_7
             {chartData.map((row, i) => (
               <Cell
                 key={`${row.model}-${row.kind}-${i}`}
-                fill={row.kind === 'search' ? CHART_COLORS.search : CHART_COLORS.llm}
+                fill={
+                  row.kind === 'search' ? CHART_COLORS.search
+                  : row.kind === 'tts' ? CHART_COLORS.tts
+                  : row.kind === 'embedding' ? CHART_COLORS.embedding
+                  : CHART_COLORS.llm
+                }
               />
             ))}
             <LabelList

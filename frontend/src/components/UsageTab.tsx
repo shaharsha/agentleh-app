@@ -123,7 +123,8 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
     () =>
       Number(totals?.llm_micros ?? 0)
       + Number(totals?.search_micros ?? 0)
-      + Number(totals?.tts_micros ?? 0),
+      + Number(totals?.tts_micros ?? 0)
+      + Number(totals?.embedding_micros ?? 0),
     [totals],
   )
 
@@ -246,11 +247,12 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
             </span>
           )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 text-sm">
           <TotalTile label={{ he: 'סה״כ', en: 'Total' }} value={num(microsToUsd(totalMicros))} loading={loading} emphasize />
           <TotalTile label={{ he: 'מודל שפה', en: 'LLM' }} value={num(microsToUsd(totals?.llm_micros))} loading={loading} />
           <TotalTile label={{ he: 'חיפוש', en: 'Search' }} value={num(microsToUsd(totals?.search_micros))} loading={loading} />
           <TotalTile label={{ he: 'קול', en: 'Voice (TTS)' }} value={num(microsToUsd(totals?.tts_micros))} loading={loading} />
+          <TotalTile label={{ he: 'חיפוש זיכרון', en: 'Memory search' }} value={num(microsToUsd(totals?.embedding_micros))} loading={loading} />
         </div>
       </div>
 
@@ -284,6 +286,7 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
                   <th className="text-end font-medium py-2 px-3">{t({ he: 'מודל שפה', en: 'LLM' })}</th>
                   <th className="text-end font-medium py-2 px-3">{t({ he: 'חיפוש', en: 'Search' })}</th>
                   <th className="text-end font-medium py-2 px-3">{t({ he: 'קול', en: 'Voice' })}</th>
+                  <th className="text-end font-medium py-2 px-3">{t({ he: 'זיכרון', en: 'Memory' })}</th>
                   <th className="text-end font-medium py-2 px-3">{t({ he: 'סה״כ', en: 'Total' })}</th>
                   <th className="text-end font-medium py-2 ps-3">{t({ he: 'אירועים', en: 'Events' })}</th>
                 </tr>
@@ -330,7 +333,11 @@ function AgentRow({
   row: AgentUsageRow
   num: (v: string) => React.ReactNode
 }) {
-  const total = Number(row.llm_micros) + Number(row.search_micros) + Number(row.tts_micros)
+  const total =
+    Number(row.llm_micros)
+    + Number(row.search_micros)
+    + Number(row.tts_micros)
+    + Number(row.embedding_micros)
   return (
     <tr className="border-t border-gray-100">
       <td className="py-2 pe-3">
@@ -340,6 +347,7 @@ function AgentRow({
       <td className="py-2 px-3 text-end">{num(microsToUsd(row.llm_micros))}</td>
       <td className="py-2 px-3 text-end">{num(microsToUsd(row.search_micros))}</td>
       <td className="py-2 px-3 text-end">{num(microsToUsd(row.tts_micros))}</td>
+      <td className="py-2 px-3 text-end">{num(microsToUsd(row.embedding_micros))}</td>
       <td className="py-2 px-3 text-end font-medium text-gray-900">{num(microsToUsd(total))}</td>
       <td className="py-2 ps-3 text-end tabular-nums">{num(String(row.event_count))}</td>
     </tr>

@@ -281,16 +281,18 @@ async def admin_vm_stats(
     today_totals = db._fetch_one(
         """
         SELECT
-            COUNT(*)                                                          AS requests,
-            COUNT(*) FILTER (WHERE kind = 'llm')                              AS llm_requests,
-            COUNT(*) FILTER (WHERE kind = 'search')                           AS search_requests,
-            COALESCE(SUM(input_tokens), 0)::bigint                            AS input_tokens,
-            COALESCE(SUM(output_tokens), 0)::bigint                           AS output_tokens,
-            COALESCE(SUM(cached_tokens), 0)::bigint                           AS cached_tokens,
-            COALESCE(SUM(search_queries), 0)::bigint                          AS search_queries,
-            COALESCE(SUM(cost_micros), 0)::bigint                             AS cost_micros,
-            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'llm'), 0)::bigint AS llm_cost_micros,
-            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'search'), 0)::bigint AS search_cost_micros
+            COUNT(*)                                                                AS requests,
+            COUNT(*) FILTER (WHERE kind = 'llm')                                    AS llm_requests,
+            COUNT(*) FILTER (WHERE kind = 'search')                                 AS search_requests,
+            COUNT(*) FILTER (WHERE kind = 'embedding')                              AS embedding_requests,
+            COALESCE(SUM(input_tokens), 0)::bigint                                  AS input_tokens,
+            COALESCE(SUM(output_tokens), 0)::bigint                                 AS output_tokens,
+            COALESCE(SUM(cached_tokens), 0)::bigint                                 AS cached_tokens,
+            COALESCE(SUM(search_queries), 0)::bigint                                AS search_queries,
+            COALESCE(SUM(cost_micros), 0)::bigint                                   AS cost_micros,
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'llm'), 0)::bigint       AS llm_cost_micros,
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'search'), 0)::bigint    AS search_cost_micros,
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'embedding'), 0)::bigint AS embedding_cost_micros
         FROM usage_events
         WHERE ts > now() - interval '24 hours'
         """,
@@ -301,10 +303,12 @@ async def admin_vm_stats(
         """
         SELECT
             date_trunc('hour', ts) AS hour,
-            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'llm'),    0)::bigint AS llm_cost_micros,
-            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'search'), 0)::bigint AS search_cost_micros,
-            COUNT(*) FILTER (WHERE kind = 'llm')                                 AS llm_events,
-            COUNT(*) FILTER (WHERE kind = 'search')                              AS search_events
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'llm'),       0)::bigint AS llm_cost_micros,
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'search'),    0)::bigint AS search_cost_micros,
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'embedding'), 0)::bigint AS embedding_cost_micros,
+            COUNT(*) FILTER (WHERE kind = 'llm')                                    AS llm_events,
+            COUNT(*) FILTER (WHERE kind = 'search')                                 AS search_events,
+            COUNT(*) FILTER (WHERE kind = 'embedding')                              AS embedding_events
         FROM usage_events
         WHERE ts > now() - interval '24 hours'
         GROUP BY hour
