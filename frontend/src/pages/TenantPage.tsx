@@ -1055,8 +1055,8 @@ function DeleteAgentModal({
 
         <p className="text-sm text-gray-700">
           {t({
-            he: 'פעולה זו תמחק לצמיתות את הסוכן, הקונטיינר שלו, כל הנתונים וההגדרות. גיבוי ישמר ב-GCS למשך 90 יום. לא ניתן לבטל פעולה זו.',
-            en: 'This will permanently delete the agent, its container, all data and configuration. A backup will be saved to GCS for 90 days. This cannot be undone.',
+            he: 'פעולה זו תמחק לצמיתות את הסוכן, הקונטיינר שלו, כל הנתונים וההגדרות. גיבוי ישמר למשך 90 יום. לא ניתן לבטל פעולה זו.',
+            en: 'This will permanently delete the agent, its container, all data and configuration. A backup will be kept for 90 days. This cannot be undone.',
           })}
         </p>
 
