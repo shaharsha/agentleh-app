@@ -237,16 +237,17 @@ def _sanitize_outbound_frame(
         params["sessionKey"] = session_key
 
     if method == "chat.send":
-        # OpenClaw's ChatSendParamsSchema rejects additionalProperties,
-        # REQUIRES idempotencyKey, and uses `originatingChannel` (not
-        # `messageChannel` which we had initially). Fix both:
-        #   - mint an idempotencyKey here so replays are safe AND the
-        #     browser doesn't need to care about the field
-        #   - coerce messageChannel → originatingChannel, hardcoded to
-        #     "webchat" so the downstream agent can tell browser traffic
-        #     from bridge/telegram
+        # OpenClaw's ChatSendParamsSchema rejects additionalProperties
+        # and REQUIRES idempotencyKey. Mint one per request so replays
+        # are safe AND the browser doesn't need to care about the field.
+        # We don't set originatingChannel/originatingTo — the schema
+        # treats those as a pair (setting channel alone yields
+        # "originatingTo is required when using originating route
+        # fields"), and we have no meaningful 'to' for web chat. The
+        # sessionKey (webchat-u<user>-a<agent>) already unambiguously
+        # identifies browser traffic for the agent's side.
         params.pop("messageChannel", None)
-        params["originatingChannel"] = "webchat"
+        params.pop("originatingChannel", None)
         if not params.get("idempotencyKey"):
             import uuid as _uuid
             params["idempotencyKey"] = f"webchat-{_uuid.uuid4().hex}"
