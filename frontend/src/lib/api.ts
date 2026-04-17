@@ -382,6 +382,64 @@ export async function getTenantUsage(
   return res.json()
 }
 
+export interface AuditEvent {
+  id: number
+  actor_user_id: number | null
+  actor_email: string | null
+  actor_full_name: string | null
+  action: string
+  target_type: string | null
+  target_id: string | null
+  metadata: Record<string, unknown> | null
+  created_at: string | null
+}
+
+export async function listTenantAudit(
+  tenantId: number,
+  opts?: { limit?: number; offset?: number },
+): Promise<{ events: AuditEvent[]; limit: number; offset: number }> {
+  const qs = new URLSearchParams()
+  if (opts?.limit !== undefined) qs.set('limit', String(opts.limit))
+  if (opts?.offset !== undefined) qs.set('offset', String(opts.offset))
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  const res = await authFetch(`/api/tenants/${tenantId}/audit${suffix}`)
+  if (!res.ok) throw new Error('Audit log failed')
+  return res.json()
+}
+
+// ─── Superadmin: cross-tenant views ────────────────────────────────
+
+export interface AdminTenantRow {
+  id: number
+  slug: string
+  name: string
+  name_base: string | null
+  created_at: string | null
+  billing_email: string | null
+  owner_user_id: number
+  owner_email: string | null
+  owner_full_name: string | null
+  member_count: number
+  agent_count: number
+  plan_id: string | null
+  plan_name_he: string | null
+  price_ils_cents: number | null
+  subscription_status: string | null
+  subscription_period_end: string | null
+}
+
+export async function adminListTenants(): Promise<{ tenants: AdminTenantRow[] }> {
+  const res = await authFetch('/api/admin/tenants')
+  if (!res.ok) throw new Error('Admin tenants failed')
+  return res.json()
+}
+
+export async function adminTenantDetail(tenantId: number): Promise<Record<string, unknown>> {
+  const res = await authFetch(`/api/admin/tenants/${tenantId}`)
+  if (!res.ok) throw new Error('Admin tenant detail failed')
+  return res.json()
+}
+
 export interface ProvisionProgress {
   step: number
   total: number

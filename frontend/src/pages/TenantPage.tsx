@@ -23,16 +23,17 @@ import { planLabel, statusLabel } from '../lib/labels'
 import TenantName from '../components/TenantName'
 import IntegrationsPanel from '../components/IntegrationsPanel'
 import UsageTab from '../components/UsageTab'
+import AuditTab from '../components/AuditTab'
 import { microsToUsd } from '../lib/format'
 
 interface Props {
   tenantId: number
-  subpage: 'dashboard' | 'members' | 'settings' | 'usage'
+  subpage: 'dashboard' | 'members' | 'settings' | 'usage' | 'audit'
   onNavigate: (path: string) => void
   onTenantsChanged: () => void
 }
 
-type Tab = 'dashboard' | 'members' | 'settings' | 'usage'
+type Tab = 'dashboard' | 'members' | 'settings' | 'usage' | 'audit'
 
 /**
  * Unified tenant page with three tabs. Fully bilingual via useI18n:
@@ -149,7 +150,9 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
         ? { he: 'חברים', en: 'Members' }
         : tab === 'usage'
           ? { he: 'שימוש', en: 'Usage' }
-          : { he: 'הגדרות', en: 'Settings' }
+          : tab === 'audit'
+            ? { he: 'יומן אירועים', en: 'Audit log' }
+            : { he: 'הגדרות', en: 'Settings' }
 
   const tabButton = (tab: Tab) => (
     <button
@@ -198,6 +201,7 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
         {tabButton('dashboard')}
         {tabButton('members')}
         {tabButton('usage')}
+        {isAdminOrOwner && tabButton('audit')}
         {tabButton('settings')}
       </div>
 
@@ -223,6 +227,7 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
         />
       )}
       {activeTab === 'usage' && <UsageTab tenantId={tenantId} />}
+      {activeTab === 'audit' && isAdminOrOwner && <AuditTab tenantId={tenantId} />}
       {activeTab === 'settings' && (
         <SettingsTab
           tenantId={tenantId}

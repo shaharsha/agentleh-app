@@ -115,6 +115,19 @@ async def accept_invite(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"error": str(exc)})
 
+    db.log_audit(
+        tenant_id=membership["tenant_id"],
+        actor_user_id=user["id"],
+        action="member.accept_invite",
+        target_type="invite",
+        target_id=str(invite["id"]),
+        metadata={
+            "email": invite["email"],
+            "role": membership["role"],
+            "invited_by": invite["invited_by"],
+        },
+    )
+
     return {
         "tenant_id": membership["tenant_id"],
         "role": membership["role"],

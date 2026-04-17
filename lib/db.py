@@ -1086,3 +1086,164 @@ class AppDatabase:
                 )
             conn.commit()
         return dict(membership)
+
+    # ── Tenant audit log ─────────────────────────────────────────────
+    # Append-only record of every state-changing tenant action. See
+    # meter/migrations/020_tenant_audit_log.sql for the schema + the
+    # action namespace convention. Call this from every mutation route
+    # right after the DB change lands (or from inside the same
+    # transaction for paths that build their own cursor).
+
+    def log_audit(
+        self,
+        *,
+        tenant_id: int,
+        action: str,
+        actor_user_id: int | None = None,
+        target_type: str | None = None,
+        target_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
+        """Write one audit row. Never raises to the caller — audit
+        logging is best-effort. Failures are logged and swallowed so an
+        audit write never blocks a real mutation.
+
+        `actor_user_id=None` signals a system-initiated action (e.g.
+        Grow webhook subscription renewal, scheduled invite expiry).
+        The UI renders these with a "system" label.
+        """
+        import json
+
+        try:
+            self._execute(
+                """
+                INSERT INTO tenant_audit_log
+                    (tenant_id, actor_user_id, action,
+                     target_type, target_id, metadata,
+                     ip_address, user_agent)
+                VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::inet, %s)
+                """,
+                (
+                    tenant_id,
+                    actor_user_id,
+                    action,
+                    target_type,
+                    target_id,
+                    json.dumps(metadata) if metadata is not None else None,
+                    ip_address,
+                    user_agent,
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "audit log write failed for tenant=%s action=%s actor=%s",
+                tenant_id, action, actor_user_id, exc_info=True,
+            )
+
+    # ── Superadmin: cross-tenant views ───────────────────────────────
+    # These power the admin panel's Tenants tab + impersonation flow.
+    # All READ-only; mutation of tenant state goes through the same
+    # routes any tenant owner would use.
+
+    def list_all_tenants(self) -> list[dict[str, Any]]:
+        """Every non-deleted tenant with owner + active plan inlined.
+
+        Used by the admin Tenants tab. One row per tenant, ordered by
+        created_at DESC so the newest workspace is at the top. The
+        active-sub join is a LATERAL LIMIT 1 because a tenant can have
+        both a superseded and an active row for the same period window.
+        """
+        return self._fetch_all(
+            """
+            SELECT
+                t.id,
+                t.slug,
+                t.name,
+                t.name_base,
+                t.created_at,
+                t.billing_email,
+                t.owner_user_id,
+                u.email        AS owner_email,
+                u.full_name    AS owner_full_name,
+                (SELECT COUNT(*) FROM tenant_memberships tm WHERE tm.tenant_id = t.id) AS member_count,
+                (SELECT COUNT(*) FROM agents a WHERE a.tenant_id = t.id AND a.deleted_at IS NULL) AS agent_count,
+                s.plan_id,
+                s.status        AS subscription_status,
+                s.period_start  AS subscription_period_start,
+                s.period_end    AS subscription_period_end,
+                p.name_he       AS plan_name_he,
+                p.price_ils_cents
+              FROM tenants t
+              JOIN app_users u ON u.id = t.owner_user_id
+              LEFT JOIN LATERAL (
+                  SELECT *
+                    FROM agent_subscriptions s
+                   WHERE s.tenant_id = t.id
+                     AND s.status = 'active'
+                     AND now() BETWEEN s.period_start AND s.period_end
+                   ORDER BY s.period_start DESC
+                   LIMIT 1
+              ) s ON TRUE
+              LEFT JOIN billing_plans p ON p.plan_id = s.plan_id
+             WHERE t.deleted_at IS NULL
+             ORDER BY t.created_at DESC
+            """
+        )
+
+    def get_tenant_full_detail(self, tenant_id: int) -> dict[str, Any] | None:
+        """Single-tenant view for the admin drawer. Combines the tenant
+        row, its members + roles, its active + soft-deleted agents, the
+        active subscription, and the last 20 audit events — all in one
+        payload so the UI doesn't need to orchestrate four fetches."""
+        tenant = self._fetch_one(
+            """
+            SELECT t.*, u.email AS owner_email, u.full_name AS owner_full_name
+              FROM tenants t
+              JOIN app_users u ON u.id = t.owner_user_id
+             WHERE t.id = %s
+            """,
+            (tenant_id,),
+        )
+        if tenant is None:
+            return None
+        return {
+            "tenant": tenant,
+            "members": self.list_tenant_members(tenant_id),
+            "agents": self.list_tenant_agents_with_deleted(tenant_id),
+            "subscription": self.get_active_subscription(tenant_id),
+            "recent_audit": self.list_tenant_audit(tenant_id, limit=20),
+            "pending_invites": self.list_pending_invites(tenant_id),
+        }
+
+    def list_tenant_audit(
+        self, tenant_id: int, *, limit: int = 100, offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """Time-descending audit feed for one tenant. Includes the
+        actor's email so the UI doesn't need a separate JOIN round-trip
+        per row. Default page size 100 matches the TenantPage Audit
+        tab's initial render."""
+        return self._fetch_all(
+            """
+            SELECT
+                a.id,
+                a.tenant_id,
+                a.actor_user_id,
+                u.email        AS actor_email,
+                u.full_name    AS actor_full_name,
+                a.action,
+                a.target_type,
+                a.target_id,
+                a.metadata,
+                a.ip_address,
+                a.user_agent,
+                a.created_at
+              FROM tenant_audit_log a
+              LEFT JOIN app_users u ON u.id = a.actor_user_id
+             WHERE a.tenant_id = %s
+             ORDER BY a.created_at DESC, a.id DESC
+             LIMIT %s OFFSET %s
+            """,
+            (tenant_id, limit, offset),
+        )

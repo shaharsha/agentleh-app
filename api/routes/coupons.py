@@ -146,7 +146,22 @@ async def redeem_route(
     if user.get("onboarding_status") == "pending":
         db.update_user(user["id"], onboarding_status="plan_active")
 
-    return {"redemption": result.to_dict()}
+    redemption = result.to_dict()
+    db.log_audit(
+        tenant_id=tenant_id,
+        actor_user_id=user["id"],
+        action="subscription.redeem_coupon",
+        target_type="subscription",
+        target_id=str(redemption.get("subscription_id")),
+        metadata={
+            "coupon_id": redemption.get("coupon_id"),
+            "plan_id": redemption.get("plan_id"),
+            "duration_days": redemption.get("duration_days"),
+            "schedule": redemption.get("schedule"),
+        },
+    )
+
+    return {"redemption": redemption}
 
 
 @router.post("/preview")
