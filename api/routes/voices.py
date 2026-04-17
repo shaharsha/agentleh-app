@@ -131,7 +131,8 @@ async def get_agent_voice(
 ) -> dict[str, Any]:
     db = request.app.state.db
     agent = db._fetch_one(
-        "SELECT agent_id, tenant_id, tts_voice_name, bot_gender FROM agents WHERE agent_id = %s",
+        "SELECT agent_id, tenant_id, tts_voice_name, bot_gender FROM agents "
+        "WHERE agent_id = %s AND deleted_at IS NULL",
         (agent_id,),
     )
     if agent is None:
@@ -229,7 +230,7 @@ async def update_agent_voice(
     # Ownership check — the agent must belong to the caller's tenant
     # (superadmin bypasses).
     agent = db._fetch_one(
-        "SELECT agent_id, tenant_id FROM agents WHERE agent_id = %s",
+        "SELECT agent_id, tenant_id FROM agents WHERE agent_id = %s AND deleted_at IS NULL",
         (agent_id,),
     )
     if agent is None:

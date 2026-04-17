@@ -345,6 +345,7 @@ class AppDatabase:
                 LIMIT 1
             ) s ON TRUE
             LEFT JOIN billing_plans p ON p.plan_id = s.plan_id
+            WHERE a.deleted_at IS NULL
             ORDER BY u.created_at DESC NULLS LAST, a.agent_id
             """
         )
@@ -360,7 +361,7 @@ class AppDatabase:
             FROM agents a
             LEFT JOIN app_user_agents ua ON ua.agent_id = a.agent_id
             LEFT JOIN app_users       u  ON u.id = ua.user_id
-            WHERE a.agent_id = %s
+            WHERE a.agent_id = %s AND a.deleted_at IS NULL
             """,
             (agent_id,),
         )
@@ -626,30 +627,62 @@ class AppDatabase:
         )
 
     def get_agent_tenant_id(self, agent_id: str) -> int | None:
+        """Resolve agent → tenant for live operations (delete, integrations,
+        voice update). Returns None for both unknown and soft-deleted
+        agents — callers should treat both as 404.
+        """
         row = self._fetch_one(
-            "SELECT tenant_id FROM agents WHERE agent_id = %s",
+            "SELECT tenant_id FROM agents WHERE agent_id = %s AND deleted_at IS NULL",
             (agent_id,),
         )
         return row["tenant_id"] if row else None
 
-    def hard_delete_agent(self, agent_id: str) -> None:
-        """Hard-delete an agent and all its DB state.
+    def soft_delete_agent(self, agent_id: str) -> None:
+        """Tombstone the agent: stamp ``deleted_at`` and clear live-routing
+        state. Preserves billing-relevant rows (usage_events, agents_meter_keys
+        as revoked, app_user_agents_legacy for the display name, legacy
+        agent-keyed agent_subscriptions) so the Usage tab can render
+        historical per-agent spend with a "(deleted)" label.
 
-        app_user_agents_legacy has no FK cascade, so we delete it
-        explicitly. The agents DELETE cascades to: phone_routes,
-        agents_meter_keys, agent_subscriptions (per-agent rows),
-        agent_google_credentials, agent_nylas_credentials.
+        What we keep
+        ────────────
+        - ``agents`` row itself (just `deleted_at` set, `gateway_url` cleared
+          so any leftover routing code fails fast).
+        - ``app_user_agents_legacy`` — source of `agent_name` for the
+          breakdown UI.
+        - ``usage_events`` — append-only, source of truth for billing.
+        - ``agent_subscriptions`` legacy agent-keyed rows (modern subs are
+          tenant-keyed and unaffected by per-agent delete).
 
-        usage_events are intentionally kept for billing history.
+        What we remove (live-state, security/PII)
+        ─────────────────────────────────────────
+        - ``phone_routes`` — frees the WhatsApp number for re-use.
+        - ``agents_meter_keys`` — revoked rather than deleted (audit trail).
+        - ``agent_google_credentials`` / ``agent_nylas_credentials`` — the
+          OAuth refresh token / Nylas grant has already been revoked at the
+          provider in the calling route; deleting the local row removes the
+          PII (email + scope set). The provider revocation is what stops
+          token use; the local delete is hygiene.
         """
         with self.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "DELETE FROM app_user_agents_legacy WHERE agent_id = %s",
+                    "UPDATE agents SET deleted_at = now(), gateway_url = '' "
+                    "WHERE agent_id = %s AND deleted_at IS NULL",
+                    (agent_id,),
+                )
+                cur.execute("DELETE FROM phone_routes WHERE agent_id = %s", (agent_id,))
+                cur.execute(
+                    "UPDATE agents_meter_keys SET revoked_at = now() "
+                    "WHERE agent_id = %s AND revoked_at IS NULL",
                     (agent_id,),
                 )
                 cur.execute(
-                    "DELETE FROM agents WHERE agent_id = %s",
+                    "DELETE FROM agent_google_credentials WHERE agent_id = %s",
+                    (agent_id,),
+                )
+                cur.execute(
+                    "DELETE FROM agent_nylas_credentials WHERE agent_id = %s",
                     (agent_id,),
                 )
             conn.commit()
@@ -718,8 +751,10 @@ class AppDatabase:
         )
 
     def list_tenant_agents(self, tenant_id: int) -> list[dict[str, Any]]:
-        """All agents belonging to this tenant, joined with the compat view
-        so agent_name + agent_gender metadata comes along for free."""
+        """Active agents for this tenant — soft-deleted agents are filtered.
+        For the Usage tab's per-agent breakdown (which must show deleted
+        agents alongside live ones), use ``list_tenant_agents_with_deleted``.
+        """
         return self._fetch_all(
             """
             SELECT a.agent_id,
@@ -732,8 +767,40 @@ class AppDatabase:
                    COALESCE(ual.created_at,   now())      AS created_at
               FROM agents a
               LEFT JOIN app_user_agents_legacy ual ON ual.agent_id = a.agent_id
-             WHERE a.tenant_id = %s
+             WHERE a.tenant_id = %s AND a.deleted_at IS NULL
              ORDER BY created_at DESC
+            """,
+            (tenant_id,),
+        )
+
+    def list_tenant_agents_with_deleted(self, tenant_id: int) -> list[dict[str, Any]]:
+        """All agents for this tenant including soft-deleted tombstones.
+
+        Returned rows include ``deleted_at`` (ISO timestamp or None). The
+        Usage tab uses this to keep historical per-agent spend attributable
+        — usage_events are append-only and tenants paid for that traffic,
+        so the rows belong on the breakdown even after delete.
+
+        Active rows sort first (by created_at desc), then deleted rows
+        (by deleted_at desc — most recently deleted first).
+        """
+        return self._fetch_all(
+            """
+            SELECT a.agent_id,
+                   a.gateway_url,
+                   a.session_scope,
+                   a.tenant_id,
+                   a.deleted_at,
+                   COALESCE(ual.agent_name,   a.agent_id) AS agent_name,
+                   COALESCE(ual.agent_gender, '')         AS agent_gender,
+                   COALESCE(ual.status,       'active')   AS status,
+                   COALESCE(ual.created_at,   now())      AS created_at
+              FROM agents a
+              LEFT JOIN app_user_agents_legacy ual ON ual.agent_id = a.agent_id
+             WHERE a.tenant_id = %s
+             ORDER BY (a.deleted_at IS NULL) DESC,
+                      a.deleted_at DESC NULLS LAST,
+                      created_at DESC
             """,
             (tenant_id,),
         )

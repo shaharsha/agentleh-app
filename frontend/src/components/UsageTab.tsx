@@ -116,6 +116,21 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
   const subscription = data?.subscription
   const respRange = data?.range
 
+  // Split for the per-agent table: live rows render at full opacity at the
+  // top; deleted rows are muted and grouped at the bottom (and collapsed
+  // behind a "show N deleted" toggle if there are many — keeps the
+  // active-roster scan clean for tenants with churn).
+  const liveAgents = useMemo(
+    () => agents.filter((a) => !a.deleted_at),
+    [agents],
+  )
+  const deletedAgents = useMemo(
+    () => agents.filter((a) => !!a.deleted_at),
+    [agents],
+  )
+  const [showDeleted, setShowDeleted] = useState(false)
+  const DELETED_COLLAPSE_THRESHOLD = 5
+
   // Values arrive from the wire as strings (Postgres SUM returns NUMERIC,
   // which FastAPI serializes as a JSON string to preserve precision).
   // Coerce before summing — otherwise `+` concatenates strings.
@@ -292,9 +307,31 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
                 </tr>
               </thead>
               <tbody>
-                {agents.map((a) => (
+                {liveAgents.map((a) => (
                   <AgentRow key={a.agent_id} row={a} num={num} />
                 ))}
+                {deletedAgents.length > 0 && (
+                  deletedAgents.length < DELETED_COLLAPSE_THRESHOLD || showDeleted ? (
+                    deletedAgents.map((a) => (
+                      <AgentRow key={a.agent_id} row={a} num={num} />
+                    ))
+                  ) : (
+                    <tr className="border-t border-gray-100">
+                      <td colSpan={7} className="py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setShowDeleted(true)}
+                          className="text-sm text-gray-500 hover:text-gray-700 cursor-pointer"
+                        >
+                          {t({
+                            he: `+ הצג ${deletedAgents.length} סוכנים שנמחקו`,
+                            en: `+ Show ${deletedAgents.length} deleted agent${deletedAgents.length === 1 ? '' : 's'}`,
+                          })}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>
@@ -333,23 +370,42 @@ function AgentRow({
   row: AgentUsageRow
   num: (v: string) => React.ReactNode
 }) {
+  const { t } = useI18n()
   const total =
     Number(row.llm_micros)
     + Number(row.search_micros)
     + Number(row.tts_micros)
     + Number(row.embedding_micros)
+  const isDeleted = !!row.deleted_at
+  // 'unknown' = legacy hard-deleted (no tombstone) — render as deleted
+  // without a date.
+  const deletedDate =
+    isDeleted && row.deleted_at !== 'unknown' ? fmtDate(row.deleted_at!) : null
+  const nameClass = isDeleted ? 'font-medium text-gray-500' : 'font-medium text-gray-900'
+  const cellClass = isDeleted ? 'text-gray-500' : ''
+  const totalClass = isDeleted ? 'font-medium text-gray-500' : 'font-medium text-gray-900'
   return (
     <tr className="border-t border-gray-100">
       <td className="py-2 pe-3">
-        <div className="font-medium text-gray-900" dir="auto">{row.agent_name}</div>
-        <div className="text-xs text-gray-500 font-mono" dir="ltr">{row.agent_id}</div>
+        <div className={nameClass} dir="auto">
+          {row.agent_name}
+          {isDeleted && (
+            <span className="ms-2 text-xs text-gray-400 font-normal">
+              ·{' '}
+              {deletedDate
+                ? t({ he: `נמחק ${deletedDate}`, en: `deleted ${deletedDate}` })
+                : t({ he: 'נמחק', en: 'deleted' })}
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-gray-400 font-mono" dir="ltr">{row.agent_id}</div>
       </td>
-      <td className="py-2 px-3 text-end">{num(microsToUsd(row.llm_micros))}</td>
-      <td className="py-2 px-3 text-end">{num(microsToUsd(row.search_micros))}</td>
-      <td className="py-2 px-3 text-end">{num(microsToUsd(row.tts_micros))}</td>
-      <td className="py-2 px-3 text-end">{num(microsToUsd(row.embedding_micros))}</td>
-      <td className="py-2 px-3 text-end font-medium text-gray-900">{num(microsToUsd(total))}</td>
-      <td className="py-2 ps-3 text-end tabular-nums">{num(String(row.event_count))}</td>
+      <td className={`py-2 px-3 text-end ${cellClass}`}>{num(microsToUsd(row.llm_micros))}</td>
+      <td className={`py-2 px-3 text-end ${cellClass}`}>{num(microsToUsd(row.search_micros))}</td>
+      <td className={`py-2 px-3 text-end ${cellClass}`}>{num(microsToUsd(row.tts_micros))}</td>
+      <td className={`py-2 px-3 text-end ${cellClass}`}>{num(microsToUsd(row.embedding_micros))}</td>
+      <td className={`py-2 px-3 text-end ${totalClass}`}>{num(microsToUsd(total))}</td>
+      <td className={`py-2 ps-3 text-end tabular-nums ${cellClass}`}>{num(String(row.event_count))}</td>
     </tr>
   )
 }

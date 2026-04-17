@@ -165,7 +165,7 @@ export interface UsageTotals {
   llm_output_tokens: number
   search_queries: number
   tts_chars: number
-  embedding_tokens: number
+  embedding_chars: number
   event_count: number
 }
 
@@ -173,6 +173,11 @@ export interface AgentUsageRow {
   agent_id: string
   agent_name: string
   agent_gender: string
+  /** ISO timestamp if the agent has been soft-deleted, otherwise null.
+   *  Special value "unknown" means the meter returned an agent_id that
+   *  predates the soft-delete migration (no tombstone in the agents
+   *  table). Render those identically to deleted, just without a date. */
+  deleted_at: string | null
   llm_micros: number
   search_micros: number
   tts_micros: number
