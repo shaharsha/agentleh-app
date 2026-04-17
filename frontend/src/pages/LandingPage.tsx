@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useI18n } from '../lib/i18n'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import { ChevronLeftIcon } from '../components/icons'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL
 
@@ -44,6 +45,16 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
 
   return (
     <div className="min-h-screen section-gradient-hero flex flex-col items-center justify-center px-5 py-16 relative">
+      <div className="absolute top-5 start-5">
+        <a
+          href={landingHref('', lang)}
+          aria-label={t({ he: 'חזרה ל-Agentiko', en: 'Back to Agentiko' })}
+          className="inline-flex items-center gap-1.5 h-9 px-3 text-xs font-semibold rounded-lg border border-border-light bg-surface/60 text-text-secondary hover:text-text-primary transition-colors"
+        >
+          <ChevronLeftIcon className="w-[14px] h-[14px] rtl:rotate-180" />
+          <span>{t({ he: 'חזרה ל-Agentiko', en: 'Back to Agentiko' })}</span>
+        </a>
+      </div>
       <div className="absolute top-5 end-5">
         <LanguageSwitcher />
       </div>

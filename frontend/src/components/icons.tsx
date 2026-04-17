@@ -122,6 +122,14 @@ export function GlobeIcon(props: IconProps) {
   )
 }
 
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <polyline points="15 6 9 12 15 18" />
+    </Icon>
+  )
+}
+
 /** Three-line hamburger — opens the mobile nav drawer. */
 export function MenuIcon(props: IconProps) {
   return (
