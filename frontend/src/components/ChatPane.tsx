@@ -166,10 +166,13 @@ export default function ChatPane({ tenantId, agentId, agentName }: ChatPaneProps
 
       // Gateway frames:
       if (frame.type === 'res') {
-        // chat.history → load prior messages.
-        const result = frame?.result
-        if (result?.messages && Array.isArray(result.messages)) {
-          const loaded: Message[] = result.messages
+        // OpenClaw wraps successful responses as {type:"res", id, ok,
+        // payload}. Earlier this was keyed off `frame.result` which
+        // never populated — that's why closing + reopening the pane
+        // was losing history.
+        const body = frame?.payload ?? frame?.result ?? {}
+        if (Array.isArray(body?.messages)) {
+          const loaded: Message[] = body.messages
             .map((m: any, idx: number) => {
               const role = normalizeRole(m?.role)
               if (!role) return null
@@ -191,7 +194,7 @@ export default function ChatPane({ tenantId, agentId, agentName }: ChatPaneProps
         }
         // chat.send response carries the runId — stash it on the
         // most-recent user bubble so we know what to abort.
-        const runId = result?.runId
+        const runId = body?.runId
         if (runId) setStreamingRunId(runId)
         return
       }
@@ -355,6 +358,7 @@ export default function ChatPane({ tenantId, agentId, agentName }: ChatPaneProps
           const isUser = m.role === 'user'
           const isSystem = m.role === 'system'
           const bubbleDir = firstStrongIsRtl(m.text) ? 'rtl' : 'ltr'
+          const awaitingFirstToken = m.streaming && !m.text
           return (
             <div
               key={m.id}
@@ -366,14 +370,21 @@ export default function ChatPane({ tenantId, agentId, agentName }: ChatPaneProps
                 dir={bubbleDir}
                 className={[
                   'max-w-[75%] px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words',
+                  // Assistant bubbles: bg-gray-100 correctly inverts in
+                  // dark mode via the app's [data-theme="dark"] token
+                  // remap (gray-100 becomes dark brown), with
+                  // text-text-primary providing the matching foreground.
+                  // The earlier `dark:bg-gray-800` was fighting the
+                  // inversion — that token resolves to CREAM in dark
+                  // mode, which is why the bubble looked washed out.
                   isSystem
                     ? 'bg-yellow-100 text-yellow-900 text-xs'
                     : isUser
                     ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 text-text-primary',
+                    : 'bg-gray-100 text-text-primary',
                 ].join(' ')}
               >
-                {m.text || (m.streaming ? '…' : '')}
+                {awaitingFirstToken ? <TypingIndicator /> : m.text}
               </div>
             </div>
           )
@@ -386,6 +397,12 @@ export default function ChatPane({ tenantId, agentId, agentName }: ChatPaneProps
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
+          // dir="auto" lets the browser flip the typing direction per
+          // first-strong directional character: Hebrew input renders
+          // RTL, Latin input LTR, even inside an LTR-display page.
+          // Matches what the assistant/user bubbles already do for
+          // their text content.
+          dir="auto"
           placeholder={t({
             he: 'כתוב הודעה… (Enter לשליחה, Shift+Enter לשורה חדשה)',
             en: 'Type a message… (Enter to send, Shift+Enter for newline)',
@@ -412,6 +429,30 @@ export default function ChatPane({ tenantId, agentId, agentName }: ChatPaneProps
         )}
       </div>
     </div>
+  )
+}
+
+// "Agent is typing..." indicator shown in the assistant bubble while
+// we've received a runId/acknowledgement but no text tokens yet. Three
+// dots with a staggered bounce, matching WhatsApp's pattern. Uses
+// Tailwind's built-in `animate-bounce` with inline delays so we don't
+// need to touch index.css for keyframes.
+function TypingIndicator() {
+  return (
+    <span className="inline-flex items-center gap-1 py-1" aria-label="typing">
+      <span
+        className="inline-block w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce"
+        style={{ animationDelay: '0ms' }}
+      />
+      <span
+        className="inline-block w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce"
+        style={{ animationDelay: '150ms' }}
+      />
+      <span
+        className="inline-block w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce"
+        style={{ animationDelay: '300ms' }}
+      />
+    </span>
   )
 }
 
