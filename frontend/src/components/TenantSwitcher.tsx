@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { TenantMembership, TenantRole } from '../lib/types'
 import { createTenant } from '../lib/api'
 import { useI18n } from '../lib/i18n'
@@ -30,6 +30,17 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
+
+  // Escape-key dismiss — complements the backdrop click and keeps
+  // keyboard users from getting stuck in the dropdown.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
 
   const activeTenant = tenants.find((t) => t.id === activeTenantId) || tenants[0] || null
 
@@ -104,7 +115,7 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div
-            className={`absolute ${anchorClass} mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-200 z-20 overflow-hidden`}
+            className={`absolute ${anchorClass} mt-2 w-[min(18rem,calc(100vw-2rem))] bg-surface rounded-xl shadow-lg border border-border-light z-20 overflow-hidden`}
           >
             <div className="p-2">
               <div className="px-2 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">

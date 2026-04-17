@@ -121,3 +121,43 @@ export function GlobeIcon(props: IconProps) {
     </Icon>
   )
 }
+
+/** Three-line hamburger — opens the mobile nav drawer. */
+export function MenuIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <line x1="4" y1="7" x2="20" y2="7" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="17" x2="20" y2="17" />
+    </Icon>
+  )
+}
+
+/** X — close. Used on drawers, modals, dialogs. */
+export function XIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </Icon>
+  )
+}
+
+/** Plus — "add new workspace" affordance inside the mobile drawer. */
+export function PlusIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </Icon>
+  )
+}
+
+/** Filled check — the workspace marker inside the mobile drawer list. */
+export function CheckIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <polyline points="20 6 9 17 4 12" />
+    </Icon>
+  )
+}

@@ -203,11 +203,11 @@ export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageP
         current={0}
       />
 
-      <div className="text-center mb-8">
-        <h2 className="text-[28px] font-bold tracking-[-0.6px] mb-2">
+      <div className="text-center mb-6 sm:mb-8">
+        <h2 className="text-[clamp(22px,6vw,28px)] font-bold tracking-[-0.6px] mb-2">
           {t({ he: 'הפעלת תוכנית', en: 'Activate a plan' })}
         </h2>
-        <p className="text-[15px] text-text-secondary">
+        <p className="text-[clamp(14px,3.5vw,15px)] text-text-secondary">
           {t({
             he: 'השתמש בקוד קופון כדי להפעיל את התוכנית שלך',
             en: 'Use a coupon code to activate your plan',
@@ -243,9 +243,15 @@ export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageP
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           placeholder={t({ he: 'לדוגמה: BIZ-30-ABC', en: 'e.g. BIZ-30-ABC' })}
-          className="input-glass w-full px-4 py-3 font-mono tracking-wider text-[16px] uppercase placeholder:normal-case placeholder:font-sans placeholder:tracking-normal"
+          className="input-glass w-full px-4 py-3 font-mono tracking-wider text-[clamp(14px,3.8vw,16px)] uppercase placeholder:normal-case placeholder:font-sans placeholder:tracking-normal"
           dir={dir}
           autoFocus
+          autoComplete="off"
+          autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck={false}
+          inputMode="text"
+          maxLength={32}
         />
       </div>
 

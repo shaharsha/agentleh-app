@@ -196,9 +196,11 @@ export default function VoicePicker({
 
   return (
     <div className="space-y-4">
-      {/* Gender filter — hidden when the parent locks gender via the prop */}
+      {/* Gender filter — hidden when the parent locks gender via the prop.
+          Wraps on narrow phones so the three bilingual labels ("הכל (N)"
+          etc.) never compete for a single row. */}
       {!lockedGender && (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
             הכל ({manifest.voices.length})
           </FilterButton>
@@ -219,8 +221,10 @@ export default function VoicePicker({
         הקלטת הדגמה: "{manifest.sample_text}"
       </div>
 
-      {/* Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[360px] overflow-y-auto">
+      {/* Grid — single column on narrow phones, two on slightly wider ones,
+          three on tablet+. Height caps at 60vh on short viewports so the
+          filter buttons above never get pushed off-screen on mobile. */}
+      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[60vh] sm:max-h-[360px] overflow-y-auto">
         {filtered.map((voice: VoiceManifestEntry) => {
           const isSelected = voice.name === value
           const isPlaying = playing === voice.name
@@ -229,10 +233,10 @@ export default function VoicePicker({
               key={voice.name}
               type="button"
               onClick={() => selectVoice(voice)}
-              className={`relative glass-card rounded-[16px] px-3 py-3 text-right transition-all ${
+              className={`relative glass-card rounded-[16px] px-3 py-3 min-h-[56px] text-start transition-colors ${
                 isSelected
                   ? 'ring-2 ring-brand-500 bg-brand-50/40'
-                  : 'hover:bg-white/60'
+                  : 'hover:bg-white/60 dark:hover:bg-white/5'
               }`}
             >
               <div className="flex items-center justify-between gap-2">
@@ -247,7 +251,7 @@ export default function VoicePicker({
                 <PlayIcon playing={isPlaying} />
               </div>
               {isSelected && (
-                <div className="absolute top-1.5 left-1.5 w-4 h-4 rounded-full bg-brand-500 flex items-center justify-center">
+                <div className="absolute top-1.5 end-1.5 w-4 h-4 rounded-full bg-brand-500 flex items-center justify-center">
                   <svg
                     width="10"
                     height="10"
@@ -293,8 +297,8 @@ function FilterButton({
 function PlayIcon({ playing }: { playing: boolean }) {
   return (
     <div
-      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-        playing ? 'bg-brand-500 text-white' : 'bg-white/80 text-brand-500'
+      className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 ${
+        playing ? 'bg-brand-500 text-white' : 'bg-white/80 dark:bg-white/10 text-brand-500'
       }`}
     >
       {playing ? (

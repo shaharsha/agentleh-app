@@ -21,10 +21,11 @@ export default function LanguageSwitcher() {
     <button
       onClick={() => setLang(target)}
       aria-pressed={lang === target}
-      className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+      aria-label={target === 'he' ? 'עברית' : 'English'}
+      className={`inline-flex items-center justify-center min-w-[36px] h-9 px-2.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
         lang === target
-          ? 'bg-gray-900 text-white'
-          : 'text-gray-500 hover:text-gray-800'
+          ? 'bg-text-primary text-surface'
+          : 'text-text-secondary hover:text-text-primary'
       }`}
     >
       {label}
@@ -32,7 +33,7 @@ export default function LanguageSwitcher() {
   )
 
   return (
-    <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-1.5 py-0.5 bg-white/50">
+    <div className="flex items-center gap-0.5 border border-border-light rounded-lg ps-2 pe-1 py-0.5 bg-surface/60">
       <GlobeIcon className="w-[14px] h-[14px] text-text-muted" />
       {btn('he', 'עב')}
       {btn('en', 'EN')}

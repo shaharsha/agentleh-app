@@ -1,12 +1,20 @@
 @import "tailwindcss";
 
 @theme {
+  /* Breakpoints — xs for iPhone-SE-class phones (≤360 px) */
+  --breakpoint-xs: 360px;
+
+  /* Brand (invariant across light/dark) */
   --color-brand: #D4622B;
   --color-brand-light: #E8854F;
   --color-brand-dark: #B84E1D;
   --color-brand-50: #FFF5F0;
   --color-brand-100: #FCE0CC;
 
+  /* Surface + text + border tokens. Defined here so Tailwind utility
+   * classes (`bg-surface`, `text-text-primary`, `border-border`) compile
+   * against them. Runtime dark-mode swap happens in the :root block
+   * below — same variable names, later-wins cascade. */
   --color-surface: #FFFFFF;
   --color-surface-soft: #F8F8F7;
 
@@ -23,23 +31,115 @@
   --font-family-sans: "Rubik", sans-serif;
 }
 
+/* ═══════════════════════════════════════════
+   SEMANTIC TOKENS — glass, sections, shadows
+   Swapped per color-scheme at runtime.
+   ═══════════════════════════════════════════ */
+:root {
+  color-scheme: light;
+
+  /* Glass surfaces (rgba so backdrop-filter still shines through) */
+  --glass-nav-bg: rgba(255, 255, 255, 0.65);
+  --glass-nav-border: rgba(255, 255, 255, 0.3);
+  --glass-card-bg: rgba(255, 255, 255, 0.55);
+  --glass-card-bg-hover: rgba(255, 255, 255, 0.75);
+  --glass-card-border: rgba(255, 255, 255, 0.6);
+  --glass-elevated-bg: rgba(255, 255, 255, 0.72);
+  --glass-elevated-border: rgba(255, 255, 255, 0.5);
+  --glass-pill-bg: rgba(255, 255, 255, 0.5);
+  --glass-pill-border: rgba(255, 255, 255, 0.4);
+  --glass-input-bg: rgba(255, 255, 255, 0.6);
+  --glass-input-bg-focus: rgba(255, 255, 255, 0.95);
+
+  /* Shadow tints */
+  --shadow-rgb: 0, 0, 0;
+
+  /* Section gradient stops */
+  --section-stop-1: #FDF8F4;
+  --section-stop-2: #FAF5F1;
+  --section-stop-3: #F5F0EC;
+  --section-alt-1: #F5F0EC;
+  --section-alt-2: #FBF7F4;
+  --section-alt-3: #FDF8F4;
+  --section-hero-1: #FEF6F0;
+  --section-hero-2: #FBF5EF;
+  --section-hero-3: #F8F3ED;
+
+  /* Subtle neutral for hover-fill on icon buttons in the header */
+  --icon-btn-hover-bg: rgba(0, 0, 0, 0.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    /* Override @theme tokens for dark mode */
+    --color-surface: #16120E;
+    --color-surface-soft: #1E1814;
+    --color-text-primary: #F5EFE8;
+    --color-text-secondary: #B8A595;
+    --color-text-muted: #7A6B5E;
+    --color-border: #2B2319;
+    --color-border-light: #221B13;
+    --color-brand-50: #2A1810;
+    --color-brand-100: #3D2416;
+    --color-success-light: #0F2A1C;
+
+    /* Glass goes dark-tinted */
+    --glass-nav-bg: rgba(22, 18, 14, 0.72);
+    --glass-nav-border: rgba(255, 255, 255, 0.06);
+    --glass-card-bg: rgba(30, 24, 20, 0.55);
+    --glass-card-bg-hover: rgba(38, 30, 24, 0.7);
+    --glass-card-border: rgba(255, 255, 255, 0.08);
+    --glass-elevated-bg: rgba(38, 30, 24, 0.72);
+    --glass-elevated-border: rgba(255, 255, 255, 0.08);
+    --glass-pill-bg: rgba(30, 24, 20, 0.5);
+    --glass-pill-border: rgba(255, 255, 255, 0.06);
+    --glass-input-bg: rgba(30, 24, 20, 0.55);
+    --glass-input-bg-focus: rgba(36, 28, 22, 0.85);
+
+    --shadow-rgb: 0, 0, 0;
+
+    --section-stop-1: #0F0B08;
+    --section-stop-2: #13100C;
+    --section-stop-3: #16120E;
+    --section-alt-1: #16120E;
+    --section-alt-2: #120E0B;
+    --section-alt-3: #0F0B08;
+    --section-hero-1: #14100C;
+    --section-hero-2: #100C09;
+    --section-hero-3: #0C0907;
+
+    --icon-btn-hover-bg: rgba(255, 255, 255, 0.06);
+  }
+}
+
 body {
   font-family: var(--font-family-sans);
   margin: 0;
   color: var(--color-text-primary);
+  background: var(--color-surface);
   line-height: 1.75;
-  -webkit-font-smoothing: antialiased;
+  /* Hebrew fonts (Rubik) render too thin with `antialiased` on some
+   * low-DPI Android displays — `auto` keeps the OS default. */
+  -webkit-font-smoothing: auto;
 }
 
 input, button, select, textarea {
   font-family: inherit;
 }
 
+/* iOS Safari zooms the viewport when focusing an input whose computed
+ * font-size is <16 px. Keep desktop density, kill mobile zoom. */
+@media (max-width: 640px) {
+  input, select, textarea {
+    font-size: 16px;
+  }
+}
+
 /* Tailwind v4 removed the default browser `cursor: pointer` on non-disabled
- * <button>s (preflight change). Restore it globally so every interactive
- * button across the app feels clickable without having to sprinkle
- * `cursor-pointer` on 40+ call sites. Disabled buttons get the default
- * cursor so the affordance matches their grayed-out state. */
+ * <button>s. Restore it globally so buttons feel clickable without
+ * sprinkling `cursor-pointer` on 40+ call sites. */
 button:not(:disabled) {
   cursor: pointer;
 }
@@ -49,60 +149,105 @@ button:not(:disabled) {
   color: var(--color-brand-dark);
 }
 
+/* ── Accessibility: reduce motion ─────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Touch-safe interactive floors ────────── */
+/* Coarse pointer = touch device. Guarantee every button/link meets the
+ * 44×44 px iOS HIG minimum so nothing on mobile feels fiddly. */
+@media (pointer: coarse) {
+  button, a.btn-brand, a.btn-secondary, a.btn-sm, a.btn-md,
+  button.btn-sm, button.btn-md {
+    min-height: 44px;
+  }
+}
+
+/* Safe-area-aware padding utilities. Use on .glass-nav, main containers,
+ * and modal / drawer sheets so the iPhone notch / Android punch-hole
+ * never clip content. */
+.safe-px {
+  padding-inline-start: max(1rem, env(safe-area-inset-left));
+  padding-inline-end: max(1rem, env(safe-area-inset-right));
+}
+.safe-pt { padding-top: max(0.5rem, env(safe-area-inset-top)); }
+.safe-pb { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+.safe-inset-b { bottom: env(safe-area-inset-bottom); }
+.safe-inset-t { top: env(safe-area-inset-top); }
+
+/* Hide scrollbars on scroll-snap tab bars (webkit + firefox). */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* Directional-icon helper: apply .icon-flip to chevrons/arrows that
+ * should mirror in RTL (back-arrow, send, external-link). Down/up-facing
+ * carets stay untouched. */
+[dir="rtl"] .icon-flip { transform: scaleX(-1); }
+
 /* ═══════════════════════════════════════════
-   SHARED DESIGN SYSTEM (same as landing)
+   SHARED DESIGN SYSTEM (mirrors landing)
    ═══════════════════════════════════════════ */
 
 /* ── Liquid Glass ─────────────────────────── */
 
 .glass-nav {
-  background: rgba(255, 255, 255, 0.65);
+  background: var(--glass-nav-bg);
   backdrop-filter: blur(24px) saturate(200%);
   -webkit-backdrop-filter: blur(24px) saturate(200%);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  border-bottom: 1px solid var(--glass-nav-border);
+  box-shadow: 0 1px 3px rgba(var(--shadow-rgb), 0.04);
 }
 
 .glass-card {
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--glass-card-bg);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--glass-card-border);
   box-shadow:
-    0 0 0 1px rgba(0,0,0,0.03),
-    0 2px 8px rgba(0,0,0,0.04),
-    0 8px 32px rgba(0,0,0,0.06);
+    0 0 0 1px rgba(var(--shadow-rgb), 0.03),
+    0 2px 8px rgba(var(--shadow-rgb), 0.04),
+    0 8px 32px rgba(var(--shadow-rgb), 0.06);
 }
 
 .glass-card-elevated {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--glass-elevated-bg);
   backdrop-filter: blur(24px) saturate(200%);
   -webkit-backdrop-filter: blur(24px) saturate(200%);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--glass-elevated-border);
   box-shadow:
-    0 0 0 1px rgba(0,0,0,0.03),
-    0 4px 16px rgba(0,0,0,0.06),
-    0 16px 48px rgba(0,0,0,0.08);
+    0 0 0 1px rgba(var(--shadow-rgb), 0.03),
+    0 4px 16px rgba(var(--shadow-rgb), 0.06),
+    0 16px 48px rgba(var(--shadow-rgb), 0.08);
 }
 
 .glass-card-hover {
-  transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: background 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.glass-card-hover:hover {
-  background: rgba(255, 255, 255, 0.75);
-  transform: translateY(-4px);
-  box-shadow:
-    0 0 0 1px rgba(212,98,43,0.08),
-    0 8px 24px rgba(212,98,43,0.08),
-    0 16px 48px rgba(0,0,0,0.08);
+@media (hover: hover) and (pointer: fine) {
+  .glass-card-hover:hover {
+    background: var(--glass-card-bg-hover);
+    transform: translateY(-4px);
+    box-shadow:
+      0 0 0 1px rgba(212,98,43,0.08),
+      0 8px 24px rgba(212,98,43,0.08),
+      0 16px 48px rgba(var(--shadow-rgb), 0.08);
+  }
 }
 
 .glass-pill {
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--glass-pill-bg);
   backdrop-filter: blur(12px) saturate(160%);
   -webkit-backdrop-filter: blur(12px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  border: 1px solid var(--glass-pill-border);
+  box-shadow: 0 1px 4px rgba(var(--shadow-rgb), 0.04);
 }
 
 /* ── Gradient Backgrounds ─────────────────── */
@@ -112,90 +257,123 @@ button:not(:disabled) {
     radial-gradient(ellipse at 30% 20%, rgba(212,98,43,0.07) 0%, transparent 50%),
     radial-gradient(ellipse at 70% 80%, rgba(232,133,79,0.05) 0%, transparent 50%),
     radial-gradient(ellipse at 50% 50%, rgba(184,78,29,0.03) 0%, transparent 60%),
-    linear-gradient(180deg, #FDF8F4 0%, #FAF5F1 50%, #F5F0EC 100%);
+    linear-gradient(180deg, var(--section-stop-1) 0%, var(--section-stop-2) 50%, var(--section-stop-3) 100%);
 }
 
 .section-gradient-alt {
   background:
     radial-gradient(ellipse at 80% 30%, rgba(212,98,43,0.06) 0%, transparent 50%),
     radial-gradient(ellipse at 20% 70%, rgba(232,133,79,0.04) 0%, transparent 50%),
-    linear-gradient(180deg, #F5F0EC 0%, #FBF7F4 50%, #FDF8F4 100%);
+    linear-gradient(180deg, var(--section-alt-1) 0%, var(--section-alt-2) 50%, var(--section-alt-3) 100%);
 }
 
 .section-gradient-hero {
   background:
     radial-gradient(ellipse 80% 60% at 50% 0%, rgba(212,98,43,0.08) 0%, transparent 60%),
     radial-gradient(ellipse at 20% 60%, rgba(232,133,79,0.05) 0%, transparent 50%),
-    linear-gradient(180deg, #FEF6F0 0%, #FBF5EF 40%, #F8F3ED 100%);
+    linear-gradient(180deg, var(--section-hero-1) 0%, var(--section-hero-2) 40%, var(--section-hero-3) 100%);
 }
 
-/* ── Buttons ──────────────────────────────── */
+/* ═══════════════════════════════════════════
+   BUTTONS
+   ═══════════════════════════════════════════ */
 
 .btn-brand {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   background: var(--color-brand); color: white; border: none;
-  padding: 16px 40px; border-radius: 100px;
+  padding: 14px 36px; border-radius: 100px;
   font-size: 17px; font-weight: 600; font-family: inherit;
   cursor: pointer; text-decoration: none; letter-spacing: -0.2px;
+  min-height: 48px;
   box-shadow:
     0 2px 8px rgba(212,98,43,0.25),
     0 8px 24px rgba(212,98,43,0.15),
     inset 0 1px 0 rgba(255,255,255,0.15);
-  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: background 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   position: relative; overflow: hidden;
 }
 .btn-brand::after {
   content: ''; position: absolute; inset: 0;
   background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
   transform: translateX(-100%); transition: transform 0.7s cubic-bezier(0.22,1,0.36,1);
+  pointer-events: none;
 }
-.btn-brand:hover::after { transform: translateX(100%); }
-.btn-brand:hover {
-  background: var(--color-brand-dark); transform: translateY(-3px);
-  box-shadow:
-    0 4px 12px rgba(212,98,43,0.3),
-    0 16px 40px rgba(212,98,43,0.2),
-    inset 0 1px 0 rgba(255,255,255,0.15);
+@media (hover: hover) and (pointer: fine) {
+  .btn-brand:hover::after { transform: translateX(100%); }
+  .btn-brand:hover {
+    background: var(--color-brand-dark); transform: translateY(-3px);
+    box-shadow:
+      0 4px 12px rgba(212,98,43,0.3),
+      0 16px 40px rgba(212,98,43,0.2),
+      inset 0 1px 0 rgba(255,255,255,0.15);
+  }
 }
 .btn-brand:active { transform: translateY(-1px); }
 .btn-brand:disabled { opacity: 0.5; transform: none; box-shadow: 0 2px 8px rgba(212,98,43,0.15); cursor: default; }
 .btn-brand:disabled:hover { transform: none; }
 .btn-brand:disabled::after { display: none; }
 
-/* Size variants */
-.btn-sm { padding: 8px 20px; font-size: 13px; }
-.btn-md { padding: 12px 28px; font-size: 15px; }
-/* default (no class) = 16px 40px / 17px */
+/* Size variants — enforce the 44-px touch floor on mobile */
+.btn-sm { padding: 10px 20px; font-size: 13px; min-height: 40px; }
+.btn-md { padding: 12px 24px; font-size: 15px; min-height: 44px; }
+@media (pointer: coarse) {
+  .btn-sm { padding: 11px 22px; min-height: 44px; }
+}
 
 .btn-secondary {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   background: var(--color-surface); color: var(--color-text-primary);
   border: 1px solid var(--color-border); border-radius: 100px;
-  padding: 12px 28px; font-size: 15px;
+  padding: 12px 24px; font-size: 15px;
+  min-height: 44px;
   font-weight: 500; font-family: inherit; cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: border-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.btn-secondary:hover {
-  border-color: var(--color-text-muted);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+@media (hover: hover) and (pointer: fine) {
+  .btn-secondary:hover {
+    border-color: var(--color-text-muted);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(var(--shadow-rgb), 0.06);
+  }
 }
 .btn-secondary:active { transform: translateY(0); }
 
-/* ── Inputs ───────────────────────────────── */
+/* ═══════════════════════════════════════════
+   INPUTS
+   ═══════════════════════════════════════════ */
 
 .input-glass {
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--glass-input-bg);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--color-border);
   border-radius: 14px;
-  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  color: var(--color-text-primary);
+  transition: background 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .input-glass:focus {
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--glass-input-bg-focus);
   border-color: var(--color-brand);
-  box-shadow: 0 0 0 3px rgba(212, 98, 43, 0.1);
+  box-shadow: 0 0 0 3px rgba(212, 98, 43, 0.15);
   outline: none;
+}
+@media (max-width: 640px) {
+  .input-glass:focus {
+    box-shadow: 0 0 0 2px rgba(212, 98, 43, 0.2);
+  }
+}
+
+.input-glass[aria-invalid="true"] {
+  border-color: #E5484D;
+}
+.input-glass[aria-invalid="true"]:focus {
+  border-color: #E5484D;
+  box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.15);
 }
