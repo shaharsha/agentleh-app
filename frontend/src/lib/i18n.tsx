@@ -92,6 +92,26 @@ const I18nContext = createContext<I18nContextValue | null>(null)
 function pickInitialLang(): Lang {
   if (typeof window === 'undefined') return 'he'
 
+  // 0. Handoff from the landing page via ?lang=he|en. localStorage
+  //    isn't shared across agentiko.io ↔ app.agentiko.io, so the
+  //    landing passes the visitor's chosen language via URL param when
+  //    they click "Sign up". Persist it to localStorage and strip the
+  //    param so the clean URL replaces it in history — no bookmark
+  //    pollution, and ?lang= can't silently override a later explicit
+  //    switcher click.
+  try {
+    const url = new URL(window.location.href)
+    const param = url.searchParams.get('lang')
+    if (param === 'he' || param === 'en') {
+      window.localStorage.setItem(LS_KEY, param)
+      url.searchParams.delete('lang')
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+      return param
+    }
+  } catch {
+    // URL parsing / localStorage disabled — fall through to the next step
+  }
+
   // 1. Explicit saved choice
   const saved = window.localStorage.getItem(LS_KEY)
   if (saved === 'he' || saved === 'en') return saved
