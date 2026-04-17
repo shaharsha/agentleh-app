@@ -112,11 +112,35 @@ class BridgeWhatsApp:
             )
             return False
 
+        # Parse the bridge response so we can log Meta's wamid + the
+        # resolved wa_id. A wa_id that differs from `phone` is a strong
+        # hint that the number was reformatted by Meta (rare) or that
+        # the template was delivered to a different account than
+        # expected. Missing wamid = Meta didn't accept the send even
+        # though the HTTP status was 200 at some intermediate hop.
+        try:
+            bridge_body = resp.json()
+        except Exception:  # noqa: BLE001
+            bridge_body = {"raw": resp.text[:400]}
+        meta_result = bridge_body.get("result") if isinstance(bridge_body, dict) else None
+        wamid = None
+        wa_id = None
+        if isinstance(meta_result, dict):
+            msgs = meta_result.get("messages") or []
+            contacts = meta_result.get("contacts") or []
+            if msgs and isinstance(msgs[0], dict):
+                wamid = msgs[0].get("id")
+            if contacts and isinstance(contacts[0], dict):
+                wa_id = contacts[0].get("wa_id")
         logger.info(
-            "BridgeWhatsApp: sent %s template to %s (agent=%s)",
+            "BridgeWhatsApp: sent %s to phone=%s agent=%s status=%s wa_id=%s wamid=%s bridge_status=%s",
             payload["template_name"],
             phone,
             agent_name,
+            resp.status_code,
+            wa_id,
+            wamid,
+            bridge_body.get("status") if isinstance(bridge_body, dict) else None,
         )
         return True
 

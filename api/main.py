@@ -7,6 +7,17 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+# Configure root logger once at import time so INFO/WARNING messages
+# from our own modules (services/*, api/*) actually reach Cloud Run
+# stdout. Without this, Python's default root level is WARNING and
+# we silently drop useful operational logs like
+# "BridgeWhatsApp: sent agent_ready_he template to +972..." making
+# it impossible to debug a bad Meta delivery.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
