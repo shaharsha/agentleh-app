@@ -105,6 +105,7 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
 function EmailForm({ mode }: { mode: 'login' | 'signup' }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [confirmationEmail, setConfirmationEmail] = useState('')
   const { t, dir } = useI18n()
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -116,8 +117,24 @@ function EmailForm({ mode }: { mode: 'login' | 'signup' }) {
     const password = form.get('password') as string
     try {
       if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({ email, password })
-        if (error) setError(error.message)
+        const { data, error } = await supabase.auth.signUp({ email, password })
+        if (error) {
+          setError(error.message)
+        } else if (data.user && (data.user.identities?.length ?? 0) === 0) {
+          // Supabase returns a fake user with empty identities when the email
+          // is already registered (enumeration-prevention quirk) — surface it
+          // so users don't wait forever for a confirmation email that's never
+          // coming.
+          setError(t({
+            he: 'האימייל הזה כבר רשום. נסה/י להתחבר במקום.',
+            en: 'This email is already registered. Try logging in instead.',
+          }))
+        } else if (!data.session) {
+          // Email confirmation is required on this Supabase project, so no
+          // session is returned. Show the "check your email" state; once the
+          // user clicks the link App.tsx's session listener takes over.
+          setConfirmationEmail(email)
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) setError(error.message)
@@ -131,6 +148,31 @@ function EmailForm({ mode }: { mode: 'login' | 'signup' }) {
   // placeholder should flow in the active text direction so it doesn't
   // look misaligned in RTL mode.
   const placeholderAlign = dir === 'rtl' ? 'placeholder:text-right' : 'placeholder:text-left'
+
+  if (confirmationEmail) {
+    return (
+      <div className="text-center py-2" dir={dir}>
+        <div className="text-[40px] mb-3">✉️</div>
+        <h3 className="text-[17px] font-semibold text-text-primary mb-2">
+          {t({ he: 'בדוק/י את תיבת הדואר', en: 'Check your inbox' })}
+        </h3>
+        <p className="text-[14px] text-text-secondary leading-relaxed">
+          {t({
+            he: 'שלחנו קישור לאישור ההרשמה אל',
+            en: 'We sent a confirmation link to',
+          })}
+          <br />
+          <span className="font-medium text-text-primary" dir="ltr">{confirmationEmail}</span>
+        </p>
+        <p className="text-[13px] text-text-muted mt-3 leading-relaxed">
+          {t({
+            he: 'לחץ/י על הקישור כדי להשלים את ההרשמה.',
+            en: 'Click the link to complete sign up.',
+          })}
+        </p>
+      </div>
+    )
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3.5">

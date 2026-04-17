@@ -416,8 +416,13 @@ async def create_invite_route(
     # can fall back to copy-link on the frontend.
     email_sent = False
     email_error: str | None = None
+    # email_error_code disambiguates the copy-link UX: 'quota_exceeded'
+    # surfaces a specific Hebrew/English message so ops knows to bump
+    # the Resend plan, vs. a generic 'send_failed' for transient
+    # provider errors (timeout, 5xx, etc.).
+    email_error_code: str | None = None
     try:
-        from services.email import send_invite_email
+        from services.email import send_invite_email, ResendQuotaExceeded
 
         await send_invite_email(
             to=body.email,
@@ -427,9 +432,16 @@ async def create_invite_route(
             accept_url=accept_url,
         )
         email_sent = True
+    except ResendQuotaExceeded as exc:
+        # Already emitted a resend.quota_exceeded structured log in
+        # services/email.py (BetterStack alerts on that key). Here we
+        # just surface the typed code to the frontend.
+        email_error = str(exc)
+        email_error_code = "quota_exceeded"
     except Exception as exc:  # noqa: BLE001
         logger.warning("invite email send failed: %s", exc)
         email_error = str(exc)
+        email_error_code = "send_failed"
 
     db.log_audit(
         tenant_id=tenant_id,
@@ -441,6 +453,7 @@ async def create_invite_route(
             "email": invite_row["email"],
             "role": invite_row["role"],
             "email_sent": email_sent,
+            "email_error_code": email_error_code,
         },
     )
 
@@ -454,6 +467,7 @@ async def create_invite_route(
         "accept_url": accept_url,
         "email_sent": email_sent,
         "email_error": email_error,
+        "email_error_code": email_error_code,
     }
 
 
@@ -733,7 +747,7 @@ async def provision_agent(
         whatsapp = request.app.state.whatsapp
         try:
             sent = await _asyncio.wait_for(
-                _asyncio.to_thread(whatsapp.send_welcome, phone_e164, body.agent_name),
+                _asyncio.to_thread(whatsapp.send_welcome, phone_e164, body.agent_name, body.agent_gender),
                 timeout=15.0,
             )
             if not sent:

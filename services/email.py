@@ -33,6 +33,20 @@ RESEND_API_URL = "https://api.resend.com/emails"
 FROM_ADDRESS = "Agentiko <noreply@agentiko.io>"
 
 
+class ResendQuotaExceeded(RuntimeError):
+    """Resend returned 429 (daily/monthly send quota exhausted) or the
+    response body indicates rate-limiting. The caller in
+    routes/tenants.py catches this and falls back to copy-link UX;
+    BetterStack alerts on the `resend.quota_exceeded` structured log
+    key so ops learns about it without a user report."""
+
+    def __init__(self, status_code: int, body_snippet: str, retry_after: int | None = None) -> None:
+        super().__init__(f"resend quota exceeded ({status_code}): {body_snippet[:200]}")
+        self.status_code = status_code
+        self.retry_after = retry_after
+        self.body_snippet = body_snippet
+
+
 def _api_key() -> str:
     """Read the Resend sending key from the env. Cloud Run injects it
     from Secret Manager `resend-api-key` / `-dev`."""
@@ -192,6 +206,33 @@ async def send_invite_email(
                 "Content-Type": "application/json",
             },
         )
+
+    if resp.status_code == 429 or (
+        resp.status_code >= 400
+        and "rate_limit" in resp.text.lower()
+    ):
+        # Quota / rate limit — surface as a typed exception so the caller
+        # can distinguish from generic Resend errors and the `extra` dict
+        # emits a structured log key BetterStack alerts on.
+        retry_after_hdr = resp.headers.get("Retry-After")
+        retry_after: int | None = None
+        if retry_after_hdr:
+            try:
+                retry_after = int(retry_after_hdr)
+            except ValueError:
+                retry_after = None
+        body = resp.text[:300]
+        logger.error(
+            "resend.quota_exceeded status=%s retry_after=%s body=%s",
+            resp.status_code, retry_after, body,
+            extra={
+                "event": "resend.quota_exceeded",
+                "status_code": resp.status_code,
+                "retry_after": retry_after,
+                "resend_body": body,
+            },
+        )
+        raise ResendQuotaExceeded(resp.status_code, body, retry_after=retry_after)
 
     if resp.status_code >= 400:
         logger.warning("resend %s: %s", resp.status_code, resp.text[:300])
