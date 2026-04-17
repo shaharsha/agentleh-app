@@ -24,12 +24,17 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# The template has to exist + be APPROVED in Meta Business Manager on
-# the shared WABA before the bridge will accept a send. Currently there
-# is exactly one approved template: `hello_greeting`. If the Meta
-# template registry gains a better welcome template later, swap this.
-HELLO_TEMPLATE_NAME = "hello_greeting"
-HELLO_TEMPLATE_LANGUAGE = "en_US"
+# Primary template: Hebrew welcome with the agent's name as {{1}}.
+# Body: "היי! אני {{1}} מ-Agentiko. כדי להתחיל — פשוט לענות כאן."
+# Gender-neutral — the agent's personal name (Shuli, Yuki, etc.) carries
+# identity; we don't say "your agent" which would require masc/fem forms.
+HELLO_TEMPLATE_NAME = "agent_ready_he"
+HELLO_TEMPLATE_LANGUAGE = "he"
+
+# Fallback for legacy agents where agent_name might be empty — the
+# original English template with zero parameters.
+FALLBACK_TEMPLATE_NAME = "hello_greeting"
+FALLBACK_TEMPLATE_LANGUAGE = "en_US"
 
 
 class WhatsAppService(Protocol):
@@ -66,13 +71,26 @@ class BridgeWhatsApp:
             logger.info("BridgeWhatsApp: skipping welcome to %s (bridge not configured)", phone)
             return False
 
-        payload = {
-            "to": phone,
-            "force_template": True,
-            "template_name": HELLO_TEMPLATE_NAME,
-            "language": HELLO_TEMPLATE_LANGUAGE,
-            "template_params": [],
-        }
+        # Use the Hebrew template with the agent's name as {{1}} when we
+        # have one; fall back to the English zero-param template otherwise
+        # (e.g. legacy agents where agent_name is empty).
+        name = (agent_name or "").strip()
+        if name:
+            payload = {
+                "to": phone,
+                "force_template": True,
+                "template_name": HELLO_TEMPLATE_NAME,
+                "language": HELLO_TEMPLATE_LANGUAGE,
+                "template_params": [name],
+            }
+        else:
+            payload = {
+                "to": phone,
+                "force_template": True,
+                "template_name": FALLBACK_TEMPLATE_NAME,
+                "language": FALLBACK_TEMPLATE_LANGUAGE,
+                "template_params": [],
+            }
 
         try:
             with httpx.Client(timeout=15.0) as client:
@@ -96,7 +114,7 @@ class BridgeWhatsApp:
 
         logger.info(
             "BridgeWhatsApp: sent %s template to %s (agent=%s)",
-            HELLO_TEMPLATE_NAME,
+            payload["template_name"],
             phone,
             agent_name,
         )
