@@ -192,10 +192,31 @@ export default function ChatPane({ tenantId, agentId, agentName }: ChatPaneProps
           }
           return
         }
-        // chat.send response carries the runId — stash it on the
-        // most-recent user bubble so we know what to abort.
+        // chat.send response carries the runId — stash it so we can
+        // route chat events + abort, AND pre-create an empty assistant
+        // bubble right now so the typing-dots indicator shows
+        // immediately, not only after the first `delta` event arrives
+        // (which often already has text, skipping the empty state).
         const runId = body?.runId
-        if (runId) setStreamingRunId(runId)
+        if (runId) {
+          setStreamingRunId(runId)
+          setMessages((prev) => {
+            // Don't duplicate if a bubble for this runId already exists
+            // (shouldn't happen, but belt + suspenders).
+            if (prev.some((m) => m.runId === runId)) return prev
+            return [
+              ...prev,
+              {
+                id: `a-${runId}`,
+                role: 'assistant',
+                text: '',
+                ts: Date.now(),
+                streaming: true,
+                runId,
+              },
+            ]
+          })
+        }
         return
       }
       if (frame.type === 'event' && frame.event === 'chat') {
@@ -464,16 +485,29 @@ function normalizeRole(role: unknown): Role | null {
   return null
 }
 
+// Strip OpenClaw's `<final>...</final>` wrapper that agents emit to
+// mark the user-facing portion of their reply. OpenClaw's own
+// sanitizeUserFacingText helper drops these via the same regex; we
+// mirror it here so the web-chat bubble doesn't leak the raw tag.
+// Case-insensitive + whitespace-tolerant so minor LLM drift
+// (`<FINAL >`, `< /final>`) still gets stripped.
+const FINAL_TAG_RE = /<\s*\/?\s*final\s*>/gi
+
 function extractText(message: any): string {
   if (!message) return ''
-  if (typeof message.text === 'string') return message.text
-  const content = message.content
-  if (typeof content === 'string') return content
-  if (Array.isArray(content)) {
-    return content
-      .map((c: any) => (typeof c?.text === 'string' ? c.text : ''))
-      .filter(Boolean)
-      .join('\n')
+  let raw = ''
+  if (typeof message.text === 'string') {
+    raw = message.text
+  } else {
+    const content = message.content
+    if (typeof content === 'string') {
+      raw = content
+    } else if (Array.isArray(content)) {
+      raw = content
+        .map((c: any) => (typeof c?.text === 'string' ? c.text : ''))
+        .filter(Boolean)
+        .join('\n')
+    }
   }
-  return ''
+  return raw.replace(FINAL_TAG_RE, '').trim()
 }
