@@ -1,55 +1,111 @@
+import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../lib/i18n'
 import { useTheme, type Theme } from '../lib/theme'
-import { MonitorIcon, MoonIcon, SunIcon } from './icons'
+import { CheckIcon, MonitorIcon, MoonIcon, SunIcon } from './icons'
 
 /**
- * Tri-state theme toggle — Auto / Light / Dark. Renders as a compact
- * 3-button pill matching the LanguageSwitcher's visual language:
- *   🌓 | ☀ | 🌑
+ * Theme switcher — single icon button that opens a small dropdown of
+ * options (Auto / Light / Dark). The trigger's glyph reflects the
+ * user's current *preference*, not the resolved mode, so at a glance
+ * you know whether you're on Auto vs pinned — Linear / GitHub pattern.
  *
- * `Auto` clears the user's explicit preference and follows
- * prefers-color-scheme. `Light` and `Dark` pin the data-theme attribute
- * regardless of OS. See [src/lib/theme.tsx](src/lib/theme.tsx) for the
- * storage + resolution rules.
+ * Mobile toolbar space is precious, and the drawer's own theme section
+ * (3 wide buttons) handles the flat-menu case. This compact variant is
+ * for the desktop nav.
  */
-export default function ThemeSwitcher({ className = '' }: { className?: string }) {
+export default function ThemeSwitcher() {
   const { t } = useI18n()
   const { theme, setTheme } = useTheme()
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  const labelFor = (target: Theme) =>
-    target === 'light'
-      ? t({ he: 'בהיר', en: 'Light' })
-      : target === 'dark'
-        ? t({ he: 'כהה', en: 'Dark' })
-        : t({ he: 'אוטומטי', en: 'Auto' })
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    const onClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onClick)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onClick)
+    }
+  }, [open])
 
-  const btn = (target: Theme, icon: React.ReactNode) => (
-    <button
-      key={target}
-      type="button"
-      onClick={() => setTheme(target)}
-      aria-pressed={theme === target}
-      aria-label={labelFor(target)}
-      title={labelFor(target)}
-      className={`inline-flex items-center justify-center w-9 h-9 rounded-md transition-colors cursor-pointer ${
-        theme === target
-          ? 'bg-gray-900 text-white dark:bg-white/15 dark:text-text-primary'
-          : 'text-text-secondary hover:text-text-primary'
-      }`}
-    >
-      {icon}
-    </button>
-  )
+  const options: Array<{ value: Theme; label: string; icon: React.ReactNode }> = [
+    {
+      value: 'auto',
+      label: t({ he: 'אוטומטי', en: 'Auto' }),
+      icon: <MonitorIcon className="w-[14px] h-[14px]" />,
+    },
+    {
+      value: 'light',
+      label: t({ he: 'בהיר', en: 'Light' }),
+      icon: <SunIcon className="w-[14px] h-[14px]" />,
+    },
+    {
+      value: 'dark',
+      label: t({ he: 'כהה', en: 'Dark' }),
+      icon: <MoonIcon className="w-[14px] h-[14px]" />,
+    },
+  ]
+
+  const activeOption = options.find((o) => o.value === theme) ?? options[0]
+  const triggerLabel = t({ he: 'ערכת נושא', en: 'Theme' }) + ': ' + activeOption.label
 
   return (
-    <div
-      role="radiogroup"
-      aria-label={t({ he: 'בחירת ערכת נושא', en: 'Theme selection' })}
-      className={`flex items-center gap-0.5 border border-border-light rounded-lg p-0.5 bg-surface/60 ${className}`}
-    >
-      {btn('auto', <MonitorIcon className="w-[14px] h-[14px]" />)}
-      {btn('light', <SunIcon className="w-[14px] h-[14px]" />)}
-      {btn('dark', <MoonIcon className="w-[14px] h-[14px]" />)}
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={triggerLabel}
+        title={triggerLabel}
+        className="flex items-center justify-center w-9 h-9 rounded-lg text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+      >
+        {activeOption.icon}
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          aria-label={t({ he: 'בחירת ערכת נושא', en: 'Theme selection' })}
+          className="absolute end-0 mt-2 w-[min(11rem,calc(100vw-1.5rem))] glass-card-elevated rounded-xl overflow-hidden z-30 animate-in-dropdown"
+        >
+          {options.map((opt) => {
+            const selected = opt.value === theme
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="menuitem"
+                aria-current={selected ? 'true' : undefined}
+                onClick={() => {
+                  setTheme(opt.value)
+                  setOpen(false)
+                }}
+                className={`w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-sm text-start transition-colors cursor-pointer ${
+                  selected
+                    ? 'text-brand'
+                    : 'text-text-primary hover:bg-black/5 dark:hover:bg-white/5'
+                }`}
+              >
+                <span className={selected ? 'text-brand' : 'text-text-secondary'}>
+                  {opt.icon}
+                </span>
+                <span className="flex-1">{opt.label}</span>
+                {selected && <CheckIcon className="w-4 h-4 text-brand" />}
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

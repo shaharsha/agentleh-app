@@ -1,42 +1,94 @@
+import { useEffect, useRef, useState } from 'react'
 import { useI18n, type Lang } from '../lib/i18n'
-import { GlobeIcon } from './icons'
+import { CheckIcon, GlobeIcon } from './icons'
 
 /**
- * Compact two-state language toggle for the top nav.
+ * Language switcher — single globe-icon button that opens a small
+ * dropdown with both language names. Matches ThemeSwitcher's pattern:
+ * compact toolbar real-estate, clear current selection via checkmark.
  *
- * Renders as `🌐 עב | EN` with the active language highlighted. A small
- * globe icon prefixes the group so at a glance the cluster reads as
- * "language control" rather than "two random buttons". Clicking either
- * side calls `setLang`, which (via I18nProvider's useEffect) flips
- * `<html dir>` + `<html lang>` and triggers a re-render across the
- * whole tree. No page reload, no flicker.
- *
- * Deliberately minimal — no dropdown, no flags, no "auto" option. Two
- * languages, one click, instantly obvious.
+ * We show the native name ("עברית" / "English") rather than a flag
+ * because flags map to countries, not languages — and mixing "עב" vs
+ * "EN" codes in the trigger would be a tiny target anyway. The full
+ * name sits comfortably in the menu.
  */
 export default function LanguageSwitcher() {
-  const { lang, setLang } = useI18n()
+  const { lang, setLang, t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  const btn = (target: Lang, label: string) => (
-    <button
-      onClick={() => setLang(target)}
-      aria-pressed={lang === target}
-      aria-label={target === 'he' ? 'עברית' : 'English'}
-      className={`inline-flex items-center justify-center min-w-[36px] h-9 px-2.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-        lang === target
-          ? 'bg-gray-900 text-white dark:bg-white/15 dark:text-text-primary'
-          : 'text-text-secondary hover:text-text-primary'
-      }`}
-    >
-      {label}
-    </button>
-  )
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    const onClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onClick)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onClick)
+    }
+  }, [open])
+
+  const options: Array<{ value: Lang; label: string }> = [
+    { value: 'he', label: 'עברית' },
+    { value: 'en', label: 'English' },
+  ]
+
+  const activeLabel = options.find((o) => o.value === lang)?.label ?? ''
+  const triggerLabel = t({ he: 'שפה', en: 'Language' }) + ': ' + activeLabel
 
   return (
-    <div className="flex items-center gap-0.5 border border-border-light rounded-lg ps-2 pe-1 py-0.5 bg-surface/60">
-      <GlobeIcon className="w-[14px] h-[14px] text-text-muted" />
-      {btn('he', 'עב')}
-      {btn('en', 'EN')}
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={triggerLabel}
+        title={triggerLabel}
+        className="flex items-center justify-center w-9 h-9 rounded-lg text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+      >
+        <GlobeIcon className="w-[14px] h-[14px]" />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          aria-label={t({ he: 'בחירת שפה', en: 'Language selection' })}
+          className="absolute end-0 mt-2 w-[min(10rem,calc(100vw-1.5rem))] glass-card-elevated rounded-xl overflow-hidden z-30 animate-in-dropdown"
+        >
+          {options.map((opt) => {
+            const selected = opt.value === lang
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="menuitem"
+                aria-current={selected ? 'true' : undefined}
+                dir={opt.value === 'he' ? 'rtl' : 'ltr'}
+                onClick={() => {
+                  setLang(opt.value)
+                  setOpen(false)
+                }}
+                className={`w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-sm text-start transition-colors cursor-pointer ${
+                  selected
+                    ? 'text-brand'
+                    : 'text-text-primary hover:bg-black/5 dark:hover:bg-white/5'
+                }`}
+              >
+                <span className="flex-1">{opt.label}</span>
+                {selected && <CheckIcon className="w-4 h-4 text-brand" />}
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
