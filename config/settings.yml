@@ -4,4 +4,4 @@ gateway_base_url: "wss://gw.agentiko.io"
 # Default voice manifest URL (overridden per-env in settings.{dev,prod}.yml).
 # The app's frontend reads this via GET /api/voices/manifest so it doesn't
 # need its own Google Storage config.
-voice_manifest_url: "https://storage.googleapis.com/agentiko-public-assets/voice-samples/manifest.json"
+voice_manifest_url: "https://storage.googleapis.com/agentleh-public-assets/voice-samples/manifest.json"

@@ -71,7 +71,7 @@ def _get_manifest_url() -> str:
     return getattr(
         settings,
         "voice_manifest_url",
-        "https://storage.googleapis.com/agentiko-public-assets/voice-samples/manifest.json",
+        "https://storage.googleapis.com/agentleh-public-assets/voice-samples/manifest.json",
     )
 
 

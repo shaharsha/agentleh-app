@@ -5,4 +5,4 @@ supabase_anon_key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSI
 cors_allowed_origins: "http://localhost:5173,http://127.0.0.1:5173,https://app-dev.agentiko.io,https://agentleh-app-dev.onrender.com"
 # Dev voice samples live in a separate public bucket so we can regenerate
 # without touching the one real customers' onboarding reads from.
-voice_manifest_url: "https://storage.googleapis.com/agentiko-public-assets-dev/voice-samples/manifest.json"
+voice_manifest_url: "https://storage.googleapis.com/agentleh-public-assets-dev/voice-samples/manifest.json"
