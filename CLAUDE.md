@@ -191,7 +191,7 @@ Plain env: `ENV_FOR_DYNACONF=production` (or `development`), `AGENTLEH_PROVISION
 
 ## Design System
 
-Shared with the landing page (`agentiko-landing` repo). Same CSS classes:
+Shared with the landing page (`agentleh-landing` repo). Same CSS classes:
 
 `glass-nav`, `glass-card`, `glass-card-elevated`, `glass-card-hover`, `glass-pill`,
 `section-gradient`, `section-gradient-alt`, `section-gradient-hero`,

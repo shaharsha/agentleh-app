@@ -20,8 +20,8 @@
  *     this repo — follows AGENTS.md and OnboardingPage precedent).
  *   - `url_dev` vs `url_prod` from the manifest: we pick based on
  *     import.meta.env.PROD which Vite evaluates at build time. In dev
- *     the bucket is gs://agentiko-public-assets-dev, in prod it's
- *     gs://agentiko-public-assets.
+ *     the bucket is gs://agentleh-public-assets-dev, in prod it's
+ *     gs://agentleh-public-assets.
  */
 
 import { useEffect, useRef, useState } from 'react'
