@@ -110,11 +110,14 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
   const subscription = data?.subscription
   const respRange = data?.range
 
+  // Values arrive from the wire as strings (Postgres SUM returns NUMERIC,
+  // which FastAPI serializes as a JSON string to preserve precision).
+  // Coerce before summing — otherwise `+` concatenates strings.
   const totalMicros = useMemo(
     () =>
-      (totals?.llm_micros ?? 0)
-      + (totals?.search_micros ?? 0)
-      + (totals?.tts_micros ?? 0),
+      Number(totals?.llm_micros ?? 0)
+      + Number(totals?.search_micros ?? 0)
+      + Number(totals?.tts_micros ?? 0),
     [totals],
   )
 
@@ -236,7 +239,7 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
       <div className="bg-white border border-gray-200 rounded-xl p-6">
         <div className="flex items-baseline justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">
-            {t({ he: 'סה״כ לדייר', en: 'Tenant totals' })}
+            {t({ he: 'סיכום שימוש', en: 'Usage summary' })}
           </h2>
           {respRange && (
             <span className="text-xs text-gray-500">
@@ -328,7 +331,7 @@ function AgentRow({
   row: AgentUsageRow
   num: (v: string) => React.ReactNode
 }) {
-  const total = row.llm_micros + row.search_micros + row.tts_micros
+  const total = Number(row.llm_micros) + Number(row.search_micros) + Number(row.tts_micros)
   return (
     <tr className="border-t border-gray-100">
       <td className="py-2 pe-3">
