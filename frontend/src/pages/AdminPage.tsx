@@ -37,6 +37,7 @@ import type {
   AdminAgentDetail,
   UsageEvent,
 } from '../lib/types'
+import { useI18n } from '../lib/i18n'
 
 type AdminTab = 'agents' | 'users' | 'plans' | 'coupons' | 'stats'
 const VALID_TABS: readonly AdminTab[] = ['agents', 'users', 'plans', 'coupons', 'stats']
@@ -65,6 +66,7 @@ function fmtDate(s: string | null | undefined): string {
 }
 
 export default function AdminPage() {
+  const { t } = useI18n()
   const [loading, setLoading] = useState(true)
   const [overview, setOverview] = useState<AdminOverview | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -143,17 +145,27 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <div className="p-8 text-gray-500">Loading admin panel…</div>
+      <div className="p-8 text-gray-500">
+        {t({ he: 'טוען את לוח הבקרה…', en: 'Loading admin panel…' })}
+      </div>
     )
   }
 
   if (error && !overview) {
     return (
       <div className="p-8 text-red-600">
-        Error: {error}
+        {t({ he: 'שגיאה', en: 'Error' })}: {error}
         {error.includes('superadmin_required') && (
           <div className="mt-4 text-gray-700">
-            You need <code>role='superadmin'</code> on your app_users row to access this page.
+            {t({
+              he: 'נדרש role=',
+              en: 'You need ',
+            })}
+            <code>role='superadmin'</code>
+            {t({
+              he: ' ברשומת app_users כדי לגשת לדף הזה.',
+              en: ' on your app_users row to access this page.',
+            })}
           </div>
         )}
       </div>
@@ -162,34 +174,48 @@ export default function AdminPage() {
 
   if (!overview) return null
 
+  // Bilingual labels for the top-level tabs. The inner tab contents
+  // (Agents table, Coupons CRUD, Stats charts) stay in their current
+  // mix of Hebrew + English — they're dense superadmin tools with many
+  // column headers and the translation ROI doesn't justify the churn.
+  const tabLabels: Record<AdminTab, { he: string; en: string }> = {
+    agents: { he: 'סוכנים', en: 'Agents' },
+    users: { he: 'משתמשים', en: 'Users' },
+    plans: { he: 'תוכניות', en: 'Plans' },
+    coupons: { he: 'קופונים', en: 'Coupons' },
+    stats: { he: 'סטטיסטיקות', en: 'Stats' },
+  }
+
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Admin</h1>
+        <h1 className="text-3xl font-bold">
+          {t({ he: 'ניהול', en: 'Admin' })}
+        </h1>
         <button
           onClick={reload}
           className="btn-secondary btn-sm"
         >
-          Refresh
+          {t({ he: 'רענון', en: 'Refresh' })}
         </button>
       </div>
 
       <div className="flex gap-2 border-b">
-        {(['agents', 'users', 'plans', 'coupons'] as const).map((t) => {
+        {(['agents', 'users', 'plans', 'coupons'] as const).map((name) => {
           // Coupons are loaded by the tab's own component on mount,
           // not by the top-level overview, so the count is omitted.
-          const count = t === 'coupons' ? null : (overview[t] as unknown[]).length
+          const count = name === 'coupons' ? null : (overview[name] as unknown[]).length
           return (
             <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-2 capitalize ${
-                tab === t
+              key={name}
+              onClick={() => setTab(name)}
+              className={`px-4 py-2 ${
+                tab === name
                   ? 'border-b-2 border-blue-600 text-blue-600 font-semibold'
                   : 'text-gray-500 hover:text-gray-800'
               }`}
             >
-              {t}{count !== null ? ` (${count})` : ''}
+              {t(tabLabels[name])}{count !== null ? ` (${count})` : ''}
             </button>
           )
         })}
@@ -201,7 +227,7 @@ export default function AdminPage() {
               : 'text-gray-500 hover:text-gray-800'
           }`}
         >
-          Stats (for nerds)
+          {t({ he: 'סטטיסטיקות (לחנונים)', en: 'Stats (for nerds)' })}
         </button>
       </div>
 

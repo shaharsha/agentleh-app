@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useI18n } from '../lib/i18n'
 
 const LANDING_URL = import.meta.env.VITE_LANDING_URL
 
@@ -9,6 +10,7 @@ interface LandingPageProps {
 
 export default function LandingPage({ initialMode = 'login' }: LandingPageProps) {
   const [mode, setMode] = useState<'login' | 'signup'>(initialMode)
+  const { t, dir } = useI18n()
 
   async function loginWithGoogle() {
     await supabase.auth.signInWithOAuth({
@@ -17,13 +19,22 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
     })
   }
 
+  const tagline = t(
+    mode === 'login'
+      ? { he: 'העוזר החכם שלך בוואטסאפ', en: 'Your smart assistant on WhatsApp' }
+      : { he: 'צור חשבון חדש', en: 'Create a new account' },
+  )
+  const googleCta = t(
+    mode === 'login'
+      ? { he: 'המשך עם Google', en: 'Continue with Google' }
+      : { he: 'הרשמה עם Google', en: 'Sign up with Google' },
+  )
+
   return (
     <div className="min-h-screen section-gradient-hero flex flex-col items-center justify-center px-5 py-16">
       <div className="text-center mb-12">
         <h1 className="text-[36px] font-extrabold tracking-[-1px] text-text-primary mb-3">Agentiko</h1>
-        <p className="text-[17px] text-text-secondary leading-relaxed">
-          {mode === 'login' ? 'העוזר החכם שלך בוואטסאפ' : 'צור חשבון חדש'}
-        </p>
+        <p className="text-[17px] text-text-secondary leading-relaxed">{tagline}</p>
       </div>
 
       <div className="glass-card-elevated rounded-[22px] p-8 w-full max-w-[400px]">
@@ -34,7 +45,7 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
             <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
             <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
           </svg>
-          <span className="font-medium">{mode === 'login' ? 'המשך עם Google' : 'הרשמה עם Google'}</span>
+          <span className="font-medium">{googleCta}</span>
         </button>
 
         <div className="relative my-7">
@@ -42,7 +53,9 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
             <div className="w-full border-t border-border" />
           </div>
           <div className="relative flex justify-center">
-            <span className="bg-white/80 px-4 text-[13px] text-text-muted">או</span>
+            <span className="bg-white/80 px-4 text-[13px] text-text-muted">
+              {t({ he: 'או', en: 'or' })}
+            </span>
           </div>
         </div>
 
@@ -50,18 +63,40 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
 
         <p className="text-center text-[14px] text-text-secondary pt-4">
           {mode === 'login' ? (
-            <>אין לך חשבון?{' '}<button type="button" onClick={() => { setMode('signup'); history.pushState(null, '', '/signup') }} className="text-brand font-medium hover:underline cursor-pointer">הרשמה</button></>
+            <>
+              {t({ he: 'אין לך חשבון?', en: "Don't have an account?" })}{' '}
+              <button
+                type="button"
+                onClick={() => { setMode('signup'); history.pushState(null, '', '/signup') }}
+                className="text-brand font-medium hover:underline cursor-pointer"
+              >
+                {t({ he: 'הרשמה', en: 'Sign up' })}
+              </button>
+            </>
           ) : (
-            <>יש לך חשבון?{' '}<button type="button" onClick={() => { setMode('login'); history.pushState(null, '', '/') }} className="text-brand font-medium hover:underline cursor-pointer">התחברות</button></>
+            <>
+              {t({ he: 'יש לך חשבון?', en: 'Already have an account?' })}{' '}
+              <button
+                type="button"
+                onClick={() => { setMode('login'); history.pushState(null, '', '/') }}
+                className="text-brand font-medium hover:underline cursor-pointer"
+              >
+                {t({ he: 'התחברות', en: 'Log in' })}
+              </button>
+            </>
           )}
         </p>
       </div>
 
-      <p className="text-center text-[13px] text-text-muted mt-8 max-w-[340px] leading-relaxed">
-        בהרשמה את/ה מסכימ/ה ל
-        <a href={LANDING_URL + '/terms'} className="text-brand hover:underline">תנאי השימוש</a>
-        {' '}ול
-        <a href={LANDING_URL + '/privacy'} className="text-brand hover:underline">מדיניות הפרטיות</a>
+      <p className="text-center text-[13px] text-text-muted mt-8 max-w-[340px] leading-relaxed" dir={dir}>
+        {t({ he: 'בהרשמה את/ה מסכימ/ה ל', en: 'By signing up you agree to the ' })}
+        <a href={LANDING_URL + '/terms'} className="text-brand hover:underline">
+          {t({ he: 'תנאי השימוש', en: 'Terms of Service' })}
+        </a>
+        {t({ he: ' ול', en: ' and ' })}
+        <a href={LANDING_URL + '/privacy'} className="text-brand hover:underline">
+          {t({ he: 'מדיניות הפרטיות', en: 'Privacy Policy' })}
+        </a>
       </p>
     </div>
   )
@@ -70,6 +105,7 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
 function EmailForm({ mode }: { mode: 'login' | 'signup' }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const { t, dir } = useI18n()
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -91,15 +127,29 @@ function EmailForm({ mode }: { mode: 'login' | 'signup' }) {
     }
   }
 
+  // Email + password stay LTR (both are always Latin/numeric); the
+  // placeholder should flow in the active text direction so it doesn't
+  // look misaligned in RTL mode.
+  const placeholderAlign = dir === 'rtl' ? 'placeholder:text-right' : 'placeholder:text-left'
+
   return (
     <form onSubmit={handleSubmit} className="space-y-3.5">
       <input
-        name="email" type="email" placeholder="אימייל" required
-        className="input-glass w-full px-4 py-3 text-[15px] placeholder:text-text-muted placeholder:text-right text-left"
+        name="email"
+        type="email"
+        placeholder={t({ he: 'אימייל', en: 'Email' })}
+        required
+        dir="ltr"
+        className={`input-glass w-full px-4 py-3 text-[15px] placeholder:text-text-muted ${placeholderAlign} text-left`}
       />
       <input
-        name="password" type="password" placeholder="סיסמה" required minLength={6}
-        className="input-glass w-full px-4 py-3 text-[15px] placeholder:text-text-muted placeholder:text-right text-left"
+        name="password"
+        type="password"
+        placeholder={t({ he: 'סיסמה', en: 'Password' })}
+        required
+        minLength={6}
+        dir="ltr"
+        className={`input-glass w-full px-4 py-3 text-[15px] placeholder:text-text-muted ${placeholderAlign} text-left`}
       />
 
       {error && (
@@ -109,7 +159,11 @@ function EmailForm({ mode }: { mode: 'login' | 'signup' }) {
       )}
 
       <button type="submit" disabled={loading} className="btn-brand btn-md w-full">
-        {loading ? '...' : mode === 'login' ? 'התחברות' : 'הרשמה'}
+        {loading
+          ? '...'
+          : mode === 'login'
+            ? t({ he: 'התחברות', en: 'Log in' })
+            : t({ he: 'הרשמה', en: 'Sign up' })}
       </button>
     </form>
   )

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { submitOnboarding } from '../lib/api'
 import StepIndicator from '../components/StepIndicator'
 import VoicePicker from '../components/VoicePicker'
+import { useI18n } from '../lib/i18n'
 import type { AppUser } from '../lib/types'
 
 interface OnboardingPageProps {
@@ -10,18 +11,24 @@ interface OnboardingPageProps {
 }
 
 export default function OnboardingPage({ user, onComplete }: OnboardingPageProps) {
+  const { t, dir } = useI18n()
   const [loading, setLoading] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const provisionSteps = [
-    { at: 0, label: 'מכין סביבת עבודה…' },
-    { at: 5, label: 'מגדיר קונפיגורציה…' },
-    { at: 12, label: 'מעדכן בסיס נתונים…' },
-    { at: 20, label: 'מפעיל קונטיינר…' },
-    { at: 35, label: 'בודק תקינות…' },
-    { at: 50, label: 'כמעט מוכן…' },
-  ]
+  // Provisioning step labels are translated up-front so the timer-driven
+  // picker (below) can index into a pre-materialized list.
+  const provisionSteps = useMemo(
+    () => [
+      { at: 0, label: t({ he: 'מכין סביבת עבודה…', en: 'Preparing workspace…' }) },
+      { at: 5, label: t({ he: 'מגדיר קונפיגורציה…', en: 'Configuring…' }) },
+      { at: 12, label: t({ he: 'מעדכן בסיס נתונים…', en: 'Updating database…' }) },
+      { at: 20, label: t({ he: 'מפעיל קונטיינר…', en: 'Starting container…' }) },
+      { at: 35, label: t({ he: 'בודק תקינות…', en: 'Health checks…' }) },
+      { at: 50, label: t({ he: 'כמעט מוכן…', en: 'Almost ready…' }) },
+    ],
+    [t],
+  )
 
   useEffect(() => {
     if (loading) {
@@ -63,7 +70,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
       await submitOnboarding(form)
       onComplete()
     } catch {
-      alert('שגיאה ביצירת הסוכן')
+      alert(t({ he: 'שגיאה ביצירת הסוכן', en: 'Failed to create agent' }))
     } finally {
       setLoading(false)
     }
@@ -77,13 +84,32 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
     form.agent_gender &&
     form.tts_voice_name
 
+  const genderOptions: [string, string][] = [
+    ['male', t({ he: 'זכר', en: 'Male' })],
+    ['female', t({ he: 'נקבה', en: 'Female' })],
+  ]
+
   return (
     <div>
-      <StepIndicator steps={['תוכנית', 'הגדרות', 'מוכן']} current={1} />
+      <StepIndicator
+        steps={[
+          t({ he: 'תוכנית', en: 'Plan' }),
+          t({ he: 'הגדרות', en: 'Setup' }),
+          t({ he: 'מוכן', en: 'Ready' }),
+        ]}
+        current={1}
+      />
 
       <div className="text-center mb-10">
-        <h2 className="text-[28px] font-bold tracking-[-0.6px] mb-2">הגדרות</h2>
-        <p className="text-[15px] text-text-secondary">ספר לנו קצת על עצמך ועל הסוכן שלך</p>
+        <h2 className="text-[28px] font-bold tracking-[-0.6px] mb-2">
+          {t({ he: 'הגדרות', en: 'Setup' })}
+        </h2>
+        <p className="text-[15px] text-text-secondary">
+          {t({
+            he: 'ספר לנו קצת על עצמך ועל הסוכן שלך',
+            en: 'Tell us a bit about yourself and your agent',
+          })}
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -96,25 +122,49 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
                 <circle cx="12" cy="7" r="4" />
               </svg>
             </div>
-            <h3 className="text-[16px] font-semibold">עליך</h3>
+            <h3 className="text-[16px] font-semibold">
+              {t({ he: 'עליך', en: 'About you' })}
+            </h3>
           </div>
 
           <div>
-            <label className="block text-[13px] font-medium text-text-secondary mb-1.5">שם מלא</label>
-            <input value={form.full_name} onChange={(e) => update('full_name', e.target.value)}
-              required className="input-glass w-full px-4 py-3 text-[15px]" placeholder="השם שלך" />
+            <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
+              {t({ he: 'שם מלא', en: 'Full name' })}
+            </label>
+            <input
+              value={form.full_name}
+              onChange={(e) => update('full_name', e.target.value)}
+              required
+              dir={dir}
+              className="input-glass w-full px-4 py-3 text-[15px]"
+              placeholder={t({ he: 'השם שלך', en: 'Your name' })}
+            />
           </div>
 
           <div>
-            <label className="block text-[13px] font-medium text-text-secondary mb-1.5">טלפון (WhatsApp)</label>
-            <input value={form.phone} onChange={(e) => update('phone', e.target.value)}
-              required type="tel" dir="ltr" className="input-glass w-full px-4 py-3 text-[15px]" placeholder="+972..." />
+            <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
+              {t({ he: 'טלפון (WhatsApp)', en: 'Phone (WhatsApp)' })}
+            </label>
+            <input
+              value={form.phone}
+              onChange={(e) => update('phone', e.target.value)}
+              required
+              type="tel"
+              dir="ltr"
+              className="input-glass w-full px-4 py-3 text-[15px]"
+              placeholder="+972..."
+            />
           </div>
 
           <div>
-            <label className="block text-[13px] font-medium text-text-secondary mb-1.5">מגדר</label>
-            <TogglePair value={form.gender} onChange={(v) => update('gender', v)}
-              options={[['male', 'זכר'], ['female', 'נקבה']]} />
+            <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
+              {t({ he: 'מגדר', en: 'Gender' })}
+            </label>
+            <TogglePair
+              value={form.gender}
+              onChange={(v) => update('gender', v)}
+              options={genderOptions}
+            />
           </div>
         </section>
 
@@ -126,27 +176,45 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
             </div>
-            <h3 className="text-[16px] font-semibold">הסוכן שלך</h3>
-          </div>
-
-          <div>
-            <label className="block text-[13px] font-medium text-text-secondary mb-1.5">שם הסוכן</label>
-            <input value={form.agent_name} onChange={(e) => update('agent_name', e.target.value)}
-              required className="input-glass w-full px-4 py-3 text-[15px]" placeholder="לדוגמה: שולי" />
-          </div>
-
-          <div>
-            <label className="block text-[13px] font-medium text-text-secondary mb-1.5">מגדר הסוכן</label>
-            <TogglePair value={form.agent_gender} onChange={(v) => update('agent_gender', v)}
-              options={[['male', 'זכר'], ['female', 'נקבה']]} />
+            <h3 className="text-[16px] font-semibold">
+              {t({ he: 'הסוכן שלך', en: 'Your agent' })}
+            </h3>
           </div>
 
           <div>
             <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
-              הקול של הסוכן בהודעות קוליות
+              {t({ he: 'שם הסוכן', en: 'Agent name' })}
+            </label>
+            <input
+              value={form.agent_name}
+              onChange={(e) => update('agent_name', e.target.value)}
+              required
+              dir={dir}
+              className="input-glass w-full px-4 py-3 text-[15px]"
+              placeholder={t({ he: 'לדוגמה: שולי', en: 'e.g. Luna' })}
+            />
+          </div>
+
+          <div>
+            <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
+              {t({ he: 'מגדר הסוכן', en: 'Agent gender' })}
+            </label>
+            <TogglePair
+              value={form.agent_gender}
+              onChange={(v) => update('agent_gender', v)}
+              options={genderOptions}
+            />
+          </div>
+
+          <div>
+            <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
+              {t({ he: 'הקול של הסוכן בהודעות קוליות', en: "Agent's voice for voice messages" })}
             </label>
             <p className="text-[12px] text-text-secondary mb-2">
-              לחץ על קול כדי לשמוע אותו ולבחור אותו. הסוכן ישתמש בקול הזה כאשר ישלח הודעות קוליות בוואטסאפ.
+              {t({
+                he: 'לחץ על קול כדי לשמוע אותו ולבחור אותו. הסוכן ישתמש בקול הזה כאשר ישלח הודעות קוליות בוואטסאפ.',
+                en: 'Click a voice to preview and select it. Your agent will use this voice for WhatsApp voice messages.',
+              })}
             </p>
             {form.agent_gender ? (
               <VoicePicker
@@ -156,7 +224,10 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
               />
             ) : (
               <div className="glass-card rounded-[16px] p-4 text-center text-[13px] text-text-secondary">
-                בחר את מגדר הסוכן למעלה כדי לראות את הקולות המתאימים
+                {t({
+                  he: 'בחר את מגדר הסוכן למעלה כדי לראות את הקולות המתאימים',
+                  en: 'Pick an agent gender above to see matching voices',
+                })}
               </div>
             )}
           </div>
@@ -165,7 +236,9 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
         {loading ? (
           <div className="glass-card-elevated rounded-[22px] p-6 space-y-4">
             <div className="flex items-center justify-between text-[15px]">
-              <span className="font-semibold">מקים את הסוכן…</span>
+              <span className="font-semibold">
+                {t({ he: 'מקים את הסוכן…', en: 'Provisioning your agent…' })}
+              </span>
               <span className="tabular-nums text-text-secondary text-[13px]">{progressPct}%</span>
             </div>
             <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
@@ -203,7 +276,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
         ) : (
           <button type="submit" disabled={!isValid}
             className="btn-brand w-full">
-            צור את הסוכן שלי
+            {t({ he: 'צור את הסוכן שלי', en: 'Create my agent' })}
           </button>
         )}
       </form>
@@ -214,7 +287,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
 function TogglePair({ value, onChange, options }: {
   value: string
   onChange: (v: string) => void
-  options: string[][]
+  options: [string, string][]
 }) {
   return (
     <div className="flex gap-3">
