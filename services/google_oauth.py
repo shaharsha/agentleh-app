@@ -96,7 +96,7 @@ def capabilities_to_scope_list(caps: list[str] | None) -> list[str]:
     return resolved
 
 _JWT_ALGORITHM = "HS256"
-_JWT_AUDIENCE = "agentiko-google-connect"
+_JWT_AUDIENCE = "agentleh-google-connect"
 _JWT_TTL_SECONDS = 15 * 60  # 15 minute connect link
 
 # Anything that ever gets honored as a post-consent redirect target must
