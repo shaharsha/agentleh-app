@@ -712,7 +712,7 @@ function DashboardTab({
                 </div>
 
                 {provisionError && (
-                  <div className="text-sm text-red-700 bg-red-50 dark:bg-red-500/10 p-3 rounded">{provisionError}</div>
+                  <div className="text-sm text-red-700 dark:text-red-300 bg-red-50 p-3 rounded">{provisionError}</div>
                 )}
                 <div className="flex flex-col sm:flex-row gap-2">
                   <button
@@ -752,7 +752,7 @@ function DashboardTab({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded">
+                    <span className="text-xs px-2 py-1 bg-green-50 text-green-700 dark:text-green-300 rounded">
                       {t(statusLabel(a.status))}
                     </span>
                     {isAdminOrOwner && (
@@ -888,7 +888,7 @@ function DeleteAgentModal({
         </div>
 
         {error && (
-          <div className="text-sm text-red-700 bg-red-50 p-3 rounded">{error}</div>
+          <div className="text-sm text-red-700 dark:text-red-300 bg-red-50 p-3 rounded">{error}</div>
         )}
 
         <div className="flex gap-2 justify-end">
@@ -1040,7 +1040,7 @@ function MembersTab({
               </button>
             </div>
             {inviteStatus === 'sent' && inviteLink && (
-              <div className="text-sm text-green-700 bg-green-50 p-3 rounded">
+              <div className="text-sm text-green-700 dark:text-green-300 bg-green-50 p-3 rounded">
                 {t({ he: 'ההזמנה נשלחה. קישור גיבוי: ', en: 'Email sent. Backup link: ' })}
                 <a href={inviteLink} dir="ltr" className="underline break-all">
                   {inviteLink}
@@ -1048,7 +1048,7 @@ function MembersTab({
               </div>
             )}
             {inviteStatus === 'link-only' && inviteLink && (
-              <div className="text-sm text-amber-800 bg-amber-50 p-3 rounded">
+              <div className="text-sm text-amber-800 dark:text-amber-300 bg-amber-50 p-3 rounded">
                 {t({
                   he: 'שליחת המייל נכשלה. העתק/י את הקישור לשיתוף ידני:',
                   en: 'Email failed to send. Copy this link to share manually:',
@@ -1307,7 +1307,7 @@ function SettingsTab({
 
       {isOwner && (
         <div className="bg-surface border border-red-200 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-red-900 mb-2">
+          <h2 className="text-lg font-semibold text-red-900 dark:text-red-200 mb-2">
             {t({ he: 'אזור מסוכן', en: 'Danger zone' })}
           </h2>
           <p className="text-sm text-gray-600 mb-4">
@@ -1443,7 +1443,7 @@ function RedeemCouponModal({
         />
 
         {previewError && (
-          <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+          <div className="p-3 rounded-lg bg-red-50 text-red-700 dark:text-red-300 text-sm">
             {t({ he: errorMsgHe(previewError), en: errorMsgEn(previewError) })}
           </div>
         )}
@@ -1466,7 +1466,7 @@ function RedeemCouponModal({
                 t({ he: 'יופעל בתום התקופה', en: 'starts at period end' })}
             </div>
             {preview.schedule.kind === 'upgrade_immediate' && (
-              <div className="mt-2 text-xs text-amber-700 bg-amber-50 rounded p-2">
+              <div className="mt-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 rounded p-2">
                 {t({
                   he: 'התוכנית הפעילה כעת תוחלף מיד.',
                   en: 'Your current active plan will be replaced immediately.',
@@ -1474,7 +1474,7 @@ function RedeemCouponModal({
               </div>
             )}
             {preview.already_redeemed_by_user && (
-              <div className="mt-2 text-xs text-red-700">
+              <div className="mt-2 text-xs text-red-700 dark:text-red-300">
                 {t({ he: 'כבר השתמשת בקוד זה.', en: 'You have already redeemed this code.' })}
               </div>
             )}
@@ -1482,7 +1482,7 @@ function RedeemCouponModal({
         )}
 
         {redeemError && (
-          <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+          <div className="p-3 rounded-lg bg-red-50 text-red-700 dark:text-red-300 text-sm">
             {t({ he: errorMsgHe(redeemError), en: errorMsgEn(redeemError) })}
           </div>
         )}

@@ -199,7 +199,7 @@ export default function InviteAcceptPage() {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 dark:text-red-300">
             {error}
           </div>
         )}

@@ -79,10 +79,10 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
   const roleBadge = (role: TenantRole) => {
     const color =
       role === 'owner'
-        ? 'bg-amber-100 text-amber-800'
+        ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
         : role === 'admin'
-          ? 'bg-indigo-100 text-indigo-800'
-          : 'bg-gray-100 text-gray-600'
+          ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-300'
+          : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300'
     return (
       <span className={`inline-block px-1.5 py-0.5 text-[10px] font-medium rounded ${color}`}>
         {roleLabel(role)}
@@ -130,8 +130,8 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
                   }}
                   className={`w-full px-3 py-2 rounded-lg text-sm flex items-center justify-between gap-2 cursor-pointer ${
                     tenant.id === activeTenantId
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'hover:bg-gray-50 text-gray-700'
+                      ? 'bg-brand-50 text-brand dark:bg-brand/15 dark:text-brand-light'
+                      : 'hover:bg-black/5 dark:hover:bg-white/5 text-text-primary'
                   }`}
                 >
                   <span className="truncate flex-1 text-start">
