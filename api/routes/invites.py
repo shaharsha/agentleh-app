@@ -115,6 +115,16 @@ async def accept_invite(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"error": str(exc)})
 
+    # A pending user joining a tenant that already has agents or an
+    # active sub has nothing to redeem — advance them past the coupon
+    # page so they land on the tenant dashboard on next /auth/me.
+    if user.get("onboarding_status") == "pending":
+        joined_tid = membership["tenant_id"]
+        if db.list_tenant_agents(joined_tid):
+            db.update_user(user["id"], onboarding_status="complete")
+        elif db.get_active_subscription(joined_tid):
+            db.update_user(user["id"], onboarding_status="plan_active")
+
     db.log_audit(
         tenant_id=membership["tenant_id"],
         actor_user_id=user["id"],

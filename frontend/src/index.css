@@ -243,11 +243,17 @@ button:not(:disabled) {
 }
 
 /* ── Touch-safe interactive floors ────────── */
-/* Coarse pointer = touch device. Guarantee every button/link meets the
- * 44×44 px iOS HIG minimum so nothing on mobile feels fiddly. */
+/* Coarse pointer = touch device. Enforce 44-px height only on TEXT-style
+ * buttons (`.btn-brand` / `.btn-secondary` / `.btn-sm` / `.btn-md`) —
+ * they carry labels and need to meet iOS HIG comfortably. Do NOT apply
+ * to bare `<button>`: that was squashing icon-only circular buttons
+ * (e.g. the 36-px avatar in the header) into 36×44 ovals because
+ * min-height stretches vertically without touching width. Icon buttons
+ * set their own `w-* h-*` and clear the tap target via the surrounding
+ * padding / parent row sizing. */
 @media (pointer: coarse) {
-  button, a.btn-brand, a.btn-secondary, a.btn-sm, a.btn-md,
-  button.btn-sm, button.btn-md {
+  a.btn-brand, a.btn-secondary, a.btn-sm, a.btn-md,
+  button.btn-brand, button.btn-secondary, button.btn-sm, button.btn-md {
     min-height: 44px;
   }
 }

@@ -142,13 +142,16 @@ export default function MobileDrawer({
         }`}
       />
 
-      {/* Sheet — slides in from inline-end (right in LTR, left in RTL) */}
+      {/* Sheet — slides in from the inline-START side, same edge as the
+       * hamburger trigger (left in LTR, right in RTL). Anchoring the
+       * drawer to the opposite side of the trigger feels wrong: your
+       * tap activates a panel somewhere across the screen. */}
       <aside
         role="dialog"
         aria-modal="true"
         aria-label={t({ he: 'תפריט ניווט', en: 'Navigation menu' })}
-        className={`absolute inset-y-0 end-0 w-[min(330px,88vw)] bg-surface shadow-2xl border-s border-border-light flex flex-col transition-transform duration-200 ease-out safe-pt safe-pb ${
-          open ? 'translate-x-0' : 'rtl:-translate-x-full ltr:translate-x-full'
+        className={`absolute inset-y-0 start-0 w-[min(330px,88vw)] bg-surface shadow-2xl border-e border-border-light flex flex-col transition-transform duration-200 ease-out safe-pt safe-pb ${
+          open ? 'translate-x-0' : 'rtl:translate-x-full ltr:-translate-x-full'
         }`}
         style={{ paddingInlineStart: 'max(0.75rem, env(safe-area-inset-left))', paddingInlineEnd: 'max(0.75rem, env(safe-area-inset-right))' }}
       >
