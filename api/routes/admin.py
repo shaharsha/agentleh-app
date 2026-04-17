@@ -166,6 +166,147 @@ async def admin_upsert_subscription(
     return await _meter_post("/admin/subscriptions", payload)
 
 
+# ─── Tenants (cross-tenant superadmin views) ─────────────────────────
+# List + detail. No mutation paths here — if a superadmin wants to
+# rename or delete a tenant they can navigate to /tenants/{id} and use
+# the tenant's own UI (the TenantContext resolver bypasses membership
+# for role='superadmin'). This keeps the mutation surface single-
+# sourced; the admin panel just gives cross-tenant visibility.
+
+
+def _tenant_row_out(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "slug": row["slug"],
+        "name": row["name"],
+        "name_base": row.get("name_base"),
+        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        "billing_email": row.get("billing_email"),
+        "owner_user_id": row["owner_user_id"],
+        "owner_email": row.get("owner_email"),
+        "owner_full_name": row.get("owner_full_name"),
+        "member_count": int(row.get("member_count") or 0),
+        "agent_count": int(row.get("agent_count") or 0),
+        "plan_id": row.get("plan_id"),
+        "plan_name_he": row.get("plan_name_he"),
+        "price_ils_cents": row.get("price_ils_cents"),
+        "subscription_status": row.get("subscription_status"),
+        "subscription_period_end": (
+            row["subscription_period_end"].isoformat()
+            if row.get("subscription_period_end") else None
+        ),
+    }
+
+
+@router.get("/tenants")
+async def admin_list_tenants(
+    request: Request,
+    _: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    """Every non-deleted tenant with its owner + active subscription
+    inlined. Powers the admin Tenants tab."""
+    db = request.app.state.db
+    rows = db.list_all_tenants()
+    return {"tenants": [_tenant_row_out(r) for r in rows]}
+
+
+@router.get("/tenants/{tenant_id}")
+async def admin_tenant_detail(
+    tenant_id: int,
+    request: Request,
+    _: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    """Full detail: members, agents (live + deleted), active sub,
+    recent audit, pending invites. For the admin drawer."""
+    db = request.app.state.db
+    detail = db.get_tenant_full_detail(tenant_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail={"error": "tenant_not_found"})
+
+    def _iso(v):
+        return v.isoformat() if hasattr(v, "isoformat") else v
+
+    tenant = detail["tenant"]
+    sub = detail["subscription"]
+    return {
+        "tenant": {
+            "id": tenant["id"],
+            "slug": tenant["slug"],
+            "name": tenant["name"],
+            "name_base": tenant.get("name_base"),
+            "owner_user_id": tenant["owner_user_id"],
+            "owner_email": tenant.get("owner_email"),
+            "owner_full_name": tenant.get("owner_full_name"),
+            "billing_email": tenant.get("billing_email"),
+            "created_at": _iso(tenant.get("created_at")),
+            "deleted_at": _iso(tenant.get("deleted_at")),
+        },
+        "members": [
+            {
+                "user_id": m["user_id"],
+                "email": m["email"],
+                "full_name": m["full_name"],
+                "role": m["role"],
+                "joined_at": _iso(m.get("joined_at")),
+            }
+            for m in detail["members"]
+        ],
+        "agents": [
+            {
+                "agent_id": a["agent_id"],
+                "agent_name": a["agent_name"],
+                "agent_gender": a.get("agent_gender"),
+                "status": a["status"],
+                "gateway_url": a.get("gateway_url"),
+                "created_at": _iso(a.get("created_at")),
+                "deleted_at": _iso(a.get("deleted_at")),
+            }
+            for a in detail["agents"]
+        ],
+        "subscription": {
+            "id": sub["id"],
+            "plan_id": sub["plan_id"],
+            "plan_name_he": sub["plan_name_he"],
+            "billing_mode": sub["billing_mode"],
+            "status": sub["status"],
+            "period_start": _iso(sub["period_start"]),
+            "period_end": _iso(sub["period_end"]),
+            "base_allowance_micros": int(sub["base_allowance_micros"]),
+            "used_micros": int(sub["used_micros"]),
+            "overage_enabled": bool(sub["overage_enabled"]),
+            "overage_cap_micros": (
+                int(sub["overage_cap_micros"])
+                if sub.get("overage_cap_micros") is not None else None
+            ),
+            "overage_used_micros": int(sub["overage_used_micros"]),
+        } if sub else None,
+        "pending_invites": [
+            {
+                "id": i["id"],
+                "email": i["email"],
+                "role": i["role"],
+                "created_at": _iso(i.get("created_at")),
+                "expires_at": _iso(i.get("expires_at")),
+            }
+            for i in detail["pending_invites"]
+        ],
+        "recent_audit": [
+            {
+                "id": e["id"],
+                "actor_user_id": e["actor_user_id"],
+                "actor_email": e.get("actor_email"),
+                "actor_full_name": e.get("actor_full_name"),
+                "action": e["action"],
+                "target_type": e.get("target_type"),
+                "target_id": e.get("target_id"),
+                "metadata": e.get("metadata"),
+                "created_at": _iso(e.get("created_at")),
+            }
+            for e in detail["recent_audit"]
+        ],
+    }
+
+
 # ─── VM stats (for scaling decisions) ────────────────────────────────
 
 

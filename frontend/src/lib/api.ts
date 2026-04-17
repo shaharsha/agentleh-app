@@ -407,6 +407,39 @@ export async function listTenantAudit(
   return res.json()
 }
 
+// ─── Superadmin: cross-tenant views ────────────────────────────────
+
+export interface AdminTenantRow {
+  id: number
+  slug: string
+  name: string
+  name_base: string | null
+  created_at: string | null
+  billing_email: string | null
+  owner_user_id: number
+  owner_email: string | null
+  owner_full_name: string | null
+  member_count: number
+  agent_count: number
+  plan_id: string | null
+  plan_name_he: string | null
+  price_ils_cents: number | null
+  subscription_status: string | null
+  subscription_period_end: string | null
+}
+
+export async function adminListTenants(): Promise<{ tenants: AdminTenantRow[] }> {
+  const res = await authFetch('/api/admin/tenants')
+  if (!res.ok) throw new Error('Admin tenants failed')
+  return res.json()
+}
+
+export async function adminTenantDetail(tenantId: number): Promise<Record<string, unknown>> {
+  const res = await authFetch(`/api/admin/tenants/${tenantId}`)
+  if (!res.ok) throw new Error('Admin tenant detail failed')
+  return res.json()
+}
+
 export interface ProvisionProgress {
   step: number
   total: number
