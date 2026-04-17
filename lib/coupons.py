@@ -450,21 +450,17 @@ def redeem(
                 current_active=current_active,
             )
 
-            # 5. Insert the new sub row. Resolve tenant owner once so the
-            # legacy NOT NULL user_id column on agent_subscriptions stays
-            # FK-valid (the column will go away post Phase 4 of the
-            # tenants refactor — for now we mirror the tenant's owner).
+            # 5. Verify the tenant exists (for a clean 404 instead of an
+            # FK violation) and insert the new sub row.
             cur.execute(
                 """
-                SELECT owner_user_id FROM tenants
+                SELECT 1 FROM tenants
                  WHERE id = %s AND deleted_at IS NULL
                 """,
                 (tenant_id,),
             )
-            owner_row = cur.fetchone()
-            if owner_row is None:
+            if cur.fetchone() is None:
                 raise InvalidPlan(detail={"reason": "tenant_not_found", "tenant_id": tenant_id})
-            owner_id = int(owner_row["owner_user_id"])
 
             exhaustion = _exhaustion_behavior(
                 plan["billing_mode"], plan["allows_overage"]
@@ -474,13 +470,13 @@ def redeem(
                 cur.execute(
                     """
                     INSERT INTO agent_subscriptions (
-                        tenant_id, user_id, plan_id, status,
+                        tenant_id, plan_id, status,
                         period_start, period_end, exhaustion_behavior,
                         base_allowance_micros, overage_enabled,
                         overage_cap_micros, overage_markup_bps,
                         plan_has_tts
                     ) VALUES (
-                        %s, %s, %s, 'active',
+                        %s, %s, 'active',
                         %s, %s, %s,
                         %s, %s,
                         %s, %s,
@@ -490,7 +486,6 @@ def redeem(
                     """,
                     (
                         tenant_id,
-                        owner_id,
                         plan["plan_id"],
                         period_start,
                         period_end,
