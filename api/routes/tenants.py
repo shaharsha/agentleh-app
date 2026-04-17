@@ -431,6 +431,34 @@ class AgentCreate(BaseModel):
     tts_voice_name: str | None = None
 
 
+def _normalize_phone_e164(raw: str, default_region: str = "IL") -> str:
+    """Parse any reasonable phone input and return it in E.164 (+CCXX…).
+
+    Accepts Israeli local (``050-123-4567``, ``050 1234567``, ``0501234567``)
+    and any international format (``+972…``, ``972…`` with any separators,
+    or other countries in E.164). Uses Israel as the fallback region when
+    no `+` prefix is present, since most Agentiko users are Israeli — a
+    US/EU user must include the leading ``+``.
+
+    Raises ``HTTPException(400)`` on unparseable or impossible numbers so
+    the caller can surface a clean error to the UI.
+    """
+    import phonenumbers
+    try:
+        parsed = phonenumbers.parse(raw, default_region)
+    except phonenumbers.NumberParseException as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_phone", "message": str(exc)},
+        ) from exc
+    if not phonenumbers.is_possible_number(parsed) or not phonenumbers.is_valid_number(parsed):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_phone", "message": "Not a valid phone number"},
+        )
+    return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+
+
 @router.post("/{tenant_id}/agents")
 async def provision_agent(
     tenant_id: int,
@@ -455,6 +483,10 @@ async def provision_agent(
 
     db = request.app.state.db
 
+    # Normalize phone to E.164 before anything touches the DB or the VM.
+    # Accepts Israeli local ("050-123-4567") and any international format.
+    phone_e164 = _normalize_phone_e164(body.phone)
+
     # Build a DB-safe agent_id: slugged agent_name + short random suffix
     # keyed to tenant so different tenants can reuse "barber" / "reception"
     # without colliding.
@@ -475,7 +507,7 @@ async def provision_agent(
         try:
             async for event in provisioner.provision_stream(
                 agent_id=agent_id,
-                phone=body.phone,
+                phone=phone_e164,
                 agent_name=body.agent_name,
                 user_name=user_name,
                 tenant_id=tenant_id,
@@ -545,11 +577,11 @@ async def provision_agent(
         whatsapp = request.app.state.whatsapp
         try:
             sent = await _asyncio.wait_for(
-                _asyncio.to_thread(whatsapp.send_welcome, body.phone, body.agent_name),
+                _asyncio.to_thread(whatsapp.send_welcome, phone_e164, body.agent_name),
                 timeout=15.0,
             )
             if not sent:
-                logger.info("welcome message not sent for agent=%s phone=%s", result_agent_id, body.phone)
+                logger.info("welcome message not sent for agent=%s phone=%s", result_agent_id, phone_e164)
         except Exception:  # noqa: BLE001
             # Non-fatal — agent is live regardless of welcome-message success
             logger.warning("welcome send errored for agent=%s", result_agent_id, exc_info=True)

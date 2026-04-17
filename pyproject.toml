@@ -11,6 +11,7 @@ dependencies = [
     "python-multipart>=0.0.17",
     "dynaconf>=3.2",
     "httpx>=0.28",
+    "phonenumbers>=9.0.28",
 ]
 
 [project.optional-dependencies]
