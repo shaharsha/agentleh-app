@@ -116,7 +116,18 @@ async def chat_websocket(
         await _deny("agent_not_ready")
         return
 
-    session_key = f"webchat-u{user['id']}-a{agent_id}"
+    # Web chat operates in the agent's MAIN conversation — same thread
+    # as WhatsApp and (soon) Telegram — so tenant admins see the live
+    # customer conversation and can interject if needed. Matches the
+    # agent's default session.dmScope = "main" in openclaw.json.
+    #
+    # Multi-admin + cross-surface interactions are intentional here:
+    # all tenant members share one view of the agent's single
+    # conversation. If we later need per-user sandboxes (e.g. for
+    # training/testing), that's a second mode — the sessionKey string
+    # is the only thing that changes, everything downstream is the
+    # same shape.
+    session_key = "main"
     started_at = time.time()
     logger.info(
         "webchat: session start user=%s tenant=%s agent=%s session_key=%s",
