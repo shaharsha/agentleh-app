@@ -211,12 +211,16 @@ def get_managed_bot_token(bot_id: int) -> str:
     """Fetch the access token for a bot created under our manager.
     Returns the raw token string.
 
-    The Bot API returns a dict whose exact key is underdocumented at
-    the time of writing; the most common shape for analogous APIs is
-    {"token": "...bot_token..."} but it may instead be just the token
-    string. We handle both.
+    The parameter is `user_id` — bots are Telegram users under the hood
+    so the managed bot is identified by its user_id (what
+    ManagedBotUpdated.bot.id carries). Initial implementation used
+    `bot_id`; Telegram returned 'Bad Request: invalid user_id
+    specified' which named the expected param.
+
+    Response shape: the API returns { "token": "<bot_token>" } — a
+    JSON object with the token under the `token` key.
     """
-    result = _api("getManagedBotToken", bot_id=bot_id)
+    result = _api("getManagedBotToken", user_id=bot_id)
     if isinstance(result, dict):
         token = result.get("token") or result.get("access_token")
         if token:
@@ -229,7 +233,7 @@ def get_managed_bot_token(bot_id: int) -> str:
 def replace_managed_bot_token(bot_id: int) -> str:
     """Rotate the managed bot's token — returns the new one. Used by
     admin flows if a leaked token needs to be invalidated."""
-    result = _api("replaceManagedBotToken", bot_id=bot_id)
+    result = _api("replaceManagedBotToken", user_id=bot_id)
     if isinstance(result, dict):
         token = result.get("token") or result.get("access_token")
         if token:
