@@ -12,10 +12,10 @@ export default function StepIndicator({ steps, current }: StepIndicatorProps) {
             <div
               className={`w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-semibold transition-all duration-300 ${
                 i < current
-                  ? 'bg-brand text-white shadow-[0_4px_12px_rgba(212,98,43,0.2)]'
+                  ? 'bg-text-primary text-surface shadow-[0_2px_8px_rgb(14_19_32/0.08)]'
                   : i === current
                     ? 'bg-brand text-white shadow-[0_8px_24px_rgba(212,98,43,0.25)] scale-110'
-                    : 'glass-card text-text-muted'
+                    : 'bg-surface-soft border-2 border-border text-text-muted'
               }`}
             >
               {i < current ? (
@@ -34,7 +34,7 @@ export default function StepIndicator({ steps, current }: StepIndicatorProps) {
           </div>
           {i < steps.length - 1 && (
             <div className={`w-12 h-[1.5px] rounded-full mb-6 mx-0.5 transition-all duration-500 ${
-              i < current ? 'bg-brand/40' : 'bg-border'
+              i < current ? 'bg-text-primary/25' : 'bg-border'
             }`} />
           )}
         </div>
