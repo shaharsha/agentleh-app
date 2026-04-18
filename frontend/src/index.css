@@ -207,6 +207,28 @@ body {
   -webkit-font-smoothing: auto;
 }
 
+/* Hebrew + Arabic: heavier descenders need air. Per BRAND.md §7. */
+html[lang="he"] body,
+html[lang="ar"] body {
+  line-height: 1.8;
+}
+
+/* Paper grain — BRAND.md §3 signature move, §10 material rule. 2%
+ * SVG turbulence overlay tints every cream/navy surface just enough
+ * that it reads as actual paper rather than a flat Pantone. Fixed
+ * position + pointer-events none so it never interferes with layout
+ * or interaction. Zero-asset: the noise is rendered by the browser. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  mix-blend-mode: multiply;
+}
+
 input, button, select, textarea {
   font-family: inherit;
 }
