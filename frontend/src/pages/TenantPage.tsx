@@ -520,7 +520,7 @@ function DashboardTab({
 
   return (
     <div className="space-y-6">
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-text-primary">
             {t({ he: 'מנוי', en: 'Subscription' })}
@@ -597,7 +597,7 @@ function DashboardTab({
         />
       )}
 
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-text-primary">
             {t({ he: 'סוכנים', en: 'Agents' })} ({agents.length})
@@ -940,7 +940,7 @@ function DashboardTab({
       </div>
 
       {totals && (
-        <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="card">
           <h2 className="text-lg font-semibold text-text-primary mb-4">
             {t({ he: 'פירוט שימוש', en: 'Usage breakdown' })}
           </h2>
@@ -1187,7 +1187,7 @@ function MembersTab({
 
   return (
     <div className="space-y-6">
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-text-primary">
             {t({ he: 'חברים', en: 'Members' })} ({members.length})
@@ -1305,7 +1305,7 @@ function MembersTab({
       </div>
 
       {pendingInvites.length > 0 && (
-        <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="card">
           <h2 className="text-lg font-semibold text-text-primary mb-4">
             {t({ he: 'הזמנות ממתינות', en: 'Pending invites' })} ({pendingInvites.length})
           </h2>
@@ -1417,7 +1417,7 @@ function SettingsTab({
 
   return (
     <div className="space-y-6">
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card">
         <h2 className="text-lg font-semibold text-text-primary mb-4">
           {t({ he: 'כללי', en: 'General' })}
         </h2>
@@ -1464,7 +1464,7 @@ function SettingsTab({
       </div>
 
       {isOwner && otherMembers.length > 0 && (
-        <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="card">
           <h2 className="text-lg font-semibold text-text-primary mb-2">
             {t({ he: 'העברת בעלות', en: 'Transfer ownership' })}
           </h2>
@@ -1498,7 +1498,7 @@ function SettingsTab({
       )}
 
       {isOwner && (
-        <div className="bg-surface border border-danger/40 rounded-xl p-6">
+        <div className="card border-danger/40">
           <h2 className="text-lg font-semibold text-danger dark:text-red-200 mb-2">
             {t({ he: 'אזור מסוכן', en: 'Danger zone' })}
           </h2>

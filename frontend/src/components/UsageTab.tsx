@@ -166,7 +166,7 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
   return (
     <div className="space-y-6">
       {/* Range picker */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card">
         <div className="flex flex-wrap items-center gap-2">
           {(['current', 'last_7d', 'last_30d', 'custom'] as RangeKind[]).map((k) => (
             <button
@@ -251,7 +251,7 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
       </div>
 
       {/* Tenant totals */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card">
         <div className="flex items-baseline justify-between mb-4">
           <h2 className="text-lg font-semibold text-text-primary">
             {t({ he: 'סיכום שימוש', en: 'Usage summary' })}
@@ -272,7 +272,7 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
       </div>
 
       {/* Per-agent table */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card">
         <h2 className="text-lg font-semibold text-text-primary mb-4">
           {t({ he: 'פירוט לפי סוכן', en: 'Per-agent breakdown' })}
         </h2>
