@@ -85,7 +85,7 @@ export default function ProfileMenu({ user, onLogout }: Props) {
       {open && (
         <>
           <div
-            className="absolute end-0 mt-2 w-[min(18rem,calc(100vw-2rem))] bg-surface rounded-xl shadow-lg border border-border-light z-20 overflow-hidden"
+            className="absolute end-0 mt-2 w-[min(18rem,calc(100vw-2rem))] bg-surface-soft rounded-xl shadow-[0_12px_48px_rgb(14_19_32/0.18)] border border-border z-20 overflow-hidden"
             role="menu"
           >
             <div className="p-3 flex items-center gap-3">
@@ -106,7 +106,7 @@ export default function ProfileMenu({ user, onLogout }: Props) {
                 </div>
               </div>
             </div>
-            <div className="border-t border-border-light p-1">
+            <div className="border-t border-border p-1">
               <button
                 onClick={() => {
                   setOpen(false)
