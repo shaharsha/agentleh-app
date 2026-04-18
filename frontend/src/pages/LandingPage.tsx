@@ -49,11 +49,11 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
       <div className="absolute top-5 start-5">
         <a
           href={landingHref('', lang)}
-          aria-label={t({ he: 'חזרה ל-Agentiko', en: 'Back to Agentiko' })}
+          aria-label={t({ he: 'חזרה לעמוד הבית', en: 'Back to home page' })}
           className="inline-flex items-center gap-1.5 h-9 px-3 text-xs font-semibold rounded-lg border border-border-light bg-surface/60 text-text-secondary hover:text-text-primary transition-colors"
         >
           <ChevronLeftIcon className="w-[14px] h-[14px] rtl:rotate-180" />
-          <span>{t({ he: 'חזרה ל-Agentiko', en: 'Back to Agentiko' })}</span>
+          <span>{t({ he: 'חזרה לעמוד הבית', en: 'Back to home page' })}</span>
         </a>
       </div>
       <div className="absolute top-5 end-5 flex items-center gap-2">
@@ -61,7 +61,8 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
         <LanguageSwitcher />
       </div>
       <div className="text-center mb-12">
-        <h1 className="text-[36px] font-extrabold tracking-[-1px] text-text-primary mb-3">Agentiko</h1>
+        <img src="/brand/logo-wordmark.svg" alt="Agentiko" className="h-10 sm:h-12 w-auto mx-auto mb-4 block dark:hidden" />
+        <img src="/brand/logo-wordmark-dark.svg" alt="Agentiko" className="h-10 sm:h-12 w-auto mx-auto mb-4 hidden dark:block" />
         <p className="text-[17px] text-text-secondary leading-relaxed">{tagline}</p>
       </div>
 
