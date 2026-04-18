@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { submitOnboarding } from '../lib/api'
+import { useState } from 'react'
+import { submitOnboarding, type ProvisionProgress } from '../lib/api'
 import StepIndicator from '../components/StepIndicator'
 import VoicePicker from '../components/VoicePicker'
-import { useI18n } from '../lib/i18n'
+import { useI18n, type Bilingual } from '../lib/i18n'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import type { AppUser } from '../lib/types'
 
@@ -11,43 +11,39 @@ interface OnboardingPageProps {
   onComplete: () => void
 }
 
+// Bilingual labels for the step numbers the backend streams. Mirrors the
+// standalone tenant agent-create flow's step layout so both progress UIs
+// narrate the same story. Step 5 only fires when the user gave a phone
+// and the welcome template is dispatched after provisioning.
+function defaultStepLabel(step: number): Bilingual {
+  switch (step) {
+    case 1: return { he: 'מכין סביבת עבודה…', en: 'Preparing workspace…' }
+    case 2: return { he: 'מגדיר קונפיגורציה…', en: 'Configuring…' }
+    case 3: return { he: 'מעדכן בסיס נתונים…', en: 'Updating database…' }
+    case 4: return { he: 'מפעיל קונטיינר ובודק תקינות…', en: 'Starting container & health checks…' }
+    case 5: return { he: 'שולח הודעת פתיחה בוואטסאפ…', en: 'Sending welcome message…' }
+    default: return { he: 'מעבד…', en: 'Working…' }
+  }
+}
+
 export default function OnboardingPage({ user, onComplete }: OnboardingPageProps) {
   const { t, dir } = useI18n()
   useDocumentTitle(t({ he: 'הגדרת סוכן', en: 'Onboarding' }))
   const [loading, setLoading] = useState(false)
-  const [elapsed, setElapsed] = useState(0)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [progress, setProgress] = useState<ProvisionProgress>({
+    step: 0,
+    total: 4,
+    label: 'Connecting…',
+  })
+  const [error, setError] = useState<string | null>(null)
 
-  // Provisioning step labels are translated up-front so the timer-driven
-  // picker (below) can index into a pre-materialized list.
-  const provisionSteps = useMemo(
-    () => [
-      { at: 0, label: t({ he: 'מכין סביבת עבודה…', en: 'Preparing workspace…' }) },
-      { at: 5, label: t({ he: 'מגדיר קונפיגורציה…', en: 'Configuring…' }) },
-      { at: 12, label: t({ he: 'מעדכן בסיס נתונים…', en: 'Updating database…' }) },
-      { at: 20, label: t({ he: 'מפעיל קונטיינר…', en: 'Starting container…' }) },
-      { at: 35, label: t({ he: 'בודק תקינות…', en: 'Health checks…' }) },
-      { at: 50, label: t({ he: 'כמעט מוכן…', en: 'Almost ready…' }) },
-    ],
-    [t],
+  // Linear progress fills the bar even when the stream is sparse (cloud
+  // buffering, or between the VM's 4-step ticks and the optional welcome
+  // step). Matches TenantPage's 700ms easing for the same reason.
+  const progressPct = Math.min(
+    100,
+    Math.round((progress.step / Math.max(1, progress.total)) * 100),
   )
-
-  useEffect(() => {
-    if (loading) {
-      setElapsed(0)
-      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000)
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [loading])
-
-  let activeStepIndex = 0
-  for (let i = provisionSteps.length - 1; i >= 0; i--) {
-    if (elapsed >= provisionSteps[i].at) { activeStepIndex = i; break }
-  }
-  const progressPct = loading ? Math.min(90, Math.round((elapsed / 60) * 90)) : 0
 
   const [form, setForm] = useState({
     full_name: user.full_name || '',
@@ -68,11 +64,20 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
+    setError(null)
+    // When creating without a phone the backend skips the welcome-send
+    // step, so the bar ends at 4/4 instead of 5/5. Mirrors the total
+    // the backend will stream back on its first `progress` tick.
+    const initialTotal = form.phone ? 5 : 4
+    setProgress({ step: 0, total: initialTotal, label: 'Connecting…' })
     try {
-      await submitOnboarding(form)
+      await submitOnboarding(form, (p) => setProgress(p))
       onComplete()
-    } catch {
-      alert(t({ he: 'שגיאה ביצירת הסוכן', en: 'Failed to create agent' }))
+    } catch (err) {
+      setError(
+        (err as Error).message ||
+          t({ he: 'שגיאה ביצירת הסוכן', en: 'Failed to create agent' }),
+      )
     } finally {
       setLoading(false)
     }
@@ -258,43 +263,60 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
               </span>
               <span className="tabular-nums text-text-secondary text-[13px]">{progressPct}%</span>
             </div>
+            {/* 700ms easing smooths burst-delivered events — Cloud Run
+                sometimes buffers a few progress ticks and flushes them at
+                once. Without the easing the bar would teleport. */}
             <div className="h-1.5 bg-border rounded-full overflow-hidden">
               <div
-                className="h-full bg-brand-500 rounded-full transition-all duration-1000 ease-linear"
+                className="h-full bg-brand-500 rounded-full transition-all duration-700 ease-out"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
             <ul className="space-y-2.5 text-[14px]">
-              {provisionSteps.map((step, i) => {
-                const done = i < activeStepIndex
-                const active = i === activeStepIndex
+              {Array.from({ length: progress.total || 4 }).map((_, i) => {
+                const stepNum = i + 1
+                const done = progress.step > stepNum
+                const active = progress.step === stepNum
+                const label = t(defaultStepLabel(stepNum))
                 return (
                   <li key={i} className="flex items-center gap-2.5">
                     {done ? (
-                      <svg className="w-4.5 h-4.5 text-success shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <svg className="w-4 h-4 text-success shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     ) : active ? (
-                      <svg className="w-4.5 h-4.5 text-brand-500 animate-spin shrink-0" viewBox="0 0 24 24" fill="none">
+                      <svg className="w-4 h-4 text-brand-500 animate-spin shrink-0" viewBox="0 0 24 24" fill="none">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
                     ) : (
-                      <div className="w-4.5 h-4.5 rounded-full border-2 border-border shrink-0" />
+                      <div className="w-4 h-4 rounded-full border-2 border-border shrink-0" />
                     )}
                     <span className={done ? 'text-text-secondary/60' : active ? 'text-text-primary font-medium' : 'text-text-secondary/60'}>
-                      {step.label}
+                      {label}
                     </span>
                   </li>
                 )
               })}
             </ul>
+            {error && (
+              <div className="text-[13px] text-danger dark:text-red-300 bg-danger-light p-3 rounded-lg">
+                {error}
+              </div>
+            )}
           </div>
         ) : (
-          <button type="submit" disabled={!isValid}
-            className="btn-brand w-full">
-            {t({ he: 'צור את הסוכן שלי', en: 'Create my agent' })}
-          </button>
+          <>
+            {error && (
+              <div className="text-[13px] text-danger dark:text-red-300 bg-danger-light p-3 rounded-lg">
+                {error}
+              </div>
+            )}
+            <button type="submit" disabled={!isValid}
+              className="btn-brand w-full">
+              {t({ he: 'צור את הסוכן שלי', en: 'Create my agent' })}
+            </button>
+          </>
         )}
       </form>
     </div>
