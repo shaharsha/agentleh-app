@@ -73,6 +73,53 @@ def require_superadmin(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
+# ─── One-shot: register the Telegram manager-bot webhook ─────────────
+
+
+@router.post("/telegram/setup-webhook")
+async def setup_telegram_webhook(
+    request: Request,
+    body: dict = Body(default={}),
+    _: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    """Bind @AgentikoManagerBot's webhook to this deployment.
+
+    Call once per environment after:
+      1. The manager-bot token is in Secret Manager (telegram-manager-bot-token
+         / -dev).
+      2. Bot Management Mode is enabled on the bot in BotFather.
+
+    Body (optional):
+      {"public_url": "https://app-dev.agentiko.io"}
+    Defaults to APP_PUBLIC_URL or the request's own host.
+
+    Returns:
+      {"ok": true, "webhook_url": "...", "telegram_response": {...}}
+
+    The endpoint is idempotent — re-running rebinds (useful after a URL
+    change or secret rotation). The webhook secret is generated and
+    stored in Secret Manager automatically on first call.
+    """
+    from services import telegram_manager
+
+    public_url = (
+        body.get("public_url")
+        or os.environ.get("APP_PUBLIC_URL")
+        or str(request.url).split("/api/")[0]
+    ).rstrip("/")
+    webhook_url = f"{public_url}/api/telegram/webhook"
+
+    try:
+        result = telegram_manager.set_webhook(webhook_url)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail={"error": "setwebhook_failed", "detail": str(exc)},
+        ) from exc
+
+    return {"ok": True, "webhook_url": webhook_url, "telegram_response": result}
+
+
 # ─── Dashboard data ──────────────────────────────────────────────────
 
 

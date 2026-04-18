@@ -12,6 +12,15 @@ dependencies = [
     "dynaconf>=3.2",
     "httpx>=0.28",
     "phonenumbers>=9.0.28",
+    # Secret Manager — stores per-agent Telegram bot tokens. The app's
+    # runtime SA needs secretmanager.admin scoped (via IAM condition)
+    # to secrets matching telegram-bot-token-* before this can write.
+    "google-cloud-secret-manager>=2.21",
+    # Gateway WebSocket client for the in-app web-chat proxy. Mirrors
+    # agentleh-bridge so the Ed25519 device-auth handshake can be
+    # ported verbatim.
+    "websockets>=16.0",
+    "cryptography>=42.0",
 ]
 
 [project.optional-dependencies]

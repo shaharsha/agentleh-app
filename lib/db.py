@@ -803,6 +803,189 @@ class AppDatabase:
         )
         return row["tenant_id"] if row else None
 
+    def get_agent_for_phone(self, phone: str) -> dict[str, Any] | None:
+        """Look up the agent currently bound to a phone number.
+
+        Normalizes to digits-only to match the bridge's phone_routes
+        storage format (see bridge/agents.py:_normalize_phone). Returns
+        {agent_id, tenant_id} or None. Used by:
+          - the /api/agents/check-phone pre-flight on agent creation
+          - the provision_agent hard duplicate guard
+          - the PATCH /bridges/whatsapp edit-phone duplicate guard
+        Soft-deleted agents are excluded so their old phone can be reused.
+        """
+        import re
+        digits = re.sub(r"\D", "", phone or "")
+        if not digits:
+            return None
+        return self._fetch_one(
+            """
+            SELECT pr.agent_id, a.tenant_id
+              FROM phone_routes pr
+              JOIN agents a ON a.agent_id = pr.agent_id
+             WHERE pr.phone = %s AND a.deleted_at IS NULL
+            """,
+            (digits,),
+        )
+
+    def get_phone_for_agent(self, agent_id: str) -> str | None:
+        """Return the digits-only phone currently routed to this agent, or None."""
+        row = self._fetch_one(
+            "SELECT phone FROM phone_routes WHERE agent_id = %s",
+            (agent_id,),
+        )
+        return row["phone"] if row else None
+
+    # ── Agent bridges (WhatsApp / Telegram / Web Chat) ────────────────
+    # Source of truth for which bridges are connected per-agent. The
+    # WhatsApp row is kept consistent with `phone_routes` inside the
+    # same transaction by set_whatsapp_bridge(). Telegram rows carry the
+    # Secret Manager secret_name that holds the real bot token — the
+    # token itself never lives in Postgres.
+
+    def get_agent_bridges(self, agent_id: str) -> list[dict[str, Any]]:
+        """All bridge rows for one agent. Ordered whatsapp → telegram → web
+        for deterministic UI rendering."""
+        return self._fetch_all(
+            """
+            SELECT agent_id, bridge_type, enabled, config,
+                   connected_at, updated_at
+              FROM agent_bridges
+             WHERE agent_id = %s
+             ORDER BY CASE bridge_type
+                          WHEN 'whatsapp' THEN 0
+                          WHEN 'telegram' THEN 1
+                          WHEN 'web'      THEN 2
+                          ELSE 9
+                      END
+            """,
+            (agent_id,),
+        )
+
+    def set_whatsapp_bridge(self, agent_id: str, phone_e164: str | None) -> None:
+        """Connect, change, or disconnect the WhatsApp bridge atomically.
+
+        Contract
+        ────────
+        - phone_e164=None (or empty) → disconnect: deletes the
+          phone_routes row for this agent and marks agent_bridges.whatsapp
+          enabled=false (config kept as audit trail for last known phone).
+        - phone_e164=<E.164 string> → connect / change: normalizes to
+          digits, DELETE-then-INSERT the phone_routes row scoped to this
+          agent (so changing phones doesn't leave the old one orphaned),
+          and UPSERT the agent_bridges.whatsapp row. The caller is
+          responsible for the duplicate-phone guard BEFORE calling this
+          (e.g. via get_agent_for_phone). We trust the DB's PK as the
+          final backstop but don't want to hit it because a conflict
+          here leaves the transaction rolled back with no good error.
+
+        Idempotent on the happy path — calling twice with the same phone
+        is a no-op after the first call.
+        """
+        import re
+        digits = re.sub(r"\D", "", phone_e164 or "")
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                # Always drop the agent's existing phone_routes row first.
+                # This way "change phone" frees the old number for reuse
+                # atomically with claiming the new one.
+                cur.execute(
+                    "DELETE FROM phone_routes WHERE agent_id = %s",
+                    (agent_id,),
+                )
+                if digits:
+                    cur.execute(
+                        """
+                        INSERT INTO phone_routes (phone, agent_id)
+                        VALUES (%s, %s)
+                        """,
+                        (digits, agent_id),
+                    )
+                    cur.execute(
+                        """
+                        INSERT INTO agent_bridges
+                            (agent_id, bridge_type, enabled, config, connected_at)
+                        VALUES (%s, 'whatsapp', TRUE,
+                                jsonb_build_object('phone', %s::text),
+                                now())
+                        ON CONFLICT (agent_id, bridge_type) DO UPDATE SET
+                            enabled      = EXCLUDED.enabled,
+                            config       = EXCLUDED.config,
+                            connected_at = COALESCE(agent_bridges.connected_at,
+                                                    EXCLUDED.connected_at)
+                        """,
+                        (agent_id, digits),
+                    )
+                else:
+                    # Disconnect: flip enabled=false. Keep the last phone
+                    # in config for audit ("previously connected to X").
+                    cur.execute(
+                        """
+                        UPDATE agent_bridges
+                           SET enabled = FALSE
+                         WHERE agent_id = %s AND bridge_type = 'whatsapp'
+                        """,
+                        (agent_id,),
+                    )
+            conn.commit()
+
+    def upsert_telegram_bridge(
+        self,
+        agent_id: str,
+        *,
+        bot_username: str,
+        bot_display_name: str,
+        secret_name: str,
+    ) -> None:
+        """Record a connected Telegram bot. Caller has already validated
+        the token via getMe and stored it in Secret Manager under
+        secret_name. We persist the IDENTITY (username + display name
+        for the UI) plus the secret_name pointer — never the token itself.
+        """
+        self._execute(
+            """
+            INSERT INTO agent_bridges
+                (agent_id, bridge_type, enabled, config, connected_at)
+            VALUES (%s, 'telegram', TRUE,
+                    jsonb_build_object(
+                        'bot_username', %s::text,
+                        'bot_display_name', %s::text,
+                        'secret_name', %s::text
+                    ),
+                    now())
+            ON CONFLICT (agent_id, bridge_type) DO UPDATE SET
+                enabled      = EXCLUDED.enabled,
+                config       = EXCLUDED.config,
+                connected_at = EXCLUDED.connected_at
+            """,
+            (agent_id, bot_username, bot_display_name, secret_name),
+        )
+
+    def disconnect_telegram_bridge(self, agent_id: str) -> dict[str, Any] | None:
+        """Flip the Telegram bridge to disabled. Returns the pre-update
+        config (so the caller can revoke the Secret Manager secret +
+        issue the openclaw.json config patch to disable the channel).
+        Returns None if no row existed (no-op)."""
+        existing = self._fetch_one(
+            """
+            SELECT config
+              FROM agent_bridges
+             WHERE agent_id = %s AND bridge_type = 'telegram'
+            """,
+            (agent_id,),
+        )
+        if existing is None:
+            return None
+        self._execute(
+            """
+            UPDATE agent_bridges
+               SET enabled = FALSE
+             WHERE agent_id = %s AND bridge_type = 'telegram'
+            """,
+            (agent_id,),
+        )
+        return existing
+
     def soft_delete_agent(self, agent_id: str) -> None:
         """Tombstone the agent: stamp ``deleted_at`` and clear live-routing
         state. Preserves billing-relevant rows (usage_events, agents_meter_keys

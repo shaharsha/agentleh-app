@@ -582,7 +582,12 @@ class AgentCreate(BaseModel):
     # We slug it + tenant_id into the DB agent_id to guarantee uniqueness.
     agent_name: str = Field(..., min_length=1, max_length=40)
     agent_gender: str = Field("", max_length=20)
-    phone: str = Field(..., min_length=6, max_length=30)
+    # Phone is OPTIONAL — an agent can exist without a WhatsApp bridge.
+    # The Bridges panel (post-create) lets the tenant connect WhatsApp
+    # later. Empty string and None are both treated as "no phone".
+    # When provided, it goes through _normalize_phone_e164() + the
+    # duplicate-phone guard before provisioning touches the VM.
+    phone: str | None = Field(default=None, max_length=30)
     user_name: str = Field("", max_length=60)
     # `user_gender` is the gender of the person this agent serves (the
     # WhatsApp recipient). Needed for Hebrew grammatical personalization —
@@ -666,7 +671,27 @@ async def provision_agent(
 
     # Normalize phone to E.164 before anything touches the DB or the VM.
     # Accepts Israeli local ("050-123-4567") and any international format.
-    phone_e164 = _normalize_phone_e164(body.phone)
+    # When the caller omits the phone (empty string or None), the agent
+    # is provisioned with no WhatsApp binding — the user can connect one
+    # later via the Bridges panel.
+    raw_phone = (body.phone or "").strip()
+    phone_e164: str | None = _normalize_phone_e164(raw_phone) if raw_phone else None
+
+    # Duplicate-phone hard guard. The pre-flight /agents/check-phone call
+    # on the frontend catches 99% of collisions politely; this is the
+    # safety net that catches the TOCTOU race. Underlying phone_routes
+    # PK is still the final backstop at the VM level.
+    if phone_e164 is not None:
+        existing = db.get_agent_for_phone(phone_e164)
+        if existing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "phone_already_in_use",
+                    "message": "מספר זה כבר משויך לסוכן אחר",
+                    "message_en": "This phone is already connected to another agent",
+                },
+            )
 
     # Build a DB-safe agent_id: slugged agent_name + short random suffix
     # keyed to tenant so different tenants can reuse "barber" / "reception"
@@ -684,11 +709,13 @@ async def provision_agent(
         # Forward progress events from the VM daemon, capture the final
         # result so we can do post-provision DB work before telling the
         # browser we're done. The VM emits 4 steps; we add a 5th for the
-        # welcome-message send, so rewrite `total` here for consistency.
+        # welcome-message send when a phone is bound, so rewrite `total`
+        # here for consistency with the frontend's stepper.
+        total_steps = 5 if phone_e164 else 4
         try:
             async for event in provisioner.provision_stream(
                 agent_id=agent_id,
-                phone=phone_e164,
+                phone=phone_e164 or "",
                 agent_name=body.agent_name,
                 user_name=user_name,
                 tenant_id=tenant_id,
@@ -700,7 +727,7 @@ async def provision_agent(
                     vm_result = event
                 else:
                     if event.get("type") == "progress":
-                        event["total"] = 5
+                        event["total"] = total_steps
                     yield _json.dumps(event) + "\n"
         except Exception as exc:  # noqa: BLE001
             logger.exception("provision_stream failed for %s", agent_id)
@@ -738,30 +765,31 @@ async def provision_agent(
             },
         )
 
-        # Kick off the WhatsApp template hello message. Emit a progress
-        # event so the browser gets a visual tick while the bridge
-        # round-trips to Meta, then fire the actual send in a thread so
-        # a slow Meta response doesn't block the stream completion.
-        yield _json.dumps({
-            "type": "progress",
-            "step": 5,
-            "total": 5,
-            "label": "Sending welcome message",
-        }) + "\n"
+        # Welcome message only makes sense when WhatsApp is actually
+        # wired up — skip the whole step when the agent was provisioned
+        # without a phone so we don't add a ghost "sending welcome…"
+        # tick to the progress bar.
+        if phone_e164:
+            yield _json.dumps({
+                "type": "progress",
+                "step": 5,
+                "total": 5,
+                "label": "Sending welcome message",
+            }) + "\n"
 
-        import asyncio as _asyncio
+            import asyncio as _asyncio
 
-        whatsapp = request.app.state.whatsapp
-        try:
-            sent = await _asyncio.wait_for(
-                _asyncio.to_thread(whatsapp.send_welcome, phone_e164, body.agent_name, body.agent_gender),
-                timeout=15.0,
-            )
-            if not sent:
-                logger.info("welcome message not sent for agent=%s phone=%s", result_agent_id, phone_e164)
-        except Exception:  # noqa: BLE001
-            # Non-fatal — agent is live regardless of welcome-message success
-            logger.warning("welcome send errored for agent=%s", result_agent_id, exc_info=True)
+            whatsapp = request.app.state.whatsapp
+            try:
+                sent = await _asyncio.wait_for(
+                    _asyncio.to_thread(whatsapp.send_welcome, phone_e164, body.agent_name, body.agent_gender),
+                    timeout=15.0,
+                )
+                if not sent:
+                    logger.info("welcome message not sent for agent=%s phone=%s", result_agent_id, phone_e164)
+            except Exception:  # noqa: BLE001
+                # Non-fatal — agent is live regardless of welcome-message success
+                logger.warning("welcome send errored for agent=%s", result_agent_id, exc_info=True)
 
         yield _json.dumps({
             "type": "result",
