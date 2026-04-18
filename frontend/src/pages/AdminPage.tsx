@@ -512,7 +512,7 @@ function GrantPlanModal({
         <div className="space-y-3">
           <label className="block">
             <div className="text-xs font-semibold mb-1">Plan</div>
-            <select value={planId} onChange={(e) => setPlanId(e.target.value)} className="input-glass w-full">
+            <select value={planId} onChange={(e) => setPlanId(e.target.value)} className="input-glass w-full px-3 py-2.5 text-sm appearance-none">
               {plans.map((p) => (
                 <option key={p.plan_id} value={p.plan_id}>
                   {p.plan_id} — {p.name_he} (₪{(p.price_ils_cents / 100).toFixed(0)})
@@ -528,7 +528,7 @@ function GrantPlanModal({
               max={3650}
               value={durationDays}
               onChange={(e) => setDurationDays(Number(e.target.value))}
-              className="input-glass w-full"
+              className="input-glass w-full px-3 py-2.5 text-sm"
             />
           </label>
           <p className="text-xs text-text-muted">
@@ -840,12 +840,12 @@ function CouponCreateForm({
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 placeholder="auto-generated if blank"
-                className="input-glass w-full font-mono uppercase"
+                className="input-glass w-full px-3 py-2.5 text-sm font-mono uppercase"
               />
             </label>
             <label className="block">
               <div className="text-xs font-semibold mb-1">Plan</div>
-              <select value={planId} onChange={(e) => setPlanId(e.target.value)} className="input-glass w-full">
+              <select value={planId} onChange={(e) => setPlanId(e.target.value)} className="input-glass w-full px-3 py-2.5 text-sm appearance-none">
                 {plans.map((p) => (
                   <option key={p.plan_id} value={p.plan_id}>
                     {p.plan_id} — {p.name_he}
@@ -861,7 +861,7 @@ function CouponCreateForm({
                 max={3650}
                 value={durationDays}
                 onChange={(e) => setDurationDays(Number(e.target.value))}
-                className="input-glass w-full"
+                className="input-glass w-full px-3 py-2.5 text-sm"
               />
             </label>
             <label className="block">
@@ -872,7 +872,7 @@ function CouponCreateForm({
                 value={maxRedemptions}
                 onChange={(e) => setMaxRedemptions(e.target.value)}
                 placeholder="unlimited"
-                className="input-glass w-full"
+                className="input-glass w-full px-3 py-2.5 text-sm"
               />
             </label>
             <label className="block">
@@ -881,7 +881,7 @@ function CouponCreateForm({
                 type="date"
                 value={validUntil}
                 onChange={(e) => setValidUntil(e.target.value)}
-                className="input-glass w-full"
+                className="input-glass w-full px-3 py-2.5 text-sm"
               />
             </label>
             <label className="flex items-center gap-2 mt-6">
@@ -899,7 +899,7 @@ function CouponCreateForm({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="input-glass w-full"
+              className="input-glass w-full px-3 py-2.5 text-sm"
               placeholder="Internal note — who/why this coupon was created"
             />
           </label>

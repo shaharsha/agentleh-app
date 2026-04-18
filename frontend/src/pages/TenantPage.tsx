@@ -1629,7 +1629,7 @@ function RedeemCouponModal({
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           placeholder={t({ he: 'הזן קוד קופון', en: 'Enter coupon code' })}
-          className="input-glass w-full font-mono tracking-wider uppercase"
+          className="input-glass w-full px-4 py-3 font-mono tracking-wider uppercase placeholder:normal-case placeholder:font-sans placeholder:tracking-normal"
           dir="ltr"
           autoFocus
         />

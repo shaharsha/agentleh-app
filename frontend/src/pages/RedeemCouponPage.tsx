@@ -223,7 +223,7 @@ export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageP
           <select
             value={tenantId ?? ''}
             onChange={(e) => setTenantId(Number(e.target.value))}
-            className="input-glass w-full"
+            className="input-glass w-full px-4 py-3 appearance-none"
           >
             {ownedTenants.map((t) => (
               <option key={t.id} value={t.id}>
