@@ -123,10 +123,19 @@ export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageP
     }
   }
 
-  function errorFor(code: string): string {
+  function errorFor(e: { code: string; detail?: Record<string, unknown> } | string): string {
+    const code = typeof e === 'string' ? e : e.code
+    const detail = typeof e === 'string' ? undefined : e.detail
     const msg = ERROR_MSG[code]
     if (msg) return t(msg)
-    return t({ he: `שגיאה: ${code}`, en: `Error: ${code}` })
+    // Backend populates `message_he` / `message` on unmapped errors so we
+    // surface something meaningful instead of a bare code like
+    // "שגיאה: internal". Prefer Hebrew; fall back to English; fall back
+    // to the code for unknown shapes.
+    const messageHe = detail?.message_he as string | undefined
+    const messageEn = detail?.message as string | undefined
+    const msgText = t({ he: messageHe || messageEn || code, en: messageEn || code })
+    return t({ he: `שגיאה: ${msgText}`, en: `Error: ${msgText}` })
   }
 
   // Pre-select tenant: the user's first owned tenant (default), or null
@@ -156,7 +165,7 @@ export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageP
       } catch (e) {
         setPreview(null)
         if (e instanceof CouponApiError) {
-          setPreviewError(errorFor(e.code))
+          setPreviewError(errorFor(e))
         } else {
           setPreviewError(t({ he: 'שגיאה בטעינת הקופון', en: 'Failed to load coupon' }))
         }
@@ -174,7 +183,7 @@ export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageP
       onComplete()
     } catch (e) {
       if (e instanceof CouponApiError) {
-        setRedeemError(errorFor(e.code))
+        setRedeemError(errorFor(e))
       } else {
         setRedeemError(t({ he: 'הפדיון נכשל. נסה שוב.', en: 'Redemption failed. Try again.' }))
       }

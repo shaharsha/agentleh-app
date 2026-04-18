@@ -1600,9 +1600,15 @@ function RedeemCouponModal({
   const { t } = useI18n()
   const [code, setCode] = useState('')
   const [preview, setPreview] = useState<CouponPreview | null>(null)
-  const [previewError, setPreviewError] = useState<string | null>(null)
+  // State shape changed from bare `string` codes to `{code, detail}`
+  // tuples so we can surface `detail.message_he` / `detail.message`
+  // from the backend when the code is unmapped. Without this an
+  // unexpected 500 renders as "שגיאה: internal" instead of the real
+  // cause the server already included in the response body.
+  type CouponErrState = { code: string; detail?: Record<string, unknown> } | null
+  const [previewError, setPreviewError] = useState<CouponErrState>(null)
   const [redeeming, setRedeeming] = useState(false)
-  const [redeemError, setRedeemError] = useState<string | null>(null)
+  const [redeemError, setRedeemError] = useState<CouponErrState>(null)
 
   useEffect(() => {
     const trimmed = code.trim()
@@ -1619,16 +1625,16 @@ function RedeemCouponModal({
       } catch (e) {
         setPreview(null)
         if (e instanceof CouponApiError) {
-          setPreviewError(e.code)
+          setPreviewError({ code: e.code, detail: e.detail })
         } else {
-          setPreviewError('preview_failed')
+          setPreviewError({ code: 'preview_failed' })
         }
       }
     }, 350)
     return () => clearTimeout(handle)
   }, [code, tenantId])
 
-  const errorMsgHe = (key: string): string => ({
+  const ERROR_HE: Record<string, string> = {
     coupon_not_found: 'הקוד שהזנת לא קיים',
     coupon_disabled: 'הקופון הושבת',
     coupon_expired: 'הקופון פג תוקף',
@@ -1637,9 +1643,8 @@ function RedeemCouponModal({
     coupon_already_redeemed: 'כבר השתמשת בקופון הזה',
     invalid_plan: 'תוכנית הקופון אינה תקפה',
     rate_limited: 'יותר מדי ניסיונות — נסה שוב בעוד דקה',
-  }[key] || `שגיאה: ${key}`)
-
-  const errorMsgEn = (key: string): string => ({
+  }
+  const ERROR_EN: Record<string, string> = {
     coupon_not_found: 'Coupon code not found',
     coupon_disabled: 'Coupon is disabled',
     coupon_expired: 'Coupon has expired',
@@ -1648,7 +1653,21 @@ function RedeemCouponModal({
     coupon_already_redeemed: 'You have already redeemed this coupon',
     invalid_plan: 'Coupon plan is invalid',
     rate_limited: 'Too many attempts — try again in a minute',
-  }[key] || `Error: ${key}`)
+  }
+  const errorMsgHe = (err: CouponErrState): string => {
+    if (!err) return ''
+    const mapped = ERROR_HE[err.code]
+    if (mapped) return mapped
+    const detailMsg = (err.detail?.message_he || err.detail?.message) as string | undefined
+    return `שגיאה: ${detailMsg || err.code}`
+  }
+  const errorMsgEn = (err: CouponErrState): string => {
+    if (!err) return ''
+    const mapped = ERROR_EN[err.code]
+    if (mapped) return mapped
+    const detailMsg = (err.detail?.message || err.detail?.message_he) as string | undefined
+    return `Error: ${detailMsg || err.code}`
+  }
 
   async function handleSubmit() {
     setRedeeming(true)
@@ -1658,9 +1677,9 @@ function RedeemCouponModal({
       onRedeemed()
     } catch (e) {
       if (e instanceof CouponApiError) {
-        setRedeemError(e.code)
+        setRedeemError({ code: e.code, detail: e.detail })
       } else {
-        setRedeemError('redeem_failed')
+        setRedeemError({ code: 'redeem_failed' })
       }
     } finally {
       setRedeeming(false)
