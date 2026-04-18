@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import parsePhoneNumberFromString from 'libphonenumber-js'
 import { submitOnboarding, type ProvisionProgress } from '../lib/api'
 import ProvisionProgressBar from '../components/ProvisionProgressBar'
 import StepIndicator from '../components/StepIndicator'
@@ -39,6 +40,30 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
+  // Phone is optional and accepts any reasonable input (050-123-4567,
+  // 0501234567, +972 50 123 4567, etc.). Parse client-side with the
+  // same IL default region as the sibling dashboard flow in
+  // TenantPage. The bridge matches inbound WhatsApp webhooks by E.164
+  // digits ("972…"); handing it "0501234567" results in the user
+  // receiving their welcome template and then "this number is not
+  // registered" on first reply, so we pre-validate here and send the
+  // canonical E.164 value on submit.
+  const parsedPhone = useMemo(() => {
+    const raw = form.phone.trim()
+    if (!raw) return null
+    return parsePhoneNumberFromString(raw, 'IL') ?? null
+  }, [form.phone])
+  const phoneE164 = parsedPhone?.isValid() ? parsedPhone.number : null
+  const phoneInvalid = form.phone.trim().length > 0 && !phoneE164
+
+  function handlePhoneBlur() {
+    if (parsedPhone?.isValid()) {
+      // Reformat to a readable international layout so the user sees
+      // exactly what the backend will store. Matches TenantPage.
+      update('phone', parsedPhone.formatInternational())
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -46,10 +71,20 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
     // When creating without a phone the backend skips the welcome-send
     // step, so the bar ends at 4/4 instead of 5/5. Mirrors the total
     // the backend will stream back on its first `progress` tick.
-    const initialTotal = form.phone ? 5 : 4
+    const initialTotal = phoneE164 ? 5 : 4
     setProgress({ step: 0, total: initialTotal, label: 'Connecting…' })
     try {
-      await submitOnboarding(form, (p) => setProgress(p))
+      await submitOnboarding(
+        {
+          ...form,
+          // Send the canonical E.164 form when we have one so the
+          // backend/bridge sees a consistent shape regardless of how
+          // the user typed the number. An empty string means "no
+          // WhatsApp" — mirrors the Optional[str] contract.
+          phone: phoneE164 ?? '',
+        },
+        (p) => setProgress(p),
+      )
       onComplete()
     } catch (err) {
       setError(
@@ -63,12 +98,15 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
 
   // Phone is optional — mirrors the standalone agent-create flow in
   // TenantPage. User can connect WhatsApp later from the Bridges panel.
+  // Submit blocked on an invalid phone (non-empty but un-parseable) so
+  // we don't send garbage that fails at the backend's /400.
   const isValid =
     form.full_name &&
     form.gender &&
     form.agent_name &&
     form.agent_gender &&
-    form.tts_voice_name
+    form.tts_voice_name &&
+    !phoneInvalid
 
   const genderOptions: [string, string][] = [
     ['male', t({ he: 'זכר', en: 'Male' })],
@@ -138,21 +176,32 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
             <input
               value={form.phone}
               onChange={(e) => update('phone', e.target.value)}
+              onBlur={handlePhoneBlur}
               type="tel"
               inputMode="tel"
               autoComplete="tel"
               maxLength={20}
               dir="ltr"
               aria-describedby="onboarding-phone-help"
-              className="input-glass w-full px-4 py-3 text-[15px]"
+              aria-invalid={phoneInvalid || undefined}
+              className={`input-glass w-full px-4 py-3 text-[15px] ${phoneInvalid ? 'border-danger' : ''}`}
               placeholder="050-123-4567"
             />
-            <p id="onboarding-phone-help" className="text-[12px] text-text-muted mt-1.5">
-              {t({
-                he: 'אפשר להשאיר ריק ולחבר וואטסאפ מאוחר יותר מתוך לשונית "גשרים" של הסוכן.',
-                en: "Leave empty to create without WhatsApp — you can connect it later from the agent's Bridges panel.",
-              })}
-            </p>
+            {phoneInvalid ? (
+              <p className="text-[12px] text-danger mt-1.5">
+                {t({
+                  he: 'המספר אינו תקין. דוגמה: 050-123-4567',
+                  en: 'Invalid phone number. Example: 050-123-4567',
+                })}
+              </p>
+            ) : (
+              <p id="onboarding-phone-help" className="text-[12px] text-text-muted mt-1.5">
+                {t({
+                  he: 'אפשר להשאיר ריק ולחבר וואטסאפ מאוחר יותר מתוך לשונית "גשרים" של הסוכן.',
+                  en: "Leave empty to create without WhatsApp — you can connect it later from the agent's Bridges panel.",
+                })}
+              </p>
+            )}
           </div>
 
           <div>

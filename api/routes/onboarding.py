@@ -71,7 +71,19 @@ async def submit(
     # provided one — otherwise keep whatever is already on the app_users
     # row so an optional-phone onboarding can't blank out a phone the user
     # already gave us through another path.
-    phone = (body.phone or "").strip() or None
+    #
+    # Phone is normalized to E.164 before we store it or hand it to the
+    # provisioner. The bridge matches inbound WhatsApp webhooks by digits
+    # only and Meta delivers the sender in E.164 (e.g. "972543023353"), so
+    # a raw "0543023353" typed in the onboarding form would write a
+    # phone_route the bridge can never match — the user would get their
+    # welcome template, reply, and get "this number is not registered"
+    # back. The sibling dashboard flow in routes/tenants.py normalizes
+    # the same way for the same reason.
+    from api.routes.tenants import _normalize_phone_e164
+
+    raw_phone = (body.phone or "").strip()
+    phone = _normalize_phone_e164(raw_phone) if raw_phone else None
     update_fields: dict[str, str] = {
         "full_name": body.full_name or user["full_name"],
         "gender": body.gender,
