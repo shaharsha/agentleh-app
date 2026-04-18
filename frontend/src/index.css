@@ -405,6 +405,45 @@ html[data-theme="dark"] .glass-nav {
   box-shadow: 0 1px 4px rgba(var(--shadow-rgb), 0.04);
 }
 
+/* BRAND.md §18 canonical card — Paper-resting. Use this for every dashboard
+ * pane. Ground tier (`bg-surface`) must not be used as a card fill: on cream
+ * it's identical to the page body, so cards disappear. `.card` lifts to
+ * surface-soft (cream-50 / navy-700) so both themes read a clear tier above
+ * the body. Prefer this over `.glass-card` in greenfield JSX.
+ *
+ * Defined in @layer components so Tailwind utility overrides (e.g.
+ * `card border-danger/40` on the Danger zone tile) win — unlayered CSS
+ * trumps every explicit layer, which would otherwise pin the border to
+ * `--color-border` no matter what utility you compose on top.
+ *
+ * Radius / padding / motion values are inlined from §9 + §11 — the app's
+ * index.css doesn't yet ship those primitives as CSS vars; replace with
+ * `var(--radius-lg)` etc. when it does. */
+@layer components {
+  .card {
+    background: var(--color-surface-soft);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    padding: 2rem;
+  }
+
+  .card-interactive {
+    cursor: pointer;
+    transition: border-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1),
+                transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .card-interactive:hover {
+    border-color: var(--color-border-light);
+    box-shadow: 0 2px 8px rgb(14 19 32 / 0.06);
+    transform: translateY(-2px);
+  }
+  .card-interactive:focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 4px;
+  }
+}
+
 /* ── Gradient Backgrounds ─────────────────── */
 
 .section-gradient {
