@@ -117,6 +117,21 @@ async def _build_tenant_dashboard(
     agents = db.list_tenant_agents(tenant["id"])
     tenant_spend = await _fetch_tenant_spend(tenant["id"])
 
+    # Subscription plate fallback. When the meter is unreachable (local
+    # dev running `uv run dev` instead of `uv run dev-with-meter`, or a
+    # brief prod outage), the meter call returns None and the UI used
+    # to flash a "no active plan" state even though the customer's
+    # agent_subscriptions row is perfectly healthy — they'd see a big
+    # "Activate plan" CTA next to a perfectly live product. The meter is
+    # still source of truth for `totals` (spend aggregation over
+    # usage_events, which the app doesn't compute), so on a miss we
+    # surface the subscription the app can see directly and leave
+    # totals null for the UI to render a zero-state.
+    subscription = tenant_spend.get("subscription") if tenant_spend else None
+    totals = tenant_spend.get("totals") if tenant_spend else None
+    if subscription is None:
+        subscription = db.get_active_subscription(tenant["id"])
+
     enriched_agents: list[dict[str, Any]] = []
     for agent in agents:
         enriched_agents.append(
@@ -149,8 +164,8 @@ async def _build_tenant_dashboard(
             "owner_user_id": tenant["owner_user_id"],
         },
         "agents": enriched_agents,
-        "subscription": tenant_spend.get("subscription") if tenant_spend else None,
-        "totals": tenant_spend.get("totals") if tenant_spend else None,
+        "subscription": subscription,
+        "totals": totals,
     }
 
 

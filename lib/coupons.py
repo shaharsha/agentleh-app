@@ -242,11 +242,19 @@ def _compute_schedule(
     new_plan_row: dict[str, Any],
     duration_days: int,
     current_active: dict[str, Any] | None,
+    tail_end: datetime | None = None,
 ) -> tuple[datetime, datetime, int | None]:
     """Decide period_start, period_end, and which-old-sub-to-supersede.
 
     Returns (period_start, period_end, superseded_sub_id_or_none).
     See the module docstring for the matrix this implements.
+
+    ``tail_end`` is the MAX(period_end) across all the tenant's active
+    (non-superseded) subs — so repeated same-plan renewals chain past
+    each other instead of all trying to start at the in-window sub's
+    period_end and colliding on the (tenant_id, period_start) unique
+    index. When there is no queue beyond the in-window sub, tail_end
+    equals current_active.period_end and behaviour is unchanged.
     """
     now = _now()
 
@@ -259,12 +267,14 @@ def _compute_schedule(
     old_price = int(current_active["price_ils_cents"])
     cmp = compare_plan_tier(new_price, old_price)
     same_plan = current_active["plan_id"] == new_plan_row["plan_id"]
-    old_end: datetime = current_active["period_end"]
+    chain_end: datetime = tail_end or current_active["period_end"]
 
     if same_plan or cmp < 0:
-        # Renewal (same plan) or downgrade — queue at old period_end.
-        period_start = old_end
-        period_end = old_end + timedelta(days=duration_days)
+        # Renewal (same plan) or downgrade — queue at the tail of the
+        # active-sub chain, not at the in-window sub's end. Lets a user
+        # redeem the same coupon N times to prepay N durations.
+        period_start = chain_end
+        period_end = chain_end + timedelta(days=duration_days)
         return period_start, period_end, None
 
     # Upgrade — immediate switch, supersede the running sub.
@@ -443,11 +453,27 @@ def redeem(
             current_active_row = cur.fetchone()
             current_active = dict(current_active_row) if current_active_row else None
 
+            # Rightmost active period_end — covers queued renewals that
+            # already sit past the in-window sub. Without this, redeeming
+            # the same coupon twice collides on (tenant_id, period_start)
+            # because both INSERTs target the in-window sub's period_end.
+            cur.execute(
+                """
+                SELECT MAX(period_end) AS tail_end
+                  FROM agent_subscriptions
+                 WHERE tenant_id = %s AND status = 'active'
+                """,
+                (tenant_id,),
+            )
+            tail_row = cur.fetchone()
+            tail_end = tail_row["tail_end"] if tail_row else None
+
             # 4. Compute the schedule.
             period_start, period_end, supersede_id = _compute_schedule(
                 new_plan_row=plan,
                 duration_days=duration_days,
                 current_active=current_active,
+                tail_end=tail_end,
             )
 
             # 5. Verify the tenant exists (for a clean 404 instead of an
@@ -643,6 +669,24 @@ def preview(
         current_active = (
             get_active_subscription(conn, tenant_id) if tenant_id is not None else None
         )
+        # Tail of the active-sub chain — keeps preview in sync with the
+        # renewal-chaining rule in _compute_schedule (see redeem()).
+        # Without this, a user with a queued renewal would see the
+        # preview announce "starts 2026-05-18" but the actual INSERT
+        # would chain further out, so the confirmation copy would lie.
+        tail_end: datetime | None = None
+        if tenant_id is not None:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT MAX(period_end) AS tail_end
+                      FROM agent_subscriptions
+                     WHERE tenant_id = %s AND status = 'active'
+                    """,
+                    (tenant_id,),
+                )
+                row = cur.fetchone()
+                tail_end = row["tail_end"] if row else None
 
     plan_view = {
         "plan_id": coupon["plan_id"],
@@ -668,7 +712,7 @@ def preview(
         cmp = compare_plan_tier(new_price, old_price)
         if same_plan or cmp < 0:
             kind = "renewal" if same_plan else "downgrade_queued"
-            ps = current_active["period_end"]
+            ps = tail_end or current_active["period_end"]
             pe = ps + timedelta(days=int(coupon["duration_days"]))
             schedule = {
                 "kind": kind,
