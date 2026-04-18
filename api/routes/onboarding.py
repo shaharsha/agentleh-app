@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -70,7 +71,19 @@ async def submit(
     # provided one — otherwise keep whatever is already on the app_users
     # row so an optional-phone onboarding can't blank out a phone the user
     # already gave us through another path.
-    phone = (body.phone or "").strip() or None
+    #
+    # Phone is normalized to E.164 before we store it or hand it to the
+    # provisioner. The bridge matches inbound WhatsApp webhooks by digits
+    # only and Meta delivers the sender in E.164 (e.g. "972543023353"), so
+    # a raw "0543023353" typed in the onboarding form would write a
+    # phone_route the bridge can never match — the user would get their
+    # welcome template, reply, and get "this number is not registered"
+    # back. The sibling dashboard flow in routes/tenants.py normalizes
+    # the same way for the same reason.
+    from api.routes.tenants import _normalize_phone_e164
+
+    raw_phone = (body.phone or "").strip()
+    phone = _normalize_phone_e164(raw_phone) if raw_phone else None
     update_fields: dict[str, str] = {
         "full_name": body.full_name or user["full_name"],
         "gender": body.gender,
@@ -87,7 +100,17 @@ async def submit(
     tenant = db.ensure_default_tenant(fresh_user["id"])
 
     provisioner = request.app.state.provisioner
-    agent_id = f"agent-{user['id']}-{body.agent_name.replace(' ', '-').lower()}"
+    # Hebrew-first product — agent_name is usually Hebrew, but the
+    # downstream create-agent.sh uses AGENT_ID as a Docker service key,
+    # shell env-var prefix, and filesystem directory, all of which
+    # require ASCII. Slug the name to [a-z0-9-], fall back to "agent"
+    # when the slug collapses to empty (e.g. fully-Hebrew input). Same
+    # pattern as the sibling tenant-scoped create flow in
+    # api/routes/tenants.py — keep them aligned or a user's first agent
+    # via onboarding will fail while the same name works from the
+    # dashboard agent-create modal.
+    slug = re.sub(r"[^a-z0-9-]+", "-", body.agent_name.lower()).strip("-") or "agent"
+    agent_id = f"agent-{user['id']}-{slug}"
     user_name = body.full_name or user["full_name"]
 
     async def event_stream():

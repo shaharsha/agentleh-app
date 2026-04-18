@@ -12,6 +12,50 @@ from psycopg.rows import dict_row
 logger = logging.getLogger(__name__)
 
 
+class AuthError(Exception):
+    """Typed auth-layer errors raised by get_user_for_auth. Carry the
+    wire-shape fields the frontend's error dictionary expects so the
+    dependency layer can raise HTTPException without having to translate
+    codes a second time."""
+
+    code: str = "auth_error"
+    http_status: int = 401
+    message: str = "Authentication failed"
+    message_he: str = "שגיאת אימות"
+
+
+class AuthAccountRevoked(AuthError):
+    """Signed-in Supabase identity maps to an app_users row whose
+    deleted_at is set — either by supabase_uid (same uid, soft-deleted)
+    or by email collision (different uid, old row soft-deleted). Either
+    way the account was revoked; we do not silently resurrect from JWT
+    claims. Contact support to restore."""
+
+    code = "account_revoked"
+    http_status = 403
+    message = "Your account has been deleted. Contact support to restore access."
+    message_he = "חשבונך נמחק. לשחזור גישה פנה לתמיכה."
+
+
+class AuthEmailAlreadyRegistered(AuthError):
+    """A live app_users row owns this email under a different
+    supabase_uid. Most likely the user deleted + re-created their
+    Supabase account with the same address. Rebinding the existing row
+    to the new uid is account takeover, so we refuse and send them back
+    to sign in with their original auth method."""
+
+    code = "email_already_registered"
+    http_status = 409
+    message = (
+        "This email is already registered under a different sign-in method. "
+        "Sign in with your original method (Google, email, etc.)."
+    )
+    message_he = (
+        "כתובת אימייל זו כבר רשומה עם שיטת כניסה אחרת. "
+        "היכנס עם שיטת הכניסה המקורית שלך (Google, אימייל וכדומה)."
+    )
+
+
 def _default_tenant_name(name_base: str) -> str:
     """Build a script-appropriate default workspace name.
 
@@ -192,21 +236,27 @@ class AppDatabase:
 
     # ── Users ─────────────────────────────────────────────────────────
 
-    # Auth gate. Returns:
-    #   - the active row if one exists  (normal authenticated request)
-    #   - None if the row exists but is soft-deleted  (revoked account)
-    #   - a freshly-inserted row if no row exists  (first login after signup)
+    # Auth gate. Returns the active row or raises a typed AuthError.
     #
-    # Intentionally SELECT-first-then-INSERT (not an UPSERT) so a soft-deleted
-    # account cannot silently resurrect itself on the next authenticated
-    # request. The original upsert did that — a user deleted in Supabase whose
-    # still-valid JWT hit /auth/me would be re-created from the JWT claims.
+    # SELECT-first-then-INSERT (not an UPSERT) so a soft-deleted account
+    # cannot silently resurrect itself on the next authenticated request.
+    # The original upsert did that — a user deleted in Supabase whose
+    # still-valid JWT hit /auth/me would be re-created from JWT claims.
+    #
+    # The INSERT's ON CONFLICT only covers the supabase_uid unique
+    # constraint; `email` is separately UNIQUE (`app_users_email_key`).
+    # A row under a different supabase_uid sharing this email therefore
+    # raises psycopg.errors.UniqueViolation — we catch it and raise a
+    # typed AuthError the dependency layer can translate to a structured
+    # HTTPException. Without this, the UniqueViolation propagates as a
+    # default FastAPI 500 with string-shaped `detail`, which the coupon
+    # route's frontend wrapper falls back to "coupon_error" for.
     def get_user_for_auth(
         self,
         supabase_uid: str,
         email: str,
         full_name: str = "",
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         with self.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -216,19 +266,58 @@ class AppDatabase:
                 row = cur.fetchone()
                 if row is not None:
                     if row["deleted_at"] is not None:
-                        return None
+                        raise AuthAccountRevoked()
                     return dict(row)
                 # First sighting of this Supabase UID — insert. ON CONFLICT
                 # DO NOTHING handles the race where two concurrent requests
                 # both hit the SELECT miss; the second INSERT no-ops and the
                 # follow-up SELECT below picks up the winner.
-                cur.execute(
-                    """INSERT INTO app_users (supabase_uid, email, full_name)
-                       VALUES (%s, %s, %s)
-                       ON CONFLICT (supabase_uid) DO NOTHING
-                       RETURNING *""",
-                    (supabase_uid, email, full_name),
-                )
+                try:
+                    cur.execute(
+                        """INSERT INTO app_users (supabase_uid, email, full_name)
+                           VALUES (%s, %s, %s)
+                           ON CONFLICT (supabase_uid) DO NOTHING
+                           RETURNING *""",
+                        (supabase_uid, email, full_name),
+                    )
+                except psycopg.errors.UniqueViolation as exc:
+                    # Email collision: another app_users row owns this
+                    # email. Three sub-cases:
+                    #
+                    #   (a) SAME supabase_uid — a concurrent request for
+                    #       this same user won the INSERT race. Postgres
+                    #       doesn't guarantee which unique constraint it
+                    #       checks first, so ON CONFLICT (supabase_uid)
+                    #       DO NOTHING can still surface the email
+                    #       constraint violation when both conflicts
+                    #       apply simultaneously. Just re-SELECT the
+                    #       winner and return it — this is us.
+                    #   (b) Different supabase_uid, live row — genuine
+                    #       cross-account collision. Reject with 409.
+                    #   (c) Different supabase_uid, soft-deleted — the
+                    #       account was revoked. Reject with 403.
+                    conn.rollback()
+                    other = self._fetch_one(
+                        "SELECT id, supabase_uid, email, full_name, phone, gender, "
+                        "onboarding_status, role, deleted_at, created_at "
+                        "FROM app_users WHERE lower(email) = lower(%s)",
+                        (email,),
+                    )
+                    if other is None:
+                        # UniqueViolation on a constraint we don't
+                        # recognize — surface the original error rather
+                        # than silently swallowing it.
+                        raise exc
+                    if other["supabase_uid"] == supabase_uid:
+                        # Race with a concurrent insert from us. Return
+                        # the winning row, unless it's somehow been
+                        # soft-deleted in the interim.
+                        if other["deleted_at"] is not None:
+                            raise AuthAccountRevoked() from exc
+                        return dict(other)
+                    if other["deleted_at"] is not None:
+                        raise AuthAccountRevoked() from exc
+                    raise AuthEmailAlreadyRegistered() from exc
                 row = cur.fetchone()
                 if row is None:
                     cur.execute(
@@ -237,9 +326,13 @@ class AppDatabase:
                     )
                     row = cur.fetchone()
                     if row is not None and row["deleted_at"] is not None:
-                        return None
+                        raise AuthAccountRevoked()
             conn.commit()
-        return dict(row) if row else None
+        if row is None:
+            # Concurrent-insert race with a soft-deleted winner? Defensive —
+            # should be unreachable given the branches above.
+            raise AuthError()
+        return dict(row)
 
     def soft_delete_user(self, user_id: int) -> dict[str, Any] | None:
         """Mark the app_users row deleted. Idempotent on already-deleted rows
