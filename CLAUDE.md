@@ -144,6 +144,17 @@ Both routed via the shared Global HTTPS LB (`34.111.24.95`) → backend service 
 
 ## Running locally
 
+**Preferred — from the parent monorepo** ([agentleh](https://github.com/shaharsha/agentleh)):
+
+```bash
+uv run dev-with-meter     # landing + app + meter + local Postgres, auto-wired
+uv run app                # app only (implies db-up)
+```
+
+The parent orchestrator injects `DATABASE_URL` (local Postgres on :15432), `APP_METER_BASE_URL=http://127.0.0.1:8080`, and `APP_METER_ADMIN_TOKEN` for you. Shell-exported values win over orchestrator defaults if you need to point at Cloud SQL proxy or the deployed dev meter.
+
+**Standalone:**
+
 ```bash
 uv sync                        # Python deps
 cd frontend && npm install     # Frontend deps
@@ -151,7 +162,7 @@ cd ..
 uv run dev                     # Backend (8000) + frontend (5173)
 ```
 
-Required env vars:
+Required env vars when running standalone:
 
 - `frontend/.env`: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_LANDING_URL`
 - Backend: `DATABASE_URL`, `APP_METER_BASE_URL`, `APP_METER_ADMIN_TOKEN`, `APP_VM_STATS_URL` (+ `APP_VM_STATS_TOKEN` if set), `RESEND_API_KEY`, `AGENTLEH_PROVISIONER=mock` (default) or `vm`
