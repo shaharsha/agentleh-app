@@ -27,6 +27,7 @@ import BridgesPanel from '../components/BridgesPanel'
 import ChatPane from '../components/ChatPane'
 import UsageTab from '../components/UsageTab'
 import AuditTab from '../components/AuditTab'
+import WorkspaceValueCard from '../components/WorkspaceValueCard'
 import VoicePicker from '../components/VoicePicker'
 import { microsToUsd } from '../lib/format'
 
@@ -520,6 +521,8 @@ function DashboardTab({
 
   return (
     <div className="space-y-6">
+      <WorkspaceValueCard tenantId={tenantId} onNavigate={onNavigate} />
+
       <div className="bg-surface border border-border rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-text-primary">
