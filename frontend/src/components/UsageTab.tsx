@@ -175,8 +175,8 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
               onClick={() => onPickKind(k)}
               className={`text-sm px-3 py-1.5 rounded-full border transition-colors cursor-pointer ${
                 range.kind === k
-                  ? 'bg-indigo-600 text-white border-indigo-600'
-                  : 'bg-surface text-text-primary border-border hover:bg-gray-50 dark:hover:bg-white/5'
+                  ? 'bg-brand text-white border-indigo-600'
+                  : 'bg-surface text-text-primary border-border hover:bg-surface-soft dark:hover:bg-white/5'
               }`}
             >
               {t(rangeLabel(k))}
@@ -187,24 +187,24 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
         {range.kind === 'custom' && (
           <div className="mt-4 flex flex-wrap items-end gap-3">
             <div>
-              <div className="text-xs text-gray-500 mb-1">{t({ he: 'מתאריך', en: 'From' })}</div>
+              <div className="text-xs text-text-muted mb-1">{t({ he: 'מתאריך', en: 'From' })}</div>
               <input
                 type="date"
                 value={customFrom}
                 max={customTo}
                 onChange={(e) => setCustomFrom(e.target.value)}
-                className="text-sm border border-gray-200 rounded-md px-2 py-1"
+                className="text-sm border border-border-light rounded-md px-2 py-1"
               />
             </div>
             <div>
-              <div className="text-xs text-gray-500 mb-1">{t({ he: 'עד תאריך', en: 'To' })}</div>
+              <div className="text-xs text-text-muted mb-1">{t({ he: 'עד תאריך', en: 'To' })}</div>
               <input
                 type="date"
                 value={customTo}
                 min={customFrom}
                 max={defaultCustomTo()}
                 onChange={(e) => setCustomTo(e.target.value)}
-                className="text-sm border border-gray-200 rounded-md px-2 py-1"
+                className="text-sm border border-border-light rounded-md px-2 py-1"
               />
             </div>
             <button
@@ -218,30 +218,30 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
         )}
 
         {range.kind === 'current' && subscription && (
-          <div className="mt-4 text-sm text-gray-600 space-y-2">
+          <div className="mt-4 text-sm text-text-secondary space-y-2">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <span>
-                <span className="text-gray-500">{t({ he: 'תכנית', en: 'Plan' })}: </span>
-                <span className="font-medium text-gray-900">{t(planLabel(subscription.plan_id))}</span>
+                <span className="text-text-muted">{t({ he: 'תכנית', en: 'Plan' })}: </span>
+                <span className="font-medium text-text-primary">{t(planLabel(subscription.plan_id))}</span>
               </span>
               <span>
-                <span className="text-gray-500">{t({ he: 'סוף תקופה', en: 'Period ends' })}: </span>
-                <span className="font-medium text-gray-900">
+                <span className="text-text-muted">{t({ he: 'סוף תקופה', en: 'Period ends' })}: </span>
+                <span className="font-medium text-text-primary">
                   {num(fmtDate(subscription.period_end))}
                 </span>
               </span>
               <span>
-                <span className="text-gray-500">{t({ he: 'נוצל', en: 'Used' })}: </span>
-                <span className="font-medium text-gray-900">
+                <span className="text-text-muted">{t({ he: 'נוצל', en: 'Used' })}: </span>
+                <span className="font-medium text-text-primary">
                   {num(microsToUsd(subscription.used_micros))}{' / '}
                   {num(microsToUsd(subscription.base_allowance_micros))}
                 </span>
               </span>
             </div>
             {allowancePct !== null && (
-              <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden" dir="ltr">
+              <div className="h-2 w-full rounded-full bg-surface-soft overflow-hidden" dir="ltr">
                 <div
-                  className={`h-full ${allowancePct >= 100 ? 'bg-red-500' : allowancePct >= 80 ? 'bg-amber-500' : 'bg-indigo-500'}`}
+                  className={`h-full ${allowancePct >= 100 ? 'bg-danger' : allowancePct >= 80 ? 'bg-warning' : 'bg-brand'}`}
                   style={{ width: `${allowancePct}%` }}
                 />
               </div>
@@ -253,11 +253,11 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
       {/* Tenant totals */}
       <div className="bg-surface border border-border rounded-xl p-6">
         <div className="flex items-baseline justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-lg font-semibold text-text-primary">
             {t({ he: 'סיכום שימוש', en: 'Usage summary' })}
           </h2>
           {respRange && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-text-muted">
               {num(formatRange(respRange.from, respRange.to))}
             </span>
           )}
@@ -273,12 +273,12 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
 
       {/* Per-agent table */}
       <div className="bg-surface border border-border rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+        <h2 className="text-lg font-semibold text-text-primary mb-4">
           {t({ he: 'פירוט לפי סוכן', en: 'Per-agent breakdown' })}
         </h2>
 
         {error && (
-          <div className="text-sm text-red-600">
+          <div className="text-sm text-danger">
             {t({ he: 'שגיאה בטעינת שימוש: ', en: 'Failed to load usage: ' })}
             {error}
           </div>
@@ -287,7 +287,7 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
         {!error && loading && <AgentRowsSkeleton />}
 
         {!error && !loading && agents.length === 0 && (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-text-muted">
             {t({ he: 'לא נרשם שימוש בטווח הזה.', en: 'No usage in this range yet.' })}
           </p>
         )}
@@ -296,7 +296,7 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-gray-500 text-xs uppercase tracking-wide">
+                <tr className="text-text-muted text-xs uppercase tracking-wide">
                   <th className="text-start font-medium py-2 pe-3">{t({ he: 'סוכן', en: 'Agent' })}</th>
                   <th className="text-end font-medium py-2 px-3">{t({ he: 'מודל שפה', en: 'LLM' })}</th>
                   <th className="text-end font-medium py-2 px-3">{t({ he: 'חיפוש', en: 'Search' })}</th>
@@ -321,7 +321,7 @@ export default function UsageTab({ tenantId }: { tenantId: number }) {
                         <button
                           type="button"
                           onClick={() => setShowDeleted(true)}
-                          className="text-sm text-gray-500 hover:text-gray-700 cursor-pointer"
+                          className="text-sm text-text-muted hover:text-text-primary cursor-pointer"
                         >
                           {t({
                             he: `+ הצג ${deletedAgents.length} סוכנים שנמחקו`,
@@ -355,8 +355,8 @@ function TotalTile({
   const { t } = useI18n()
   return (
     <div>
-      <div className="text-gray-500">{t(label)}</div>
-      <div className={`${emphasize ? 'text-xl' : ''} font-medium ${loading ? 'text-gray-300' : 'text-gray-900'}`}>
+      <div className="text-text-muted">{t(label)}</div>
+      <div className={`${emphasize ? 'text-xl' : ''} font-medium ${loading ? 'text-gray-300' : 'text-text-primary'}`}>
         {value}
       </div>
     </div>
@@ -381,16 +381,16 @@ function AgentRow({
   // without a date.
   const deletedDate =
     isDeleted && row.deleted_at !== 'unknown' ? fmtDate(row.deleted_at!) : null
-  const nameClass = isDeleted ? 'font-medium text-gray-500' : 'font-medium text-gray-900'
-  const cellClass = isDeleted ? 'text-gray-500' : ''
-  const totalClass = isDeleted ? 'font-medium text-gray-500' : 'font-medium text-gray-900'
+  const nameClass = isDeleted ? 'font-medium text-text-muted' : 'font-medium text-text-primary'
+  const cellClass = isDeleted ? 'text-text-muted' : ''
+  const totalClass = isDeleted ? 'font-medium text-text-muted' : 'font-medium text-text-primary'
   return (
     <tr className="border-t border-gray-100">
       <td className="py-2 pe-3">
         <div className={nameClass} dir="auto">
           {row.agent_name}
           {isDeleted && (
-            <span className="ms-2 text-xs text-gray-400 font-normal">
+            <span className="ms-2 text-xs text-text-muted font-normal">
               ·{' '}
               {deletedDate
                 ? t({ he: `נמחק ${deletedDate}`, en: `deleted ${deletedDate}` })
@@ -398,7 +398,7 @@ function AgentRow({
             </span>
           )}
         </div>
-        <div className="text-xs text-gray-400 font-mono" dir="ltr">{row.agent_id}</div>
+        <div className="text-xs text-text-muted font-mono" dir="ltr">{row.agent_id}</div>
       </td>
       <td className={`py-2 px-3 text-end ${cellClass}`}>{num(microsToUsd(row.llm_micros))}</td>
       <td className={`py-2 px-3 text-end ${cellClass}`}>{num(microsToUsd(row.search_micros))}</td>
@@ -414,7 +414,7 @@ function AgentRowsSkeleton() {
   return (
     <div className="space-y-2">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="h-8 bg-gray-100 rounded animate-pulse" />
+        <div key={i} className="h-8 bg-surface-soft rounded animate-pulse" />
       ))}
     </div>
   )

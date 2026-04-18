@@ -13,28 +13,34 @@
   --breakpoint-xs: 360px;
 
   /* Brand (invariant across light/dark) */
-  --color-brand: #D4622B;
-  --color-brand-light: #E8854F;
-  --color-brand-dark: #B84E1D;
-  --color-brand-50: #FFF5F0;
-  --color-brand-100: #FCE0CC;
+  --color-brand: #B85A3A;
+  --color-brand-light: #D08060;
+  --color-brand-dark: #6E3420;
+  --color-brand-50: #FBEEE7;
+  --color-brand-100: #F0C6B2;
 
   /* Surface + text + border tokens. Defined here so Tailwind utility
    * classes (`bg-surface`, `text-text-primary`, `border-border`) compile
    * against them. Runtime dark-mode swap happens in the :root block
    * below — same variable names, later-wins cascade. */
-  --color-surface: #FFFFFF;
-  --color-surface-soft: #F8F8F7;
+  --color-surface: #F3EAD3;
+  --color-surface-soft: #FAF5E8;
 
-  --color-text-primary: #1A1A1A;
-  --color-text-secondary: #4A4A4A;
-  --color-text-muted: #9A9A9A;
+  --color-text-primary: #0E1320;
+  --color-text-secondary: #3A4055;
+  --color-text-muted: #8A7860;
 
-  --color-border: #E8E8E6;
-  --color-border-light: #F0F0F0;
+  --color-border: #E8DCBE;
+  --color-border-light: #F0E6C8;
 
-  --color-success: #30D158;
-  --color-success-light: #D1FAE5;
+  --color-success: #6B8E5A;
+  --color-success-light: #E4EBD8;
+  --color-warning: #D4A24A;
+  --color-warning-light: #F7EBCF;
+  --color-danger: #A83E2E;
+  --color-danger-light: #F4D6D0;
+  --color-info: #6D8BA6;
+  --color-info-light: #DDE5EC;
 
   --font-family-sans: "Rubik", sans-serif;
 }
@@ -46,32 +52,37 @@
 :root {
   color-scheme: light;
 
-  /* Glass surfaces (rgba so backdrop-filter still shines through) */
-  --glass-nav-bg: rgba(255, 255, 255, 0.65);
-  --glass-nav-border: rgba(255, 255, 255, 0.3);
-  --glass-card-bg: rgba(255, 255, 255, 0.55);
-  --glass-card-bg-hover: rgba(255, 255, 255, 0.75);
-  --glass-card-border: rgba(255, 255, 255, 0.6);
-  --glass-elevated-bg: rgba(255, 255, 255, 0.72);
-  --glass-elevated-border: rgba(255, 255, 255, 0.5);
-  --glass-pill-bg: rgba(255, 255, 255, 0.5);
-  --glass-pill-border: rgba(255, 255, 255, 0.4);
-  --glass-input-bg: rgba(255, 255, 255, 0.6);
-  --glass-input-bg-focus: rgba(255, 255, 255, 0.95);
+  /* Glass surfaces — tuned to BRAND.md §6 "cream commitment": cards on
+   * cream use cream-50 #FAF5E8 (NOT white — white is reserved for input
+   * fields and inline code). The lift comes from a visible cream-200
+   * border, not from a whitened fill. Alpha stays high (0.92+) so the
+   * hue reads true while backdrop-blur still softens the background. */
+  --glass-nav-bg: rgba(250, 245, 232, 0.82);      /* cream-50 at .82 */
+  --glass-nav-border: rgba(232, 220, 190, 0.6);   /* cream-200 at .6 */
+  --glass-card-bg: rgba(250, 245, 232, 0.92);     /* cream-50 near-solid */
+  --glass-card-bg-hover: rgba(253, 250, 240, 0.98);
+  --glass-card-border: rgba(232, 220, 190, 0.8);  /* cream-200 */
+  --glass-elevated-bg: rgba(253, 250, 240, 0.98); /* cream-50 slightly brighter */
+  --glass-elevated-border: rgba(232, 220, 190, 0.7);
+  --glass-pill-bg: rgba(250, 245, 232, 0.82);
+  --glass-pill-border: rgba(232, 220, 190, 0.7);
+  /* Input fields — white is explicitly spec-allowed for inputs (§3). */
+  --glass-input-bg: rgba(255, 255, 255, 0.9);
+  --glass-input-bg-focus: rgba(255, 255, 255, 1);
 
   /* Shadow tints */
   --shadow-rgb: 0, 0, 0;
 
   /* Section gradient stops */
-  --section-stop-1: #FDF8F4;
-  --section-stop-2: #FAF5F1;
-  --section-stop-3: #F5F0EC;
-  --section-alt-1: #F5F0EC;
-  --section-alt-2: #FBF7F4;
-  --section-alt-3: #FDF8F4;
-  --section-hero-1: #FEF6F0;
-  --section-hero-2: #FBF5EF;
-  --section-hero-3: #F8F3ED;
+  --section-stop-1: #FAF5E8;
+  --section-stop-2: #F3EAD3;
+  --section-stop-3: #EEE2C5;
+  --section-alt-1: #EEE2C5;
+  --section-alt-2: #F3EAD3;
+  --section-alt-3: #FAF5E8;
+  --section-hero-1: #FAF5E8;
+  --section-hero-2: #F3EAD3;
+  --section-hero-3: #EEE2C5;
 
   /* Subtle neutral for hover-fill on icon buttons in the header */
   --icon-btn-hover-bg: rgba(0, 0, 0, 0.05);
@@ -92,13 +103,13 @@ html[data-theme="dark"] {
     color-scheme: dark;
 
     /* Override @theme tokens for dark mode */
-    --color-surface: #16120E;
-    --color-surface-soft: #1E1814;
-    --color-text-primary: #F5EFE8;
-    --color-text-secondary: #B8A595;
-    --color-text-muted: #7A6B5E;
-    --color-border: #2B2319;
-    --color-border-light: #221B13;
+    --color-surface: #0E1320;
+    --color-surface-soft: #141828;
+    --color-text-primary: #F3EAD3;
+    --color-text-secondary: #D4C4A0;
+    --color-text-muted: #D4C4A0; /* BRAND.md §6 dark theme: cream-300 */
+    --color-border: #2A3350;
+    --color-border-light: #1F2740;
     --color-brand-50: #2A1810;
     --color-brand-100: #3D2416;
     --color-success-light: #0F2A1C;
@@ -150,30 +161,37 @@ html[data-theme="dark"] {
     --color-purple-100: rgb(52 28 90);
     --color-purple-200: rgb(72 42 120);
 
-    /* Glass goes dark-tinted */
-    --glass-nav-bg: rgba(22, 18, 14, 0.72);
-    --glass-nav-border: rgba(255, 255, 255, 0.06);
-    --glass-card-bg: rgba(30, 24, 20, 0.55);
-    --glass-card-bg-hover: rgba(38, 30, 24, 0.7);
-    --glass-card-border: rgba(255, 255, 255, 0.08);
-    --glass-elevated-bg: rgba(38, 30, 24, 0.72);
-    --glass-elevated-border: rgba(255, 255, 255, 0.08);
-    --glass-pill-bg: rgba(30, 24, 20, 0.5);
-    --glass-pill-border: rgba(255, 255, 255, 0.06);
-    --glass-input-bg: rgba(30, 24, 20, 0.55);
-    --glass-input-bg-focus: rgba(36, 28, 22, 0.85);
+    /* Glass surfaces — BRAND.md §6 dark theme map:
+     *   card bg: var(--navy-700) #141828
+     *   elevated: var(--navy-500) #1F2740
+     *   border: var(--navy-500) #1F2740 (hairline)
+     * Alpha stays high (0.92+) so the navy hue reads true against the
+     * navy-900 body while backdrop-blur keeps the liquid-glass feel. */
+    --glass-nav-bg: rgba(20, 24, 40, 0.82);          /* navy-700 */
+    --glass-nav-border: rgba(31, 39, 64, 0.6);       /* navy-500 hairline */
+    --glass-card-bg: rgba(20, 24, 40, 0.92);         /* navy-700 near-solid */
+    --glass-card-bg-hover: rgba(31, 39, 64, 0.95);   /* lift to navy-500 on hover */
+    --glass-card-border: rgba(31, 39, 64, 0.8);      /* navy-500 */
+    --glass-elevated-bg: rgba(31, 39, 64, 0.95);     /* navy-500 */
+    --glass-elevated-border: rgba(58, 64, 85, 0.7);  /* navy-300 hairline */
+    --glass-pill-bg: rgba(20, 24, 40, 0.82);
+    --glass-pill-border: rgba(31, 39, 64, 0.7);
+    /* Inputs lift ABOVE the card (navy-700) to navy-500 so fields read
+     * as interactive rather than dissolving into the card color. */
+    --glass-input-bg: rgba(31, 39, 64, 0.95);
+    --glass-input-bg-focus: rgba(42, 51, 80, 1);
 
     --shadow-rgb: 0, 0, 0;
 
-    --section-stop-1: #0F0B08;
-    --section-stop-2: #13100C;
-    --section-stop-3: #16120E;
-    --section-alt-1: #16120E;
-    --section-alt-2: #120E0B;
-    --section-alt-3: #0F0B08;
-    --section-hero-1: #14100C;
-    --section-hero-2: #100C09;
-    --section-hero-3: #0C0907;
+    --section-stop-1: #0E1320;
+    --section-stop-2: #141828;
+    --section-stop-3: #1F2740;
+    --section-alt-1: #1F2740;
+    --section-alt-2: #141828;
+    --section-alt-3: #0E1320;
+    --section-hero-1: #05070F;
+    --section-hero-2: #0E1320;
+    --section-hero-3: #141828;
 
     --icon-btn-hover-bg: rgba(255, 255, 255, 0.06);
 }
@@ -303,48 +321,57 @@ button:not(:disabled) {
 /* ── Liquid Glass ─────────────────────────── */
 
 .glass-nav {
+  /* BRAND.md §10 Liquid Glass, Agentiko-tuned: 24px blur, saturate 140%,
+   * brightness 1.06. Inner specular top + contact bottom for depth. */
   background: var(--glass-nav-bg);
-  backdrop-filter: blur(24px) saturate(200%);
-  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  backdrop-filter: blur(24px) saturate(140%) brightness(1.06);
+  -webkit-backdrop-filter: blur(24px) saturate(140%) brightness(1.06);
   border-bottom: 1px solid var(--glass-nav-border);
-  box-shadow: 0 1px 3px rgba(var(--shadow-rgb), 0.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(14, 19, 32, 0.05),
+    0 1px 3px rgba(var(--shadow-rgb), 0.04);
+}
+html[data-theme="dark"] .glass-nav {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+    0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
+/* Per BRAND.md §10.4, dashboard cards + settings forms are Paper, not
+ * Liquid Glass. Glass is reserved for floating chrome (nav, dropdowns,
+ * modals, toasts). The class names .glass-card / .glass-card-elevated
+ * are kept for existing JSX call-sites but the rules below render
+ * them as Paper-resting / Paper-elevated per the spec's elevation
+ * tiers (§10.1): cream-50/navy-700 fill, cream-200/navy-500 hairline,
+ * no blur, no saturation tricks. */
 .glass-card {
+  /* BRAND.md §10 Paper-resting: bg-elevated + 1px border, NO shadow.
+   * Resting cards must feel paper-flat; they're not floating chrome. */
   background: var(--glass-card-bg);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--glass-card-border);
-  box-shadow:
-    0 0 0 1px rgba(var(--shadow-rgb), 0.03),
-    0 2px 8px rgba(var(--shadow-rgb), 0.04),
-    0 8px 32px rgba(var(--shadow-rgb), 0.06);
 }
 
 .glass-card-elevated {
   background: var(--glass-elevated-bg);
-  backdrop-filter: blur(24px) saturate(200%);
-  -webkit-backdrop-filter: blur(24px) saturate(200%);
   border: 1px solid var(--glass-elevated-border);
   box-shadow:
-    0 0 0 1px rgba(var(--shadow-rgb), 0.03),
-    0 4px 16px rgba(var(--shadow-rgb), 0.06),
-    0 16px 48px rgba(var(--shadow-rgb), 0.08);
+    0 2px 8px rgba(var(--shadow-rgb), 0.05),
+    0 8px 24px rgba(var(--shadow-rgb), 0.06);
 }
 
+/* BRAND.md §3 "Static by default — the mark is the only thing that moves".
+ * No translate, no scale, no lift on content surfaces. Hover shifts only
+ * the border color (paper-hover tier from §10.1) and hairline underlay. */
 .glass-card-hover {
-  transition: background 0.4s cubic-bezier(0.22, 1, 0.36, 1),
-              transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
-              box-shadow 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: border-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @media (hover: hover) and (pointer: fine) {
   .glass-card-hover:hover {
-    background: var(--glass-card-bg-hover);
-    transform: translateY(-4px);
-    box-shadow:
-      0 0 0 1px rgba(212,98,43,0.08),
-      0 8px 24px rgba(212,98,43,0.08),
-      0 16px 48px rgba(var(--shadow-rgb), 0.08);
+    border-color: var(--color-cream-300, #D4C4A0);
+    box-shadow: 0 2px 8px rgba(14, 19, 32, 0.06);
   }
 }
 
@@ -360,23 +387,23 @@ button:not(:disabled) {
 
 .section-gradient {
   background:
-    radial-gradient(ellipse at 30% 20%, rgba(212,98,43,0.07) 0%, transparent 50%),
-    radial-gradient(ellipse at 70% 80%, rgba(232,133,79,0.05) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 50%, rgba(184,78,29,0.03) 0%, transparent 60%),
+    radial-gradient(ellipse at 30% 20%, rgba(184,90,58,0.07) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 80%, rgba(196,116,134,0.05) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(110,52,32,0.03) 0%, transparent 60%),
     linear-gradient(180deg, var(--section-stop-1) 0%, var(--section-stop-2) 50%, var(--section-stop-3) 100%);
 }
 
 .section-gradient-alt {
   background:
-    radial-gradient(ellipse at 80% 30%, rgba(212,98,43,0.06) 0%, transparent 50%),
-    radial-gradient(ellipse at 20% 70%, rgba(232,133,79,0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 30%, rgba(184,90,58,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 20% 70%, rgba(196,116,134,0.04) 0%, transparent 50%),
     linear-gradient(180deg, var(--section-alt-1) 0%, var(--section-alt-2) 50%, var(--section-alt-3) 100%);
 }
 
 .section-gradient-hero {
   background:
-    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(212,98,43,0.08) 0%, transparent 60%),
-    radial-gradient(ellipse at 20% 60%, rgba(232,133,79,0.05) 0%, transparent 50%),
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(184,90,58,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse at 20% 60%, rgba(196,116,134,0.05) 0%, transparent 50%),
     linear-gradient(180deg, var(--section-hero-1) 0%, var(--section-hero-2) 40%, var(--section-hero-3) 100%);
 }
 
@@ -392,8 +419,8 @@ button:not(:disabled) {
   cursor: pointer; text-decoration: none; letter-spacing: -0.2px;
   min-height: 48px;
   box-shadow:
-    0 2px 8px rgba(212,98,43,0.25),
-    0 8px 24px rgba(212,98,43,0.15),
+    0 2px 8px rgba(184,90,58,0.25),
+    0 8px 24px rgba(184,90,58,0.15),
     inset 0 1px 0 rgba(255,255,255,0.15);
   transition: background 0.3s cubic-bezier(0.22, 1, 0.36, 1),
               transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
@@ -411,13 +438,13 @@ button:not(:disabled) {
   .btn-brand:hover {
     background: var(--color-brand-dark); transform: translateY(-3px);
     box-shadow:
-      0 4px 12px rgba(212,98,43,0.3),
-      0 16px 40px rgba(212,98,43,0.2),
+      0 4px 12px rgba(184,90,58,0.3),
+      0 16px 40px rgba(184,90,58,0.2),
       inset 0 1px 0 rgba(255,255,255,0.15);
   }
 }
 .btn-brand:active { transform: translateY(-1px); }
-.btn-brand:disabled { opacity: 0.5; transform: none; box-shadow: 0 2px 8px rgba(212,98,43,0.15); cursor: default; }
+.btn-brand:disabled { opacity: 0.5; transform: none; box-shadow: 0 2px 8px rgba(184,90,58,0.15); cursor: default; }
 .btn-brand:disabled:hover { transform: none; }
 .btn-brand:disabled::after { display: none; }
 
@@ -430,6 +457,10 @@ button:not(:disabled) {
 
 .btn-secondary {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  /* Uses surface-soft (cream-50 in light, navy-700 in dark) — on a Paper
+   * card this reads as a lifted button on a slightly-darker surround.
+   * In dark mode specifically, the button is OVERRIDDEN below to navy-500
+   * so it lifts ABOVE the navy-700 card per BRAND.md §10 elevation tiers. */
   background: var(--color-surface); color: var(--color-text-primary);
   border: 1px solid var(--color-border); border-radius: 100px;
   padding: 12px 24px; font-size: 15px;
@@ -438,6 +469,10 @@ button:not(:disabled) {
   transition: border-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
               transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
               box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+html[data-theme="dark"] .btn-secondary {
+  background: #1F2740; /* navy-500 — lifts above navy-700 cards */
+  border-color: #2A3350;
 }
 @media (hover: hover) and (pointer: fine) {
   .btn-secondary:hover {
@@ -467,7 +502,7 @@ button:not(:disabled) {
 .input-glass:focus {
   background: var(--glass-input-bg-focus);
   border-color: var(--color-brand);
-  box-shadow: 0 0 0 3px rgba(212, 98, 43, 0.15);
+  box-shadow: 0 0 0 3px rgba(184, 90, 58, 0.15);
   outline: none;
 }
 @media (max-width: 640px) {
@@ -477,11 +512,11 @@ button:not(:disabled) {
 }
 
 .input-glass[aria-invalid="true"] {
-  border-color: #E5484D;
+  border-color: var(--color-danger);
 }
 .input-glass[aria-invalid="true"]:focus {
-  border-color: #E5484D;
-  box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.15);
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px rgba(168,62,46, 0.15);
 }
 
 /* ═══════════════════════════════════════════

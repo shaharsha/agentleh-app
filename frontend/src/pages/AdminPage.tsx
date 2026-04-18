@@ -147,7 +147,7 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <div className="p-8 text-gray-500">
+      <div className="p-8 text-text-muted">
         {t({ he: 'טוען את לוח הבקרה…', en: 'Loading admin panel…' })}
       </div>
     )
@@ -155,10 +155,10 @@ export default function AdminPage() {
 
   if (error && !overview) {
     return (
-      <div className="p-8 text-red-600">
+      <div className="p-8 text-danger">
         {t({ he: 'שגיאה', en: 'Error' })}: {error}
         {error.includes('superadmin_required') && (
-          <div className="mt-4 text-gray-700">
+          <div className="mt-4 text-text-primary">
             {t({
               he: 'נדרש role=',
               en: 'You need ',
@@ -217,8 +217,8 @@ export default function AdminPage() {
               onClick={() => setTab(name)}
               className={`snap-start shrink-0 px-4 py-3 min-h-[44px] whitespace-nowrap text-sm ${
                 tab === name
-                  ? 'border-b-2 border-blue-600 text-blue-600 font-semibold'
-                  : 'text-gray-500 hover:text-gray-800'
+                  ? 'border-b-2 border-blue-600 text-info font-semibold'
+                  : 'text-text-muted hover:text-text-primary'
               }`}
             >
               {t(tabLabels[name])}{count !== null ? ` (${count})` : ''}
@@ -229,8 +229,8 @@ export default function AdminPage() {
           onClick={() => setTab('stats')}
           className={`snap-start shrink-0 px-4 py-3 min-h-[44px] whitespace-nowrap text-sm ${
             tab === 'stats'
-              ? 'border-b-2 border-blue-600 text-blue-600 font-semibold'
-              : 'text-gray-500 hover:text-gray-800'
+              ? 'border-b-2 border-blue-600 text-info font-semibold'
+              : 'text-text-muted hover:text-text-primary'
           }`}
         >
           {t({ he: 'סטטיסטיקות (לחנונים)', en: 'Stats (for nerds)' })}
@@ -302,7 +302,7 @@ function AgentsTab({
                 <div className="min-w-0">
                   <div className="font-mono text-xs break-all">{a.agent_id}</div>
                   {a.agent_name && (
-                    <div className="text-xs text-gray-500 mt-0.5 truncate">
+                    <div className="text-xs text-text-muted mt-0.5 truncate">
                       {a.agent_name}
                     </div>
                   )}
@@ -310,10 +310,10 @@ function AgentsTab({
                 <span
                   className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded ${
                     a.subscription_status === 'active'
-                      ? 'bg-green-50 text-green-700 dark:text-green-300'
+                      ? 'bg-success-light text-success dark:text-green-300'
                       : a.subscription_status === 'exhausted'
-                        ? 'bg-red-50 text-red-700 dark:text-red-300'
-                        : 'bg-gray-100 text-gray-600 dark:text-gray-300'
+                        ? 'bg-danger-light text-danger dark:text-red-300'
+                        : 'bg-surface-soft text-text-secondary dark:text-gray-300'
                   }`}
                 >
                   {a.subscription_status || 'none'}
@@ -321,29 +321,29 @@ function AgentsTab({
               </div>
 
               <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                <div className="text-gray-500">Owner</div>
+                <div className="text-text-muted">Owner</div>
                 <div className="text-end truncate">
                   {a.user_email || '—'}
                 </div>
-                <div className="text-gray-500">Plan</div>
+                <div className="text-text-muted">Plan</div>
                 <div className="text-end truncate">
                   {a.plan_name_he || '—'}
                 </div>
-                <div className="text-gray-500">Used / cap</div>
+                <div className="text-text-muted">Used / cap</div>
                 <div className="text-end font-mono tabular-nums">
                   {fmtUsd(a.used_micros)} / {fmtUsd(cap || null)}
                 </div>
-                <div className="text-gray-500">Usage</div>
+                <div className="text-text-muted">Usage</div>
                 <div className="text-end tabular-nums">
                   {pct(a.used_micros, cap || null)}
                 </div>
               </div>
 
               {cap > 0 && (
-                <div className="h-1.5 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
+                <div className="h-1.5 rounded-full bg-surface-soft dark:bg-white/10 overflow-hidden">
                   <div
                     className={`h-full rounded-full ${
-                      pctNum >= 90 ? 'bg-red-500' : pctNum >= 70 ? 'bg-amber-500' : 'bg-indigo-500'
+                      pctNum >= 90 ? 'bg-danger' : pctNum >= 70 ? 'bg-warning' : 'bg-brand'
                     }`}
                     style={{ width: `${pctNum}%` }}
                   />
@@ -376,7 +376,7 @@ function AgentsTab({
           )
         })}
         {agents.length === 0 && (
-          <li className="p-6 text-center text-sm text-gray-500">No agents yet.</li>
+          <li className="p-6 text-center text-sm text-text-muted">No agents yet.</li>
         )}
       </ul>
 
@@ -384,7 +384,7 @@ function AgentsTab({
           via admin-table-wrap (up to md, switchover). */}
       <div className="hidden md:block admin-table-wrap">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50">
+          <thead className="bg-surface-soft">
             <tr>
               <th className="text-left p-3">Agent</th>
               <th className="text-left p-3">Owner</th>
@@ -400,18 +400,18 @@ function AgentsTab({
             {agents.map((a) => {
               const cap = (a.base_allowance_micros || 0) + (a.overage_cap_micros || 0)
               return (
-                <tr key={a.agent_id} className="border-t hover:bg-gray-50">
+                <tr key={a.agent_id} className="border-t hover:bg-surface-soft">
                   <td className="p-3 font-mono text-xs">
                     <div>{a.agent_id}</div>
                     {a.agent_name && (
-                      <div className="text-gray-500">({a.agent_name})</div>
+                      <div className="text-text-muted">({a.agent_name})</div>
                     )}
                   </td>
                   <td className="p-3">
-                    {a.user_email || <span className="text-gray-400">—</span>}
+                    {a.user_email || <span className="text-text-muted">—</span>}
                   </td>
                   <td className="p-3">
-                    {a.plan_name_he || <span className="text-gray-400">—</span>}
+                    {a.plan_name_he || <span className="text-text-muted">—</span>}
                   </td>
                   <td className="p-3 text-right font-mono">{fmtUsd(a.used_micros)}</td>
                   <td className="p-3 text-right font-mono">{fmtUsd(cap || null)}</td>
@@ -420,10 +420,10 @@ function AgentsTab({
                     <span
                       className={
                         a.subscription_status === 'active'
-                          ? 'text-green-600'
+                          ? 'text-success'
                           : a.subscription_status === 'exhausted'
-                            ? 'text-red-600'
-                            : 'text-gray-500'
+                            ? 'text-danger'
+                            : 'text-text-muted'
                       }
                     >
                       {a.subscription_status || 'none'}
@@ -507,12 +507,12 @@ function GrantPlanModal({
       <div className="bg-surface rounded-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold">Grant plan to tenant {tenantId}</h3>
-          <button onClick={onClose} className="text-gray-500 text-2xl">×</button>
+          <button onClick={onClose} className="text-text-muted text-2xl">×</button>
         </div>
         <div className="space-y-3">
           <label className="block">
             <div className="text-xs font-semibold mb-1">Plan</div>
-            <select value={planId} onChange={(e) => setPlanId(e.target.value)} className="input-glass w-full">
+            <select value={planId} onChange={(e) => setPlanId(e.target.value)} className="input-glass w-full px-3 py-2.5 text-sm appearance-none">
               {plans.map((p) => (
                 <option key={p.plan_id} value={p.plan_id}>
                   {p.plan_id} — {p.name_he} (₪{(p.price_ils_cents / 100).toFixed(0)})
@@ -528,15 +528,15 @@ function GrantPlanModal({
               max={3650}
               value={durationDays}
               onChange={(e) => setDurationDays(Number(e.target.value))}
-              className="input-glass w-full"
+              className="input-glass w-full px-3 py-2.5 text-sm"
             />
           </label>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-text-muted">
             Logged as an admin grant (coupon_id=NULL, granted_by_admin=you). Same supersession rules
             as a coupon: upgrades take effect immediately, downgrades and same-plan renewals queue
             at the current period end.
           </p>
-          {error && <div className="text-sm text-red-600 dark:text-red-300 bg-red-50 rounded-lg p-2">{error}</div>}
+          {error && <div className="text-sm text-danger dark:text-red-300 bg-danger-light rounded-lg p-2">{error}</div>}
           <button onClick={handleSubmit} disabled={submitting} className="btn-brand w-full">
             {submitting ? 'Granting…' : 'Grant plan'}
           </button>
@@ -583,7 +583,7 @@ function CouponsTab({ plans }: { plans: AdminOverview['plans'] }) {
     }
   }
 
-  if (loading) return <div className="p-6 text-gray-500">Loading coupons…</div>
+  if (loading) return <div className="p-6 text-text-muted">Loading coupons…</div>
 
   return (
     <div className="space-y-4">
@@ -604,7 +604,7 @@ function CouponsTab({ plans }: { plans: AdminOverview['plans'] }) {
         />
       )}
 
-      {error && <div className="p-3 bg-red-50 text-red-700 dark:text-red-300 rounded-lg text-sm">{error}</div>}
+      {error && <div className="p-3 bg-danger-light text-danger dark:text-red-300 rounded-lg text-sm">{error}</div>}
 
       <div className="glass-card">
         {/* Mobile: stacked cards */}
@@ -620,24 +620,24 @@ function CouponsTab({ plans }: { plans: AdminOverview['plans'] }) {
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                  <div className="text-gray-500">Plan</div>
+                  <div className="text-text-muted">Plan</div>
                   <div className="text-end truncate">
-                    {c.plan_name_he} <span className="text-gray-400">({c.plan_id})</span>
+                    {c.plan_name_he} <span className="text-text-muted">({c.plan_id})</span>
                   </div>
-                  <div className="text-gray-500">Days</div>
+                  <div className="text-text-muted">Days</div>
                   <div className="text-end tabular-nums">{c.duration_days}</div>
-                  <div className="text-gray-500">Used / cap</div>
+                  <div className="text-text-muted">Used / cap</div>
                   <div className="text-end tabular-nums">
                     {c.redemption_count}/{c.max_redemptions ?? '∞'}
                   </div>
-                  <div className="text-gray-500">Valid until</div>
-                  <div className="text-end text-gray-600">
+                  <div className="text-text-muted">Valid until</div>
+                  <div className="text-end text-text-secondary">
                     {c.valid_until ? new Date(c.valid_until).toLocaleDateString('en-GB') : '—'}
                   </div>
                   {c.notes && (
                     <>
-                      <div className="text-gray-500">Notes</div>
-                      <div className="text-end text-gray-600 truncate" title={c.notes}>
+                      <div className="text-text-muted">Notes</div>
+                      <div className="text-end text-text-secondary truncate" title={c.notes}>
                         {c.notes}
                       </div>
                     </>
@@ -661,7 +661,7 @@ function CouponsTab({ plans }: { plans: AdminOverview['plans'] }) {
             )
           })}
           {coupons.length === 0 && (
-            <li className="p-6 text-center text-sm text-gray-500">
+            <li className="p-6 text-center text-sm text-text-muted">
               No coupons yet — tap "New coupon" to mint one.
             </li>
           )}
@@ -670,7 +670,7 @@ function CouponsTab({ plans }: { plans: AdminOverview['plans'] }) {
         {/* Desktop: table */}
         <div className="hidden md:block admin-table-wrap">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50">
+            <thead className="bg-surface-soft">
               <tr>
                 <th className="text-left p-3">Code</th>
                 <th className="text-left p-3">Plan</th>
@@ -686,9 +686,9 @@ function CouponsTab({ plans }: { plans: AdminOverview['plans'] }) {
               {coupons.map((c) => {
                 const status = couponStatus(c)
                 return (
-                  <tr key={c.id} className="border-t hover:bg-gray-50">
+                  <tr key={c.id} className="border-t hover:bg-surface-soft">
                     <td className="p-3 font-mono text-xs">{c.code}</td>
-                    <td className="p-3">{c.plan_name_he} <span className="text-gray-400">({c.plan_id})</span></td>
+                    <td className="p-3">{c.plan_name_he} <span className="text-text-muted">({c.plan_id})</span></td>
                     <td className="p-3 text-right">{c.duration_days}</td>
                     <td className="p-3 text-right">
                       {c.redemption_count}/{c.max_redemptions ?? '∞'}
@@ -696,10 +696,10 @@ function CouponsTab({ plans }: { plans: AdminOverview['plans'] }) {
                     <td className="p-3">
                       <span className={statusColor(status)}>{status}</span>
                     </td>
-                    <td className="p-3 text-xs text-gray-500">
+                    <td className="p-3 text-xs text-text-muted">
                       {c.valid_until ? new Date(c.valid_until).toLocaleDateString('en-GB') : '—'}
                     </td>
-                    <td className="p-3 text-xs text-gray-500 max-w-xs truncate" title={c.notes}>
+                    <td className="p-3 text-xs text-text-muted max-w-xs truncate" title={c.notes}>
                       {c.notes || '—'}
                     </td>
                     <td className="p-3 text-right space-x-2">
@@ -718,7 +718,7 @@ function CouponsTab({ plans }: { plans: AdminOverview['plans'] }) {
               })}
               {coupons.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-gray-500">
+                  <td colSpan={8} className="p-6 text-center text-text-muted">
                     No coupons yet — click "New coupon" to mint one.
                   </td>
                 </tr>
@@ -749,12 +749,12 @@ function couponStatus(c: AdminCouponRow): 'active' | 'disabled' | 'expired' | 'e
 
 function statusColor(s: string): string {
   switch (s) {
-    case 'active': return 'text-green-600 font-semibold'
-    case 'disabled': return 'text-gray-400'
-    case 'expired': return 'text-red-600'
-    case 'exhausted': return 'text-amber-600'
-    case 'pending': return 'text-blue-600'
-    default: return 'text-gray-500'
+    case 'active': return 'text-success font-semibold'
+    case 'disabled': return 'text-text-muted'
+    case 'expired': return 'text-danger'
+    case 'exhausted': return 'text-warning'
+    case 'pending': return 'text-info'
+    default: return 'text-text-muted'
   }
 }
 
@@ -811,7 +811,7 @@ function CouponCreateForm({
         <>
           <div className="text-sm">
             <strong>Created:</strong>{' '}
-            <code className="font-mono bg-green-50 text-green-800 dark:text-green-300 px-2 py-1 rounded">
+            <code className="font-mono bg-success-light text-success dark:text-green-300 px-2 py-1 rounded">
               {createdCode}
             </code>
             <button
@@ -840,12 +840,12 @@ function CouponCreateForm({
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 placeholder="auto-generated if blank"
-                className="input-glass w-full font-mono uppercase"
+                className="input-glass w-full px-3 py-2.5 text-sm font-mono uppercase"
               />
             </label>
             <label className="block">
               <div className="text-xs font-semibold mb-1">Plan</div>
-              <select value={planId} onChange={(e) => setPlanId(e.target.value)} className="input-glass w-full">
+              <select value={planId} onChange={(e) => setPlanId(e.target.value)} className="input-glass w-full px-3 py-2.5 text-sm appearance-none">
                 {plans.map((p) => (
                   <option key={p.plan_id} value={p.plan_id}>
                     {p.plan_id} — {p.name_he}
@@ -861,7 +861,7 @@ function CouponCreateForm({
                 max={3650}
                 value={durationDays}
                 onChange={(e) => setDurationDays(Number(e.target.value))}
-                className="input-glass w-full"
+                className="input-glass w-full px-3 py-2.5 text-sm"
               />
             </label>
             <label className="block">
@@ -872,7 +872,7 @@ function CouponCreateForm({
                 value={maxRedemptions}
                 onChange={(e) => setMaxRedemptions(e.target.value)}
                 placeholder="unlimited"
-                className="input-glass w-full"
+                className="input-glass w-full px-3 py-2.5 text-sm"
               />
             </label>
             <label className="block">
@@ -881,7 +881,7 @@ function CouponCreateForm({
                 type="date"
                 value={validUntil}
                 onChange={(e) => setValidUntil(e.target.value)}
-                className="input-glass w-full"
+                className="input-glass w-full px-3 py-2.5 text-sm"
               />
             </label>
             <label className="flex items-center gap-2 mt-6">
@@ -899,11 +899,11 @@ function CouponCreateForm({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="input-glass w-full"
+              className="input-glass w-full px-3 py-2.5 text-sm"
               placeholder="Internal note — who/why this coupon was created"
             />
           </label>
-          {error && <div className="text-sm text-red-600 dark:text-red-300 bg-red-50 rounded-lg p-2">{error}</div>}
+          {error && <div className="text-sm text-danger dark:text-red-300 bg-danger-light rounded-lg p-2">{error}</div>}
           <button onClick={submit} disabled={submitting} className="btn-brand">
             {submitting ? 'Creating…' : 'Create coupon'}
           </button>
@@ -939,16 +939,16 @@ function RedemptionsModal({
           <h3 className="text-lg font-bold">
             Redemptions — <code className="font-mono text-base">{coupon.code}</code>
           </h3>
-          <button onClick={onClose} className="text-gray-500 text-2xl">×</button>
+          <button onClick={onClose} className="text-text-muted text-2xl">×</button>
         </div>
         {loading ? (
-          <div className="text-gray-500">Loading…</div>
+          <div className="text-text-muted">Loading…</div>
         ) : rows.length === 0 ? (
-          <div className="text-gray-500">No redemptions yet.</div>
+          <div className="text-text-muted">No redemptions yet.</div>
         ) : (
           <div className="admin-table-wrap">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50">
+              <thead className="bg-surface-soft">
                 <tr>
                   <th className="text-left p-2">User</th>
                   <th className="text-left p-2">Tenant</th>
@@ -961,11 +961,11 @@ function RedemptionsModal({
                   <tr key={r.id} className="border-t">
                     <td className="p-2">{r.user_email}</td>
                     <td className="p-2">{r.tenant_name}</td>
-                    <td className="p-2 text-xs text-gray-500">
+                    <td className="p-2 text-xs text-text-muted">
                       {new Date(r.period_start).toLocaleDateString('en-GB')} →{' '}
                       {new Date(r.period_end).toLocaleDateString('en-GB')}
                     </td>
-                    <td className="p-2 text-xs text-gray-500">
+                    <td className="p-2 text-xs text-text-muted">
                       {new Date(r.redeemed_at).toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem' })}
                     </td>
                   </tr>
@@ -989,7 +989,7 @@ function UsersTab({
   return (
     <div className="glass-card admin-table-wrap">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50">
+        <thead className="bg-surface-soft">
           <tr>
             <th className="text-left p-3">Email</th>
             <th className="text-left p-3">Name</th>
@@ -1003,7 +1003,7 @@ function UsersTab({
         </thead>
         <tbody>
           {users.map((u) => (
-            <tr key={u.id} className="border-t hover:bg-gray-50">
+            <tr key={u.id} className="border-t hover:bg-surface-soft">
               <td className="p-3">{u.email}</td>
               <td className="p-3">{u.full_name || '—'}</td>
               <td className="p-3 font-mono text-xs">{u.phone || '—'}</td>
@@ -1012,7 +1012,7 @@ function UsersTab({
                   className={
                     u.role === 'superadmin'
                       ? 'text-purple-600 font-semibold'
-                      : 'text-gray-600'
+                      : 'text-text-secondary'
                   }
                 >
                   {u.role}
@@ -1020,7 +1020,7 @@ function UsersTab({
               </td>
               <td className="p-3">{u.onboarding_status}</td>
               <td className="p-3 text-right">{u.agent_count}</td>
-              <td className="p-3 text-xs text-gray-500">{fmtDate(u.created_at)}</td>
+              <td className="p-3 text-xs text-text-muted">{fmtDate(u.created_at)}</td>
               <td className="p-3 text-right">
                 <button onClick={() => onPromote(u)} className="btn-secondary btn-sm">
                   {u.role === 'superadmin' ? 'Demote' : 'Promote'}
@@ -1038,7 +1038,7 @@ function PlansTab({ plans }: { plans: AdminOverview['plans'] }) {
   return (
     <div className="glass-card admin-table-wrap">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50">
+        <thead className="bg-surface-soft">
           <tr>
             <th className="text-left p-3">Plan</th>
             <th className="text-left p-3">Hebrew</th>
@@ -1188,8 +1188,8 @@ function StatsTab() {
     return () => clearInterval(id)
   }, [])
 
-  if (err) return <div className="p-6 text-red-600">Error: {err}</div>
-  if (!data) return <div className="p-6 text-gray-500">Loading…</div>
+  if (err) return <div className="p-6 text-danger">Error: {err}</div>
+  if (!data) return <div className="p-6 text-text-muted">Loading…</div>
 
   return (
     <div className="space-y-6">
@@ -1232,7 +1232,7 @@ function InfoTip({
         role="button"
         tabIndex={0}
         aria-label={text}
-        className="cursor-help opacity-60 hover:opacity-100 focus:opacity-100 focus:outline-none select-none text-gray-400 text-[12px] leading-none"
+        className="cursor-help opacity-60 hover:opacity-100 focus:opacity-100 focus:outline-none select-none text-text-muted text-[12px] leading-none"
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
         onFocus={() => setOpen(true)}
@@ -1267,15 +1267,15 @@ function InfoTip({
 }
 
 function colorForPct(pct: number, yellow: number, red: number): string {
-  if (pct >= red) return 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10'
-  if (pct >= yellow) return 'text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-500/10'
-  return 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10'
+  if (pct >= red) return 'text-danger dark:text-red-400 bg-danger-light dark:bg-danger/10'
+  if (pct >= yellow) return 'text-warning dark:text-yellow-400 bg-warning-light dark:bg-warning/10'
+  return 'text-success dark:text-green-400 bg-success-light dark:bg-success/10'
 }
 
 function barColor(pct: number, yellow: number, red: number): string {
-  if (pct >= red) return 'bg-red-500'
-  if (pct >= yellow) return 'bg-yellow-500'
-  return 'bg-green-500'
+  if (pct >= red) return 'bg-danger'
+  if (pct >= yellow) return 'bg-warning'
+  return 'bg-success'
 }
 
 function MetricTile({
@@ -1322,8 +1322,8 @@ function LiveCard({ data }: { data: VmStatsResponse }) {
   if (!live) {
     return (
       <div className="glass-card p-6">
-        <div className="text-red-600">VM stats unreachable: {data.live_error}</div>
-        <div className="text-xs text-gray-500 mt-2">
+        <div className="text-danger">VM stats unreachable: {data.live_error}</div>
+        <div className="text-xs text-text-muted mt-2">
           Make sure vm-stats systemd service is running on openclaw-prod and APP_VM_STATS_TOKEN
           matches.
         </div>
@@ -1342,9 +1342,9 @@ function LiveCard({ data }: { data: VmStatsResponse }) {
     <div className="glass-card p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold">
-          Live — <span className="font-mono text-sm text-gray-600">{live.hostname}</span>
+          Live — <span className="font-mono text-sm text-text-secondary">{live.hostname}</span>
         </h2>
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-text-muted">
           up {uptimeDays}d {uptimeHours}h · updates every 10s
         </div>
       </div>
@@ -1484,14 +1484,14 @@ function UsageTile({
 }) {
   return (
     <div className="rounded-xl p-4 bg-surface border border-border-light shadow-sm">
-      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
+      <div className="text-xs font-semibold uppercase tracking-wide text-text-muted flex items-center gap-1.5">
         <span>{label}</span>
         {info && <InfoTip text={info} />}
       </div>
       <div className="text-2xl font-bold mt-1" style={{ color: accent }}>
         {value}
       </div>
-      {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
+      {sub && <div className="text-xs text-text-muted mt-1">{sub}</div>}
     </div>
   )
 }
@@ -1499,7 +1499,7 @@ function UsageTile({
 function TodayUsageTotals({ totals }: { totals: VmStatsResponse['today_totals'] }) {
   if (!totals || totals.requests === 0) {
     return (
-      <div className="glass-card p-6 text-sm text-gray-500">
+      <div className="glass-card p-6 text-sm text-text-muted">
         No LLM or search activity in the last 24 hours.
       </div>
     )
@@ -1511,7 +1511,7 @@ function TodayUsageTotals({ totals }: { totals: VmStatsResponse['today_totals'] 
     <div className="glass-card p-6">
       <div className="flex items-baseline justify-between mb-4">
         <h2 className="text-xl font-bold">Usage — last 24 hours</h2>
-        <div className="text-xs text-gray-500">via agentleh-meter</div>
+        <div className="text-xs text-text-muted">via agentleh-meter</div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <UsageTile
@@ -1561,7 +1561,7 @@ function TodayUsageTotals({ totals }: { totals: VmStatsResponse['today_totals'] 
 function CostByKindChart({ hours }: { hours: VmStatsResponse['cost_by_kind_per_hour'] }) {
   if (hours.length === 0) {
     return (
-      <div className="glass-card p-6 text-sm text-gray-500">
+      <div className="glass-card p-6 text-sm text-text-muted">
         No cost data in the last 24 hours.
       </div>
     )
@@ -1582,7 +1582,7 @@ function CostByKindChart({ hours }: { hours: VmStatsResponse['cost_by_kind_per_h
           <h3 className="text-base font-semibold">Cost by kind — last 24h</h3>
           <InfoTip text="Per-hour stacked cost split between LLM (chat completions, per-token), grounding search (per-query, ~$14/1k on Gemini 3), and memory-search embeddings (per-token on gemini-embedding-001, ~$0.15/Mtok). Grounding search is usually the biggest cost lever." />
         </div>
-        <div className="text-xs text-gray-600">
+        <div className="text-xs text-text-secondary">
           <span className="font-mono font-semibold" style={{ color: CHART_COLORS.llm }}>${totalLlm.toFixed(4)}</span>
           {' '}LLM ·{' '}
           <span className="font-mono font-semibold" style={{ color: CHART_COLORS.search }}>${totalSearch.toFixed(4)}</span>
@@ -1623,7 +1623,7 @@ function CostByKindChart({ hours }: { hours: VmStatsResponse['cost_by_kind_per_h
 function TokensThroughputChart({ hours }: { hours: VmStatsResponse['tokens_per_hour'] }) {
   if (hours.length === 0) {
     return (
-      <div className="glass-card p-6 text-sm text-gray-500">
+      <div className="glass-card p-6 text-sm text-text-muted">
         No token data in the last 24 hours.
       </div>
     )
@@ -1644,7 +1644,7 @@ function TokensThroughputChart({ hours }: { hours: VmStatsResponse['tokens_per_h
           <h3 className="text-base font-semibold">Token throughput — last 24h</h3>
           <InfoTip text="Per-hour input vs output tokens for LLM calls. Watch the gap — input climbing without output climbing means context bloat (compaction failing or runaway memory)." />
         </div>
-        <div className="text-xs text-gray-600">
+        <div className="text-xs text-text-secondary">
           ratio in/out <span className="font-mono font-semibold">{ratio}x</span>
         </div>
       </div>
@@ -1691,7 +1691,7 @@ function ModelBreakdownCard({ rows }: { rows: VmStatsResponse['model_breakdown_7
     return (
       <div className="glass-card p-6">
         <h3 className="text-base font-semibold mb-3">Cost by model — last 7 days</h3>
-        <div className="text-sm text-gray-500">No model usage in the last 7 days.</div>
+        <div className="text-sm text-text-muted">No model usage in the last 7 days.</div>
       </div>
     )
   }
@@ -1718,7 +1718,7 @@ function ModelBreakdownCard({ rows }: { rows: VmStatsResponse['model_breakdown_7
           <h3 className="text-base font-semibold">Cost by model — last 7 days</h3>
           <InfoTip text="Per-(model, kind) spend over the last 7 days. Bar color encodes kind: blue = LLM/chat, green = grounding search, amber = voice/TTS, pink = memory-search embeddings. Any unexpected model at the top means an accidental fallback — fix it before it compounds." />
         </div>
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-text-muted">
           <span className="inline-block w-2 h-2 rounded-full mr-1 align-middle" style={{ background: CHART_COLORS.llm }} />LLM
           <span className="inline-block w-2 h-2 rounded-full mr-1 ml-2 align-middle" style={{ background: CHART_COLORS.search }} />Search
           <span className="inline-block w-2 h-2 rounded-full mr-1 ml-2 align-middle" style={{ background: CHART_COLORS.tts }} />TTS
@@ -1776,7 +1776,7 @@ function ModelBreakdownCard({ rows }: { rows: VmStatsResponse['model_breakdown_7
       </ResponsiveContainer>
       <div className="admin-table-wrap mt-3">
       <table className="w-full text-xs">
-        <thead className="text-gray-500">
+        <thead className="text-text-muted">
           <tr>
             <th className="text-left p-1">Model</th>
             <th className="text-left p-1">Kind</th>
@@ -1801,8 +1801,8 @@ function ModelBreakdownCard({ rows }: { rows: VmStatsResponse['model_breakdown_7
                 </span>
               </td>
               <td className="p-1 text-right font-mono">${m.usd.toFixed(4)}</td>
-              <td className="p-1 text-right text-gray-500">{m.events.toLocaleString()}</td>
-              <td className="p-1 text-right text-gray-500">{m.tokens.toLocaleString()}</td>
+              <td className="p-1 text-right text-text-muted">{m.events.toLocaleString()}</td>
+              <td className="p-1 text-right text-text-muted">{m.tokens.toLocaleString()}</td>
             </tr>
           ))}
         </tbody>
@@ -1815,7 +1815,7 @@ function ModelBreakdownCard({ rows }: { rows: VmStatsResponse['model_breakdown_7
 function HistoryCharts({ history }: { history: VmStatsResponse['history'] }) {
   if (history.length === 0) {
     return (
-      <div className="glass-card p-6 text-sm text-gray-500">
+      <div className="glass-card p-6 text-sm text-text-muted">
         No historical samples yet. The vm-stats-sampler writes one row every 60s —
         data starts accumulating right after the timer is enabled.
       </div>
@@ -1833,11 +1833,11 @@ function HistoryCharts({ history }: { history: VmStatsResponse['history'] }) {
     <div className="glass-card p-6">
       <div className="flex items-baseline justify-between mb-3">
         <h3 className="text-base font-semibold">VM history — last 24 hours</h3>
-        <span className="text-xs text-gray-500">{history.length} samples · 60s cadence</span>
+        <span className="text-xs text-text-muted">{history.length} samples · 60s cadence</span>
       </div>
       <div className="space-y-6">
         <div>
-          <div className="text-xs text-gray-600 mb-2">CPU · RAM · Disk (%)</div>
+          <div className="text-xs text-text-secondary mb-2">CPU · RAM · Disk (%)</div>
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={histData} margin={CHART_MARGIN}>
               <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
@@ -1866,7 +1866,7 @@ function HistoryCharts({ history }: { history: VmStatsResponse['history'] }) {
           </ResponsiveContainer>
         </div>
         <div>
-          <div className="text-xs text-gray-600 mb-2">Running containers (agents only)</div>
+          <div className="text-xs text-text-secondary mb-2">Running containers (agents only)</div>
           <ResponsiveContainer width="100%" height={140}>
             <AreaChart data={histData} margin={CHART_MARGIN}>
               <defs>
@@ -1903,7 +1903,7 @@ function HistoryCharts({ history }: { history: VmStatsResponse['history'] }) {
 function TrafficChart({ events }: { events: VmStatsResponse['events_per_hour'] }) {
   if (events.length === 0) {
     return (
-      <div className="glass-card p-6 text-sm text-gray-500">
+      <div className="glass-card p-6 text-sm text-text-muted">
         No meter traffic in the last 24 hours.
       </div>
     )
@@ -1922,7 +1922,7 @@ function TrafficChart({ events }: { events: VmStatsResponse['events_per_hour'] }
           <h3 className="text-base font-semibold">Meter traffic — last 24h</h3>
           <InfoTip text="Total request volume (bars, left axis) and total cost (line, right axis) per hour. Volume is the dominant signal; the line shows whether the cost is correlated." />
         </div>
-        <div className="text-xs text-gray-600">
+        <div className="text-xs text-text-secondary">
           <span className="font-mono font-semibold">{fmtCompactNumber(totalEvents)}</span> events ·{' '}
           <span className="font-mono font-semibold">${totalCost.toFixed(4)}</span>
         </div>
@@ -1972,7 +1972,7 @@ function TrafficChart({ events }: { events: VmStatsResponse['events_per_hour'] }
 function MeterLatencyCard({ latency }: { latency: VmStatsResponse['meter_latency_1h'] }) {
   if (!latency || latency.n === 0) {
     return (
-      <div className="glass-card p-6 text-sm text-gray-500">
+      <div className="glass-card p-6 text-sm text-text-muted">
         No meter activity in the last hour.
       </div>
     )
@@ -1990,7 +1990,7 @@ function MeterLatencyCard({ latency }: { latency: VmStatsResponse['meter_latency
           <h3 className="text-base font-semibold">Meter latency — last 1h</h3>
           <InfoTip text="Round-trip latency through agentleh-meter for successful upstream calls (status 200) over the last hour. p50 = median, p99 = tail. Sustained p99 above 5s usually means the upstream Google API is degraded." />
         </div>
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-text-muted">
           n = <span className="font-mono font-semibold">{latency.n.toLocaleString()}</span>
         </div>
       </div>
@@ -2039,7 +2039,7 @@ function TopAgentsCard({ agents }: { agents: VmStatsResponse['top_agents'] }) {
     return (
       <div className="glass-card p-6">
         <h3 className="text-base font-semibold mb-3">Top agents — last 30 days</h3>
-        <div className="text-sm text-gray-500">No usage yet.</div>
+        <div className="text-sm text-text-muted">No usage yet.</div>
       </div>
     )
   }
@@ -2061,7 +2061,7 @@ function TopAgentsCard({ agents }: { agents: VmStatsResponse['top_agents'] }) {
           <h3 className="text-base font-semibold">Top agents — last 30 days</h3>
           <InfoTip text="Top 5 agents by total cost over the last 30 days. The bar shows $ spend; the table below has events and tokens for each." />
         </div>
-        <div className="text-xs text-gray-500">by spend</div>
+        <div className="text-xs text-text-muted">by spend</div>
       </div>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 72, left: 0, bottom: 0 }}>
@@ -2103,7 +2103,7 @@ function TopAgentsCard({ agents }: { agents: VmStatsResponse['top_agents'] }) {
       </ResponsiveContainer>
       <div className="admin-table-wrap mt-3">
       <table className="w-full text-xs">
-        <thead className="text-gray-500">
+        <thead className="text-text-muted">
           <tr>
             <th className="text-left p-1">Agent</th>
             <th className="text-right p-1">Spend</th>
@@ -2116,8 +2116,8 @@ function TopAgentsCard({ agents }: { agents: VmStatsResponse['top_agents'] }) {
             <tr key={a.agent} className="border-t">
               <td className="p-1 font-mono">{a.agent}</td>
               <td className="p-1 text-right font-mono">${a.usd.toFixed(4)}</td>
-              <td className="p-1 text-right text-gray-500">{a.events}</td>
-              <td className="p-1 text-right text-gray-500">{a.tokens.toLocaleString()}</td>
+              <td className="p-1 text-right text-text-muted">{a.events}</td>
+              <td className="p-1 text-right text-text-muted">{a.tokens.toLocaleString()}</td>
             </tr>
           ))}
         </tbody>
@@ -2138,7 +2138,7 @@ function ContainersCard({
       <div className="admin-table-wrap">
       <table className="w-full text-xs">
         <thead>
-          <tr className="text-left text-gray-500">
+          <tr className="text-left text-text-muted">
             <th className="p-1">Name</th>
             <th className="p-1">Image</th>
             <th className="p-1">State</th>
@@ -2149,21 +2149,21 @@ function ContainersCard({
           {containers.map((c) => (
             <tr key={c.name} className="border-t">
               <td className="p-1 font-mono">{c.name}</td>
-              <td className="p-1 text-gray-500 truncate max-w-xs">{c.image}</td>
+              <td className="p-1 text-text-muted truncate max-w-xs">{c.image}</td>
               <td className="p-1">
                 <span
                   className={
                     c.state === 'running'
-                      ? 'text-green-600'
+                      ? 'text-success'
                       : c.state === 'exited'
-                        ? 'text-red-600'
-                        : 'text-gray-500'
+                        ? 'text-danger'
+                        : 'text-text-muted'
                   }
                 >
                   {c.state}
                 </span>
               </td>
-              <td className="p-1 text-gray-500">{c.status}</td>
+              <td className="p-1 text-text-muted">{c.status}</td>
             </tr>
           ))}
         </tbody>
@@ -2192,12 +2192,12 @@ function AgentDetailModal({
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold">Agent Detail</h2>
-            <button onClick={onClose} className="text-gray-500 text-2xl">
+            <button onClick={onClose} className="text-text-muted text-2xl">
               ×
             </button>
           </div>
           {!detail ? (
-            <div className="text-gray-500">Loading…</div>
+            <div className="text-text-muted">Loading…</div>
           ) : (
             <>
               <div className="space-y-2 mb-4 text-sm">
@@ -2217,7 +2217,7 @@ function AgentDetailModal({
               <h3 className="font-semibold mt-4 mb-2">Recent usage events</h3>
               <div className="admin-table-wrap">
                 <table className="w-full text-xs">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-surface-soft">
                     <tr>
                       <th className="text-left p-2">Time</th>
                       <th className="text-left p-2">Kind</th>
@@ -2233,7 +2233,7 @@ function AgentDetailModal({
                   <tbody>
                     {detail.recent_events.map((e: UsageEvent) => (
                       <tr key={e.event_id} className="border-t">
-                        <td className="p-2 text-gray-500">{fmtDate(e.ts)}</td>
+                        <td className="p-2 text-text-muted">{fmtDate(e.ts)}</td>
                         <td className="p-2">{e.kind}</td>
                         <td className="p-2 font-mono text-xs">{e.model}</td>
                         <td className="p-2 text-right">{e.input_tokens ?? '—'}</td>
@@ -2247,8 +2247,8 @@ function AgentDetailModal({
                           <span
                             className={
                               e.upstream_status === 200
-                                ? 'text-green-600'
-                                : 'text-red-600'
+                                ? 'text-success'
+                                : 'text-danger'
                             }
                           >
                             {e.upstream_status}
@@ -2261,7 +2261,7 @@ function AgentDetailModal({
               </div>
 
               {detail.spend && 'error' in detail.spend && (
-                <div className="mt-4 p-3 bg-yellow-50 text-yellow-800 dark:text-yellow-300 text-sm rounded">
+                <div className="mt-4 p-3 bg-warning-light text-warning dark:text-yellow-300 text-sm rounded">
                   Meter unreachable: {String(detail.spend.error)}
                 </div>
               )}
@@ -2295,14 +2295,14 @@ function TenantsTab() {
 
   if (error) {
     return (
-      <div className="text-red-600 py-6">
+      <div className="text-danger py-6">
         {t({ he: 'שגיאה: ', en: 'Error: ' })}{error}
       </div>
     )
   }
   if (rows === null) {
     return (
-      <div className="text-gray-500 py-6">
+      <div className="text-text-muted py-6">
         {t({ he: 'טוען…', en: 'Loading…' })}
       </div>
     )
@@ -2331,61 +2331,61 @@ function TenantsTab() {
           placeholder={t({ he: 'סינון לפי שם / אימייל / slug…', en: 'Filter by name / email / slug…' })}
           className="input-glass w-full max-w-sm px-3 py-2 text-sm"
         />
-        <span className="text-sm text-gray-500 shrink-0">
+        <span className="text-sm text-text-muted shrink-0">
           {visible.length === rows.length
             ? t({ he: `${rows.length} סביבות`, en: `${rows.length} tenants` })
             : t({ he: `${visible.length} מתוך ${rows.length}`, en: `${visible.length} of ${rows.length}` })}
         </span>
       </div>
 
-      <div className="admin-table-wrap rounded-xl border border-gray-200">
+      <div className="admin-table-wrap rounded-xl border border-border-light">
         <table className="min-w-full text-sm">
-          <thead className="bg-gray-50">
+          <thead className="bg-surface-soft">
             <tr>
-              <th className="text-start p-3 font-medium text-gray-700">{t({ he: 'שם', en: 'Name' })}</th>
-              <th className="text-start p-3 font-medium text-gray-700">{t({ he: 'בעלים', en: 'Owner' })}</th>
-              <th className="text-start p-3 font-medium text-gray-700">{t({ he: 'תוכנית', en: 'Plan' })}</th>
-              <th className="text-end p-3 font-medium text-gray-700">{t({ he: 'חברים', en: 'Members' })}</th>
-              <th className="text-end p-3 font-medium text-gray-700">{t({ he: 'סוכנים', en: 'Agents' })}</th>
-              <th className="text-start p-3 font-medium text-gray-700">{t({ he: 'מצב חבילה', en: 'Sub status' })}</th>
-              <th className="text-start p-3 font-medium text-gray-700">{t({ he: 'תוקף עד', en: 'Period end' })}</th>
-              <th className="text-end p-3 font-medium text-gray-700"></th>
+              <th className="text-start p-3 font-medium text-text-primary">{t({ he: 'שם', en: 'Name' })}</th>
+              <th className="text-start p-3 font-medium text-text-primary">{t({ he: 'בעלים', en: 'Owner' })}</th>
+              <th className="text-start p-3 font-medium text-text-primary">{t({ he: 'תוכנית', en: 'Plan' })}</th>
+              <th className="text-end p-3 font-medium text-text-primary">{t({ he: 'חברים', en: 'Members' })}</th>
+              <th className="text-end p-3 font-medium text-text-primary">{t({ he: 'סוכנים', en: 'Agents' })}</th>
+              <th className="text-start p-3 font-medium text-text-primary">{t({ he: 'מצב חבילה', en: 'Sub status' })}</th>
+              <th className="text-start p-3 font-medium text-text-primary">{t({ he: 'תוקף עד', en: 'Period end' })}</th>
+              <th className="text-end p-3 font-medium text-text-primary"></th>
             </tr>
           </thead>
           <tbody>
             {visible.map((r) => (
-              <tr key={r.id} className="border-t border-gray-100 hover:bg-gray-50">
+              <tr key={r.id} className="border-t border-gray-100 hover:bg-surface-soft">
                 <td className="p-3">
-                  <div className="font-medium text-gray-900">{r.name}</div>
-                  <code className="text-xs text-gray-500 font-mono">{r.slug}</code>
+                  <div className="font-medium text-text-primary">{r.name}</div>
+                  <code className="text-xs text-text-muted font-mono">{r.slug}</code>
                 </td>
                 <td className="p-3">
-                  <div className="text-gray-900">{r.owner_full_name || r.owner_email || `#${r.owner_user_id}`}</div>
+                  <div className="text-text-primary">{r.owner_full_name || r.owner_email || `#${r.owner_user_id}`}</div>
                   {r.owner_full_name && r.owner_email && (
-                    <div className="text-xs text-gray-500">{r.owner_email}</div>
+                    <div className="text-xs text-text-muted">{r.owner_email}</div>
                   )}
                 </td>
-                <td className="p-3 text-gray-700">
+                <td className="p-3 text-text-primary">
                   {r.plan_id ? (
                     <span>{r.plan_name_he || r.plan_id}</span>
                   ) : (
-                    <span className="text-gray-400 italic">
+                    <span className="text-text-muted italic">
                       {t({ he: 'אין תוכנית פעילה', en: 'No active plan' })}
                     </span>
                   )}
                 </td>
                 <td className="p-3 text-end tabular-nums">{r.member_count}</td>
                 <td className="p-3 text-end tabular-nums">{r.agent_count}</td>
-                <td className="p-3 text-gray-700">
+                <td className="p-3 text-text-primary">
                   {r.subscription_status || '—'}
                 </td>
-                <td className="p-3 text-gray-700 tabular-nums" dir="ltr">
+                <td className="p-3 text-text-primary tabular-nums" dir="ltr">
                   {fmtDate(r.subscription_period_end)}
                 </td>
                 <td className="p-3 text-end">
                   <a
                     href={`/tenants/${r.id}`}
-                    className="text-blue-600 hover:underline text-sm"
+                    className="text-info hover:underline text-sm"
                   >
                     {t({ he: 'פתח/י', en: 'Open' })}
                   </a>
@@ -2394,7 +2394,7 @@ function TenantsTab() {
             ))}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={8} className="p-6 text-center text-gray-500">
+                <td colSpan={8} className="p-6 text-center text-text-muted">
                   {t({ he: 'אין סביבות תואמות', en: 'No matching tenants' })}
                 </td>
               </tr>
@@ -2403,7 +2403,7 @@ function TenantsTab() {
         </table>
       </div>
 
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-text-muted">
         {t({
           he: 'לחיצה על "פתח" מובילה לסביבת העבודה — אתה תראה אותה כפי שחבר רגיל רואה אותה (עם הרשאות superadmin).',
           en: '"Open" navigates into the workspace — you see it as a regular member would, with your superadmin overlay.',

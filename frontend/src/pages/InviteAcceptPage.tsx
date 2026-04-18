@@ -95,8 +95,8 @@ export default function InviteAcceptPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-500">
+      <div className="min-h-screen flex items-center justify-center bg-surface-soft">
+        <div className="text-text-muted">
           {t({ he: 'טוען הזמנה…', en: 'Loading invite…' })}
         </div>
       </div>
@@ -106,13 +106,13 @@ export default function InviteAcceptPage() {
   if (error && !preview) {
     return (
       <div className="min-h-screen flex items-center justify-center section-gradient p-6">
-        <div className="glass-card-elevated rounded-xl border border-red-200 p-8 max-w-md w-full text-center">
-          <div className="text-red-600 text-3xl mb-3">⚠</div>
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">
+        <div className="glass-card-elevated rounded-xl border border-danger/40 p-8 max-w-md w-full text-center">
+          <div className="text-danger text-3xl mb-3">⚠</div>
+          <h1 className="text-xl font-semibold text-text-primary mb-2">
             {t({ he: 'לא הצלחנו לקבל את ההזמנה', en: "Couldn't accept invite" })}
           </h1>
-          <p className="text-sm text-gray-600 mb-6">{error}</p>
-          <a href="/" className="text-indigo-600 text-sm hover:underline">
+          <p className="text-sm text-text-secondary mb-6">{error}</p>
+          <a href="/" className="text-brand text-sm hover:underline">
             {t({ he: 'חזרה ל-Agentiko', en: 'Back to Agentiko' })}
           </a>
         </div>
@@ -123,12 +123,12 @@ export default function InviteAcceptPage() {
   if (accepted) {
     return (
       <div className="min-h-screen flex items-center justify-center section-gradient p-6">
-        <div className="glass-card-elevated rounded-xl border border-green-200 p-8 max-w-md w-full text-center">
-          <div className="text-green-600 text-4xl mb-3">✓</div>
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">
+        <div className="glass-card-elevated rounded-xl border border-success/40 p-8 max-w-md w-full text-center">
+          <div className="text-success text-4xl mb-3">✓</div>
+          <h1 className="text-xl font-semibold text-text-primary mb-2">
             {t({ he: 'הצטרפת!', en: "You're in!" })}
           </h1>
-          <p className="text-sm text-gray-600 mb-6">
+          <p className="text-sm text-text-secondary mb-6">
             {t({ he: 'ברוכ/ה הבא/ה ל-', en: 'Welcome to ' })}
             <span className="font-medium" dir="auto">
               {accepted.tenant_name}
@@ -137,7 +137,7 @@ export default function InviteAcceptPage() {
           </p>
           <button
             onClick={() => (window.location.href = `/tenants/${accepted.tenant_id}`)}
-            className="w-full px-4 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+            className="w-full px-4 py-2 text-white bg-brand rounded-lg hover:bg-brand-dark"
           >
             {t({ he: 'לסביבת העבודה', en: 'Go to workspace' })}
           </button>
@@ -158,11 +158,11 @@ export default function InviteAcceptPage() {
     return (
       <div className="min-h-screen flex items-center justify-center section-gradient p-6">
         <div className="glass-card-elevated rounded-xl p-8 max-w-md w-full text-center">
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">
+          <h1 className="text-xl font-semibold text-text-primary mb-2">
             {t({ he: 'ההזמנה לא זמינה', en: 'Invite unavailable' })}
           </h1>
-          <p className="text-sm text-gray-600 mb-6">{label}</p>
-          <a href="/" className="text-indigo-600 text-sm hover:underline">
+          <p className="text-sm text-text-secondary mb-6">{label}</p>
+          <a href="/" className="text-brand text-sm hover:underline">
             {t({ he: 'חזרה ל-Agentiko', en: 'Back to Agentiko' })}
           </a>
         </div>
@@ -171,26 +171,26 @@ export default function InviteAcceptPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+    <div className="min-h-screen flex items-center justify-center bg-surface-soft p-6">
       <div className="glass-card-elevated rounded-xl p-8 max-w-md w-full">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-text-primary">
             {t({ he: 'הוזמנת להצטרף', en: "You're invited" })}
           </h1>
-          <p className="text-sm text-gray-500 mt-2">
+          <p className="text-sm text-text-muted mt-2">
             <span className="font-medium" dir="auto">
               {preview.inviter_name}
             </span>{' '}
             {t({ he: 'הזמינ/ה אותך להצטרף ל-', en: 'invited you to join' })}
           </p>
-          <p className="text-lg font-semibold text-indigo-600 mt-1" dir="auto">
+          <p className="text-lg font-semibold text-brand mt-1" dir="auto">
             {preview.tenant_name}
           </p>
-          <p className="text-xs text-gray-500 mt-2">
+          <p className="text-xs text-text-muted mt-2">
             {t({ he: 'בתור ', en: 'as ' })}
             <span className="font-medium uppercase">{t(roleLabel(preview.role))}</span>
           </p>
-          <p className="text-xs text-gray-400 mt-3">
+          <p className="text-xs text-text-muted mt-3">
             {t({ he: 'ההזמנה נשלחה אל ', en: 'Sent to ' })}
             <span className="font-medium" dir="ltr">
               {preview.email}
@@ -199,14 +199,14 @@ export default function InviteAcceptPage() {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 dark:text-red-300">
+          <div className="mb-4 p-3 rounded-lg bg-danger-light border border-danger/40 text-sm text-danger dark:text-red-300">
             {error}
           </div>
         )}
 
         {!session ? (
           <>
-            <p className="text-sm text-gray-600 mb-4 text-center">
+            <p className="text-sm text-text-secondary mb-4 text-center">
               {t({
                 he: 'התחבר/י כדי לקבל את ההזמנה:',
                 en: 'Sign in to accept the invite:',
@@ -222,14 +222,14 @@ export default function InviteAcceptPage() {
                   options: { redirectTo: window.location.href },
                 })
               }
-              className="w-full px-4 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 mb-2"
+              className="w-full px-4 py-2 text-white bg-brand rounded-lg hover:bg-brand-dark mb-2"
             >
               {t({ he: 'המשך עם Google', en: 'Continue with Google' })}
             </button>
           </>
         ) : !emailsMatch ? (
           <>
-            <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900">
+            <div className="mb-4 p-3 rounded-lg bg-warning-light border border-warning/40 text-sm text-warning">
               <p className="font-medium mb-1">
                 {t({ he: 'חשבון לא נכון', en: 'Wrong account' })}
               </p>
@@ -250,7 +250,7 @@ export default function InviteAcceptPage() {
             </div>
             <button
               onClick={handleSwitchAccount}
-              className="w-full px-4 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+              className="w-full px-4 py-2 text-white bg-brand rounded-lg hover:bg-brand-dark"
             >
               {t({
                 he: 'התנתק/י והתחבר/י עם הכתובת הנכונה',
@@ -263,7 +263,7 @@ export default function InviteAcceptPage() {
             <button
               onClick={handleAccept}
               disabled={accepting}
-              className="w-full px-4 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-60"
+              className="w-full px-4 py-2 text-white bg-brand rounded-lg hover:bg-brand-dark disabled:opacity-60"
             >
               {accepting
                 ? t({ he: 'מקבל את ההזמנה…', en: 'Accepting…' })
@@ -271,7 +271,7 @@ export default function InviteAcceptPage() {
             </button>
             <button
               onClick={handleSwitchAccount}
-              className="w-full mt-2 px-4 py-2 text-gray-600 text-sm hover:text-gray-900"
+              className="w-full mt-2 px-4 py-2 text-text-secondary text-sm hover:text-text-primary"
             >
               {t({ he: 'להחליף חשבון', en: 'Switch account' })}
             </button>

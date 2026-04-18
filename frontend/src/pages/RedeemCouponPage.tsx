@@ -223,7 +223,7 @@ export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageP
           <select
             value={tenantId ?? ''}
             onChange={(e) => setTenantId(Number(e.target.value))}
-            className="input-glass w-full"
+            className="input-glass w-full px-4 py-3 appearance-none"
           >
             {ownedTenants.map((t) => (
               <option key={t.id} value={t.id}>
@@ -256,7 +256,7 @@ export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageP
       </div>
 
       {previewError && (
-        <div className="mb-5 p-3 rounded-xl bg-red-50 text-red-700 dark:text-red-300 text-[13px]">
+        <div className="mb-5 p-3 rounded-xl bg-danger-light text-danger dark:text-red-300 text-[13px]">
           {previewError}
         </div>
       )}
@@ -283,7 +283,7 @@ export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageP
             {fmtSchedule(preview)}
           </div>
           {preview.schedule.kind === 'upgrade_immediate' && (
-            <div className="text-[12px] text-amber-700 dark:text-amber-300 bg-amber-50 rounded-lg px-2 py-1 mt-2">
+            <div className="text-[12px] text-warning dark:text-amber-300 bg-warning-light rounded-lg px-2 py-1 mt-2">
               {t({
                 he: 'שים לב: הפעלת קופון זה תחליף את התוכנית הפעילה כעת באופן מיידי.',
                 en: 'Heads up: redeeming this coupon will replace your active plan immediately.',
@@ -299,7 +299,7 @@ export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageP
             </div>
           )}
           {preview.already_redeemed_by_user && (
-            <div className="text-[12px] text-red-700 dark:text-red-300 mt-2">
+            <div className="text-[12px] text-danger dark:text-red-300 mt-2">
               {t({ he: 'כבר השתמשת בקוד זה.', en: "You've already used this code." })}
             </div>
           )}
@@ -307,7 +307,7 @@ export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageP
       )}
 
       {redeemError && (
-        <div className="mb-5 p-3 rounded-xl bg-red-50 text-red-700 dark:text-red-300 text-[13px]">
+        <div className="mb-5 p-3 rounded-xl bg-danger-light text-danger dark:text-red-300 text-[13px]">
           {redeemError}
         </div>
       )}

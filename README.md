@@ -21,7 +21,7 @@ Browser ←→ Cloudflare DNS ←→ Global HTTPS LB ←→ Cloud Run agentleh-a
 ## Stack
 
 - **Backend**: Python 3.11, FastAPI, psycopg3, Dynaconf
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS 4 (Liquid Glass design system)
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS 4 (Liquid Glass design system — brand spec at [../BRAND.md](../BRAND.md))
 - **Auth**: Supabase Auth (Google OAuth + email/password), JWT verified backend-side (HS256)
 - **Database**: Cloud SQL Postgres 18 at `10.65.0.3` (private IP)
 - **Deployment**: Docker on Cloud Run (europe-west3), always-on `--no-cpu-throttling` prod, `min-instances=0` dev

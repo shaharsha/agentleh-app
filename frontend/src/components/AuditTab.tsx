@@ -92,7 +92,7 @@ export default function AuditTab({ tenantId }: { tenantId: number }) {
   }
   if (error) {
     return (
-      <div className="text-red-600 py-8 text-center">
+      <div className="text-danger py-8 text-center">
         {t({ he: 'שגיאה: ', en: 'Error: ' })}
         {error}
       </div>
@@ -158,7 +158,7 @@ export default function AuditTab({ tenantId }: { tenantId: number }) {
                   </button>
                   {isOpen && (
                     <pre
-                      className="mt-1.5 p-2 rounded-lg bg-gray-50 text-[11px] text-text-secondary overflow-x-auto"
+                      className="mt-1.5 p-2 rounded-lg bg-surface-soft text-[11px] text-text-secondary overflow-x-auto"
                       dir="ltr"
                     >
                       {JSON.stringify(ev.metadata, null, 2)}

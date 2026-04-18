@@ -397,7 +397,7 @@ export default function ChatPane({ tenantId, agentId, agentName }: ChatPaneProps
                 dir={bubbleDir}
                 className={[
                   'max-w-[75%] px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words',
-                  // Assistant bubbles: bg-gray-100 correctly inverts in
+                  // Assistant bubbles: bg-surface-soft correctly inverts in
                   // dark mode via the app's [data-theme="dark"] token
                   // remap (gray-100 becomes dark brown), with
                   // text-text-primary providing the matching foreground.
@@ -405,10 +405,10 @@ export default function ChatPane({ tenantId, agentId, agentName }: ChatPaneProps
                   // inversion — that token resolves to CREAM in dark
                   // mode, which is why the bubble looked washed out.
                   isSystem
-                    ? 'bg-yellow-100 text-yellow-900 text-xs'
+                    ? 'bg-warning-light text-warning text-xs'
                     : isUser
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-text-primary',
+                    ? 'bg-brand text-white'
+                    : 'bg-surface-soft text-text-primary',
                 ].join(' ')}
               >
                 {awaitingFirstToken ? <TypingIndicator /> : m.text}

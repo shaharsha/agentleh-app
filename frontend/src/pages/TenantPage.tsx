@@ -125,14 +125,14 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
 
   if (loading) {
     return (
-      <div className="p-8 text-gray-500">
+      <div className="p-8 text-text-muted">
         {t({ he: 'טוען סביבת עבודה…', en: 'Loading workspace…' })}
       </div>
     )
   }
   if (error) {
     return (
-      <div className="p-8 text-red-600">
+      <div className="p-8 text-danger">
         {t({ he: 'שגיאה: ', en: 'Error: ' })}
         {error}
       </div>
@@ -164,7 +164,7 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
       onClick={() => setTab(tab)}
       className={`snap-start shrink-0 px-4 py-3 min-h-[44px] text-sm font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
         activeTab === tab
-          ? 'border-indigo-600 text-indigo-600'
+          ? 'border-brand text-brand'
           : 'border-transparent text-text-muted hover:text-text-primary'
       }`}
     >
@@ -522,13 +522,13 @@ function DashboardTab({
     <div className="space-y-6">
       <div className="bg-surface border border-border rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-lg font-semibold text-text-primary">
             {t({ he: 'מנוי', en: 'Subscription' })}
           </h2>
           {isAdminOrOwner && (
             <button
               onClick={() => setShowRedeem(true)}
-              className="px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800"
+              className="px-3 py-1.5 text-sm font-medium text-brand hover:text-brand-dark"
             >
               {subscription
                 ? t({ he: 'נהל / שדרג', en: 'Manage / upgrade' })
@@ -539,36 +539,36 @@ function DashboardTab({
         {subscription ? (
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <div className="text-gray-500">{t({ he: 'תכנית', en: 'Plan' })}</div>
-              <div className="font-medium text-gray-900">
+              <div className="text-text-muted">{t({ he: 'תכנית', en: 'Plan' })}</div>
+              <div className="font-medium text-text-primary">
                 {t(planLabel(subscription.plan_id))}
               </div>
             </div>
             <div>
-              <div className="text-gray-500">{t({ he: 'סטטוס', en: 'Status' })}</div>
-              <div className="font-medium text-gray-900">
+              <div className="text-text-muted">{t({ he: 'סטטוס', en: 'Status' })}</div>
+              <div className="font-medium text-text-primary">
                 {t(statusLabel(subscription.status))}
               </div>
             </div>
             <div>
-              <div className="text-gray-500">
+              <div className="text-text-muted">
                 {t({ he: 'שימוש בתקופה הנוכחית', en: 'Used this period' })}
               </div>
-              <div className="font-medium text-gray-900">
+              <div className="font-medium text-text-primary">
                 {num(microsToUsd(subscription.used_micros))}{' / '}
                 {num(microsToUsd(subscription.base_allowance_micros))}
               </div>
             </div>
             <div>
-              <div className="text-gray-500">{t({ he: 'חריגה', en: 'Overage' })}</div>
-              <div className="font-medium text-gray-900">
+              <div className="text-text-muted">{t({ he: 'חריגה', en: 'Overage' })}</div>
+              <div className="font-medium text-text-primary">
                 {num(microsToUsd(subscription.overage_used_micros))}
               </div>
             </div>
           </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-text-muted">
               {t({
                 he: 'אין מנוי פעיל. כדי ליצור סוכנים יש להפעיל תוכנית באמצעות קוד קופון.',
                 en: 'No active subscription. Activate a plan with a coupon code to create agents.',
@@ -577,7 +577,7 @@ function DashboardTab({
             {isAdminOrOwner && (
               <button
                 onClick={() => setShowRedeem(true)}
-                className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                className="px-3 py-1.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark"
               >
                 {t({ he: 'הפעל תוכנית', en: 'Activate plan' })}
               </button>
@@ -599,13 +599,13 @@ function DashboardTab({
 
       <div className="bg-surface border border-border rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-lg font-semibold text-text-primary">
             {t({ he: 'סוכנים', en: 'Agents' })} ({agents.length})
           </h2>
           {isAdminOrOwner && subscription && (
             <button
               onClick={() => setShowNewAgent(!showNewAgent)}
-              className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+              className="px-3 py-1.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark"
             >
               {t({ he: 'סוכן חדש', en: 'New agent' })}
             </button>
@@ -613,7 +613,7 @@ function DashboardTab({
           {isAdminOrOwner && !subscription && (
             <button
               onClick={() => setShowRedeem(true)}
-              className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+              className="px-3 py-1.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark"
               title={t({
                 he: 'יש להפעיל תוכנית כדי ליצור סוכן',
                 en: 'Activate a plan to create an agent',
@@ -625,23 +625,23 @@ function DashboardTab({
         </div>
 
         {showNewAgent && isAdminOrOwner && subscription && (
-          <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+          <div className="mb-4 p-4 bg-surface-soft rounded-lg space-y-3">
             {provisioning ? (
               /* ── Real-time progress driven by backend NDJSON stream ── */
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm text-gray-700">
+                <div className="flex items-center justify-between text-sm text-text-primary">
                   <span className="font-medium">
                     {t({ he: 'מקים סוכן…', en: 'Creating agent…' })}
                   </span>
-                  <span className="tabular-nums text-gray-500">{progressPct}%</span>
+                  <span className="tabular-nums text-text-muted">{progressPct}%</span>
                 </div>
                 {/* Long CSS transition (700ms) smooths out burst-delivered
                     events from GCP Cloud Run, which sometimes buffers a
                     few seconds of progress ticks before flushing them as
                     a batch. Without this the bar would teleport. */}
-                <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-border rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-indigo-500 rounded-full transition-all duration-700 ease-out"
+                    className="h-full bg-brand rounded-full transition-all duration-700 ease-out"
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
@@ -663,26 +663,26 @@ function DashboardTab({
                       <li key={i} className="flex items-start gap-2">
                         <div className="mt-0.5 shrink-0">
                           {done ? (
-                            <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <svg className="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                             </svg>
                           ) : active ? (
-                            <svg className="w-4 h-4 text-indigo-500 animate-spin" viewBox="0 0 24 24" fill="none">
+                            <svg className="w-4 h-4 text-brand animate-spin" viewBox="0 0 24 24" fill="none">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                             </svg>
                           ) : (
-                            <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
+                            <div className="w-4 h-4 rounded-full border-2 border-border" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className={done ? 'text-gray-400' : active ? 'text-gray-900 font-medium' : 'text-gray-400'}>
+                          <div className={done ? 'text-text-muted' : active ? 'text-text-primary font-medium' : 'text-text-muted'}>
                             {t(label)}
                           </div>
                           {isHealthStep && (
-                            <div className="mt-1 h-0.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="mt-1 h-0.5 bg-border rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-indigo-400 rounded-full transition-all duration-700 ease-out"
+                                className="h-full bg-brand-light rounded-full transition-all duration-700 ease-out"
                                 style={{ width: `${Math.round((subTick / subTotal) * 100)}%` }}
                               />
                             </div>
@@ -769,7 +769,7 @@ function DashboardTab({
                     {phoneAvailable === false ? (
                       <p
                         id="new-agent-phone-help"
-                        className="text-[11px] text-red-600 dark:text-red-300 mt-1"
+                        className="text-[11px] text-danger dark:text-red-300 mt-1"
                       >
                         {t({
                           he: 'מספר זה כבר משויך לסוכן אחר. כל מספר טלפון יכול להיות מחובר לסוכן אחד בלבד.',
@@ -779,7 +779,7 @@ function DashboardTab({
                     ) : phoneBlurred && newAgentPhone.trim() && !phoneE164 ? (
                       <p
                         id="new-agent-phone-help"
-                        className="text-[11px] text-red-600 dark:text-red-300 mt-1"
+                        className="text-[11px] text-danger dark:text-red-300 mt-1"
                       >
                         {t({
                           he: 'מספר לא תקין — נסה שוב (למשל 050-123-4567)',
@@ -869,7 +869,7 @@ function DashboardTab({
                 </div>
 
                 {provisionError && (
-                  <div className="text-sm text-red-700 dark:text-red-300 bg-red-50 p-3 rounded">{provisionError}</div>
+                  <div className="text-sm text-danger dark:text-red-300 bg-danger-light p-3 rounded">{provisionError}</div>
                 )}
                 <div className="flex flex-col sm:flex-row gap-2">
                   <button
@@ -892,7 +892,7 @@ function DashboardTab({
         )}
 
         {agents.length === 0 ? (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-text-muted">
             {t({ he: 'אין עדיין סוכנים.', en: 'No agents yet.' })}
           </p>
         ) : (
@@ -901,21 +901,21 @@ function DashboardTab({
               <div key={a.agent_id} className="py-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-medium text-gray-900" dir="auto">
+                    <div className="font-medium text-text-primary" dir="auto">
                       {a.agent_name}
                     </div>
-                    <div className="text-xs text-gray-500 font-mono" dir="ltr">
+                    <div className="text-xs text-text-muted font-mono" dir="ltr">
                       {a.agent_id}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs px-2 py-1 bg-green-50 text-green-700 dark:text-green-300 rounded">
+                    <span className="text-xs px-2 py-1 bg-success-light text-success dark:text-green-300 rounded">
                       {t(statusLabel(a.status))}
                     </span>
                     {isAdminOrOwner && (
                       <button
                         onClick={() => { setDeletingAgentId(a.agent_id); setDeleteError(null) }}
-                        className="text-xs text-red-500 hover:text-red-700"
+                        className="text-xs text-danger hover:text-danger"
                       >
                         {t({ he: 'מחיקה', en: 'Delete' })}
                       </button>
@@ -941,27 +941,27 @@ function DashboardTab({
 
       {totals && (
         <div className="bg-surface border border-border rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          <h2 className="text-lg font-semibold text-text-primary mb-4">
             {t({ he: 'פירוט שימוש', en: 'Usage breakdown' })}
           </h2>
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div>
-              <div className="text-gray-500">{t({ he: 'מודל שפה', en: 'LLM' })}</div>
+              <div className="text-text-muted">{t({ he: 'מודל שפה', en: 'LLM' })}</div>
               <div className="font-medium">{num(microsToUsd(totals.llm_micros))}</div>
             </div>
             <div>
-              <div className="text-gray-500">{t({ he: 'חיפוש', en: 'Search' })}</div>
+              <div className="text-text-muted">{t({ he: 'חיפוש', en: 'Search' })}</div>
               <div className="font-medium">{num(microsToUsd(totals.search_micros))}</div>
             </div>
             <div>
-              <div className="text-gray-500">{t({ he: 'קול', en: 'Voice (TTS)' })}</div>
+              <div className="text-text-muted">{t({ he: 'קול', en: 'Voice (TTS)' })}</div>
               <div className="font-medium">{num(microsToUsd(totals.tts_micros))}</div>
             </div>
           </div>
           <button
             type="button"
             onClick={() => onNavigate(`/tenants/${tenantId}/usage`)}
-            className="mt-4 text-sm text-indigo-600 hover:text-indigo-700 cursor-pointer"
+            className="mt-4 text-sm text-brand hover:text-brand-dark cursor-pointer"
           >
             {t({ he: 'פירוט מלא לפי סוכן ←', en: '→ Full breakdown by agent' })}
           </button>
@@ -1040,20 +1040,20 @@ function DeleteAgentModal({
       <div className="relative bg-surface rounded-xl shadow-xl max-w-md w-full mx-4 p-6 space-y-4">
         {/* Warning icon */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-            <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <div className="w-10 h-10 rounded-full bg-danger-light flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">
+            <h3 className="text-lg font-semibold text-text-primary">
               {t({ he: 'מחיקת סוכן', en: 'Delete agent' })}
             </h3>
-            <p className="text-sm text-gray-500" dir="auto">{agentName}</p>
+            <p className="text-sm text-text-muted" dir="auto">{agentName}</p>
           </div>
         </div>
 
-        <p className="text-sm text-gray-700">
+        <p className="text-sm text-text-primary">
           {t({
             he: 'פעולה זו תמחק לצמיתות את הסוכן, הקונטיינר שלו, כל הנתונים וההגדרות. גיבוי ישמר למשך 90 יום. לא ניתן לבטל פעולה זו.',
             en: 'This will permanently delete the agent, its container, all data and configuration. A backup will be kept for 90 days. This cannot be undone.',
@@ -1061,13 +1061,13 @@ function DeleteAgentModal({
         </p>
 
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">
+          <label className="block text-xs font-medium text-text-secondary mb-1">
             {t({
               he: 'הקלד את מזהה הסוכן לאישור:',
               en: 'Type the agent ID to confirm:',
             })}
           </label>
-          <div className="text-xs text-gray-400 font-mono mb-1.5" dir="ltr">{agentId}</div>
+          <div className="text-xs text-text-muted font-mono mb-1.5" dir="ltr">{agentId}</div>
           <input
             type="text"
             value={confirmText}
@@ -1075,19 +1075,19 @@ function DeleteAgentModal({
             placeholder={agentId}
             dir="ltr"
             disabled={inProgress}
-            className="w-full px-3 py-2 text-sm font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+            className="w-full px-3 py-2 text-sm font-mono border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
           />
         </div>
 
         {error && (
-          <div className="text-sm text-red-700 dark:text-red-300 bg-red-50 p-3 rounded">{error}</div>
+          <div className="text-sm text-danger dark:text-red-300 bg-danger-light p-3 rounded">{error}</div>
         )}
 
         <div className="flex gap-2 justify-end">
           <button
             onClick={onCancel}
             disabled={inProgress}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+            className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary"
           >
             {t({ he: 'ביטול', en: 'Cancel' })}
           </button>
@@ -1189,13 +1189,13 @@ function MembersTab({
     <div className="space-y-6">
       <div className="bg-surface border border-border rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-lg font-semibold text-text-primary">
             {t({ he: 'חברים', en: 'Members' })} ({members.length})
           </h2>
           {isAdminOrOwner && (
             <button
               onClick={() => setShowInvite(!showInvite)}
-              className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+              className="px-3 py-1.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark"
             >
               {t({ he: 'הזמנה', en: 'Invite' })}
             </button>
@@ -1203,7 +1203,7 @@ function MembersTab({
         </div>
 
         {showInvite && isAdminOrOwner && (
-          <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+          <div className="mb-4 p-4 bg-surface-soft rounded-lg space-y-3">
             <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="email"
@@ -1211,12 +1211,12 @@ function MembersTab({
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="name@example.com"
                 dir="ltr"
-                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand"
               />
               <select
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value as 'admin' | 'member')}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                className="px-3 py-2 text-sm border border-border rounded-lg"
               >
                 <option value="member">{roleOptionLabel('member')}</option>
                 <option value="admin">{roleOptionLabel('admin')}</option>
@@ -1224,7 +1224,7 @@ function MembersTab({
               <button
                 onClick={handleInvite}
                 disabled={inviteStatus === 'sending'}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark disabled:opacity-50"
               >
                 {inviteStatus === 'sending'
                   ? t({ he: 'שולח…', en: 'Sending…' })
@@ -1232,7 +1232,7 @@ function MembersTab({
               </button>
             </div>
             {inviteStatus === 'sent' && inviteLink && (
-              <div className="text-sm text-green-700 dark:text-green-300 bg-green-50 p-3 rounded">
+              <div className="text-sm text-success dark:text-green-300 bg-success-light p-3 rounded">
                 {t({ he: 'ההזמנה נשלחה. קישור גיבוי: ', en: 'Email sent. Backup link: ' })}
                 <a href={inviteLink} dir="ltr" className="underline break-all">
                   {inviteLink}
@@ -1240,7 +1240,7 @@ function MembersTab({
               </div>
             )}
             {inviteStatus === 'link-only' && inviteLink && (
-              <div className="text-sm text-amber-800 dark:text-amber-300 bg-amber-50 p-3 rounded">
+              <div className="text-sm text-warning dark:text-amber-300 bg-warning-light p-3 rounded">
                 {t({
                   he: 'שליחת המייל נכשלה. העתק/י את הקישור לשיתוף ידני:',
                   en: 'Email failed to send. Copy this link to share manually:',
@@ -1252,7 +1252,7 @@ function MembersTab({
               </div>
             )}
             {inviteStatus?.startsWith('error:') && (
-              <div className="text-sm text-red-700 bg-red-50 p-3 rounded">
+              <div className="text-sm text-danger bg-danger-light p-3 rounded">
                 {inviteStatus.slice(6)}
               </div>
             )}
@@ -1263,15 +1263,15 @@ function MembersTab({
           {members.map((m) => (
             <div key={m.user_id} className="py-3 flex items-center justify-between">
               <div>
-                <div className="font-medium text-gray-900" dir="auto">
+                <div className="font-medium text-text-primary" dir="auto">
                   {m.full_name || m.email}
                 </div>
-                <div className="text-xs text-gray-500" dir="ltr">
+                <div className="text-xs text-text-muted" dir="ltr">
                   {m.email}
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-gray-600 uppercase">
+                <span className="text-xs font-medium text-text-secondary uppercase">
                   {t(
                     m.role === 'owner'
                       ? { he: 'בעלים', en: 'owner' }
@@ -1285,14 +1285,14 @@ function MembersTab({
                     <select
                       value={m.role}
                       onChange={(e) => handleChangeRole(m.user_id, e.target.value as 'admin' | 'member')}
-                      className="text-xs border border-gray-300 rounded px-2 py-1"
+                      className="text-xs border border-border rounded px-2 py-1"
                     >
                       <option value="member">{roleOptionLabel('member')}</option>
                       <option value="admin">{roleOptionLabel('admin')}</option>
                     </select>
                     <button
                       onClick={() => handleRemove(m.user_id)}
-                      className="text-xs text-red-600 hover:text-red-800"
+                      className="text-xs text-danger hover:text-danger"
                     >
                       {t({ he: 'הסרה', en: 'Remove' })}
                     </button>
@@ -1306,17 +1306,17 @@ function MembersTab({
 
       {pendingInvites.length > 0 && (
         <div className="bg-surface border border-border rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          <h2 className="text-lg font-semibold text-text-primary mb-4">
             {t({ he: 'הזמנות ממתינות', en: 'Pending invites' })} ({pendingInvites.length})
           </h2>
           <div className="divide-y divide-gray-100">
             {pendingInvites.map((i) => (
               <div key={i.id} className="py-3 flex items-center justify-between">
                 <div>
-                  <div className="font-medium text-gray-900" dir="ltr">
+                  <div className="font-medium text-text-primary" dir="ltr">
                     {i.email}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-text-muted">
                     {roleOptionLabel(i.role)} ·{' '}
                     {t({ he: 'תוקף עד ', en: 'expires ' })}
                     {new Date(i.expires_at).toLocaleDateString('en-GB')}
@@ -1325,7 +1325,7 @@ function MembersTab({
                 {isAdminOrOwner && (
                   <button
                     onClick={() => handleRevoke(i.id)}
-                    className="text-xs text-red-600 hover:text-red-800"
+                    className="text-xs text-danger hover:text-danger"
                   >
                     {t({ he: 'ביטול', en: 'Revoke' })}
                   </button>
@@ -1418,12 +1418,12 @@ function SettingsTab({
   return (
     <div className="space-y-6">
       <div className="bg-surface border border-border rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+        <h2 className="text-lg font-semibold text-text-primary mb-4">
           {t({ he: 'כללי', en: 'General' })}
         </h2>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-text-primary mb-1">
               {t({ he: 'שם סביבת העבודה', en: 'Workspace name' })}
             </label>
             <input
@@ -1431,12 +1431,12 @@ function SettingsTab({
               value={name}
               onChange={(e) => setName(e.target.value)}
               dir="auto"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand"
               disabled={!isOwner}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-text-primary mb-1">
               {t({ he: 'אימייל לחיוב', en: 'Billing email' })}
             </label>
             <input
@@ -1444,16 +1444,16 @@ function SettingsTab({
               value={billingEmail}
               onChange={(e) => setBillingEmail(e.target.value)}
               dir="ltr"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand"
               disabled={!isOwner}
             />
           </div>
-          {error && <div className="text-sm text-red-600">{error}</div>}
+          {error && <div className="text-sm text-danger">{error}</div>}
           {isOwner && (
             <button
               onClick={handleSave}
               disabled={saving || (name === tenant.name && billingEmail === tenant.billing_email)}
-              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark disabled:opacity-50"
             >
               {saving
                 ? t({ he: 'שומר…', en: 'Saving…' })
@@ -1465,10 +1465,10 @@ function SettingsTab({
 
       {isOwner && otherMembers.length > 0 && (
         <div className="bg-surface border border-border rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">
+          <h2 className="text-lg font-semibold text-text-primary mb-2">
             {t({ he: 'העברת בעלות', en: 'Transfer ownership' })}
           </h2>
-          <p className="text-sm text-gray-500 mb-4">
+          <p className="text-sm text-text-muted mb-4">
             {t({
               he: 'הפוך חבר/ת צוות אחר/ת לבעלים של סביבת העבודה. את/ה תהפוך/י למנהל/ת.',
               en: "Make another member the owner of this workspace. You'll become an admin.",
@@ -1478,16 +1478,16 @@ function SettingsTab({
             {otherMembers.map((m) => (
               <div key={m.user_id} className="flex items-center justify-between py-2">
                 <div>
-                  <div className="text-sm font-medium text-gray-900" dir="auto">
+                  <div className="text-sm font-medium text-text-primary" dir="auto">
                     {m.full_name || m.email}
                   </div>
-                  <div className="text-xs text-gray-500" dir="ltr">
+                  <div className="text-xs text-text-muted" dir="ltr">
                     {m.email}
                   </div>
                 </div>
                 <button
                   onClick={() => handleTransfer(m.user_id)}
-                  className="text-sm text-indigo-600 hover:text-indigo-800"
+                  className="text-sm text-brand hover:text-brand-dark"
                 >
                   {t({ he: 'העברה', en: 'Transfer' })}
                 </button>
@@ -1498,11 +1498,11 @@ function SettingsTab({
       )}
 
       {isOwner && (
-        <div className="bg-surface border border-red-200 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-red-900 dark:text-red-200 mb-2">
+        <div className="bg-surface border border-danger/40 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-danger dark:text-red-200 mb-2">
             {t({ he: 'אזור מסוכן', en: 'Danger zone' })}
           </h2>
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="text-sm text-text-secondary mb-4">
             {t({
               he: 'מחיקת סביבת העבודה מסירה את כל הסוכנים, החברים וההזמנות. חובה שתהיה לך לפחות סביבת עבודה אחת נוספת.',
               en: 'Deleting this workspace removes all agents, members, and invites. You must own at least one other workspace first.',
@@ -1621,7 +1621,7 @@ function RedeemCouponModal({
           <h3 className="text-lg font-bold">
             {t({ he: 'הפעלת קוד קופון', en: 'Redeem coupon code' })}
           </h3>
-          <button onClick={onClose} className="text-gray-500 text-2xl">×</button>
+          <button onClick={onClose} className="text-text-muted text-2xl">×</button>
         </div>
 
         <input
@@ -1629,24 +1629,24 @@ function RedeemCouponModal({
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           placeholder={t({ he: 'הזן קוד קופון', en: 'Enter coupon code' })}
-          className="input-glass w-full font-mono tracking-wider uppercase"
+          className="input-glass w-full px-4 py-3 font-mono tracking-wider uppercase placeholder:normal-case placeholder:font-sans placeholder:tracking-normal"
           dir="ltr"
           autoFocus
         />
 
         {previewError && (
-          <div className="p-3 rounded-lg bg-red-50 text-red-700 dark:text-red-300 text-sm">
+          <div className="p-3 rounded-lg bg-danger-light text-danger dark:text-red-300 text-sm">
             {t({ he: errorMsgHe(previewError), en: errorMsgEn(previewError) })}
           </div>
         )}
 
         {preview && !previewError && (
-          <div className="p-4 rounded-lg bg-gray-50 border border-gray-200">
-            <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">
+          <div className="p-4 rounded-lg bg-surface-soft border border-border-light">
+            <div className="text-xs uppercase tracking-wide text-text-muted mb-1">
               {t({ he: 'קופון זוהה', en: 'Coupon recognized' })}
             </div>
             <div className="text-base font-semibold">{preview.plan.name_he}</div>
-            <div className="text-sm text-gray-600 mt-1">
+            <div className="text-sm text-text-secondary mt-1">
               {preview.duration_days} {t({ he: 'ימים', en: 'days' })} ·{' '}
               {preview.schedule.kind === 'immediate' &&
                 t({ he: 'יופעל מיד', en: 'activates immediately' })}
@@ -1658,7 +1658,7 @@ function RedeemCouponModal({
                 t({ he: 'יופעל בתום התקופה', en: 'starts at period end' })}
             </div>
             {preview.schedule.kind === 'upgrade_immediate' && (
-              <div className="mt-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 rounded p-2">
+              <div className="mt-2 text-xs text-warning dark:text-amber-300 bg-warning-light rounded p-2">
                 {t({
                   he: 'התוכנית הפעילה כעת תוחלף מיד.',
                   en: 'Your current active plan will be replaced immediately.',
@@ -1666,7 +1666,7 @@ function RedeemCouponModal({
               </div>
             )}
             {preview.already_redeemed_by_user && (
-              <div className="mt-2 text-xs text-red-700 dark:text-red-300">
+              <div className="mt-2 text-xs text-danger dark:text-red-300">
                 {t({ he: 'כבר השתמשת בקוד זה.', en: 'You have already redeemed this code.' })}
               </div>
             )}
@@ -1674,7 +1674,7 @@ function RedeemCouponModal({
         )}
 
         {redeemError && (
-          <div className="p-3 rounded-lg bg-red-50 text-red-700 dark:text-red-300 text-sm">
+          <div className="p-3 rounded-lg bg-danger-light text-danger dark:text-red-300 text-sm">
             {t({ he: errorMsgHe(redeemError), en: errorMsgEn(redeemError) })}
           </div>
         )}
@@ -1682,7 +1682,7 @@ function RedeemCouponModal({
         <button
           onClick={handleSubmit}
           disabled={!canRedeem}
-          className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          className="w-full px-4 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
           {redeeming
             ? t({ he: 'מפעיל…', en: 'Redeeming…' })
