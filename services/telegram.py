@@ -118,11 +118,24 @@ def build_enable_patch(env_var: str) -> dict[str, Any]:
     also need to write to /opt/agentleh/.env.
     """
     del env_var  # accepted for API compatibility; openclaw.json uses the fixed container-side name
+    # dmPolicy=open + allowFrom=["*"] together mean "anyone who messages
+    # the bot can chat with the agent, no pairing handshake required."
+    # Default OpenClaw behavior is dmPolicy=pairing, which replies to
+    # every new sender with an "OpenClaw: access not configured" message
+    # + pairing code that the bot owner must approve via a CLI command.
+    # That's the wrong default for an Agentleh agent — the bot is the
+    # customer-facing surface; everyone messaging it IS the intended
+    # audience. Open policy moves authorization from "per-sender opt-in"
+    # to "per-bot opt-in" (the tenant admin connected the bot = all
+    # senders welcome). If a tenant ever needs per-sender gating we can
+    # expose it in the Bridges panel UI as a future enhancement.
     return {
         "channels": {
             "telegram": {
                 "enabled": True,
                 "botToken": "${TELEGRAM_BOT_TOKEN}",
+                "dmPolicy": "open",
+                "allowFrom": ["*"],
             }
         }
     }
