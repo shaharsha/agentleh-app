@@ -1,4 +1,5 @@
 import type { SVGProps } from 'react'
+import { useI18n } from '../lib/i18n'
 
 /**
  * Shared inline SVG icon set for the toolbar + nav.
@@ -121,6 +122,40 @@ export function ChevronLeftIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <polyline points="15 6 9 12 15 18" />
+    </Icon>
+  )
+}
+
+/**
+ * Disclosure chevron used by collapsible section headers (Integrations,
+ * Bridges). One chevron-right path that rotates on open/close and mirrors
+ * automatically in RTL, so it shares the visual weight of the rest of the
+ * nav icons and never falls back to the emoji font the way the old
+ * Unicode triangle did on iOS Safari.
+ *
+ * Rotation map (closed points toward the content that will reveal; open
+ * points down — the classic folder-disclosure mental model):
+ *   ltr: closed 0° (→), open 90° (↓)
+ *   rtl: closed 180° (←), open 90° (↓)
+ *
+ * Motion is gated behind `motion-safe:` so `prefers-reduced-motion`
+ * collapses it to an instant state swap.
+ */
+export function DisclosureChevronIcon({
+  open,
+  className = 'w-4 h-4 shrink-0',
+  style,
+  ...rest
+}: IconProps & { open: boolean }) {
+  const { dir } = useI18n()
+  const rotate = open ? 90 : dir === 'rtl' ? 180 : 0
+  return (
+    <Icon
+      className={`${className} motion-safe:transition-transform motion-safe:duration-200 ease-out`}
+      style={{ transform: `rotate(${rotate}deg)`, ...style }}
+      {...rest}
+    >
+      <polyline points="9 6 15 12 9 18" />
     </Icon>
   )
 }

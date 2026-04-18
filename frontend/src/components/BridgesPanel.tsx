@@ -13,6 +13,7 @@ import {
   type TelegramManagedStart,
 } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { DisclosureChevronIcon } from './icons'
 
 interface BridgesPanelProps {
   tenantId: number
@@ -97,12 +98,8 @@ export default function BridgesPanel({
   canEdit,
   onOpenChat,
 }: BridgesPanelProps) {
-  const { t, dir, lang } = useI18n()
+  const { t, dir } = useI18n()
   const [open, setOpen] = useState(false)
-  // Match IntegrationsPanel's chevron convention so the two collapsibles
-  // are visually identical in the agent row.
-  const isRtl = lang === 'he'
-  const chevron = open ? '▼' : isRtl ? '◀' : '▶'
   const [data, setData] = useState<BridgesResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -381,7 +378,7 @@ export default function BridgesPanel({
         className="w-full flex items-center justify-between text-sm text-text-secondary hover:text-text-primary transition"
       >
         <span className="flex items-center gap-2">
-          <span aria-hidden="true">{chevron}</span>
+          <DisclosureChevronIcon open={open} />
           <span>{t({ he: 'גשרים', en: 'Bridges' })}</span>
         </span>
         <span className="flex items-center gap-1.5 text-xs text-text-muted">
