@@ -60,8 +60,8 @@ export default function Layout({
 
   return (
     <div className="min-h-screen section-gradient">
-      <header className="glass-nav sticky top-0 z-50 safe-pt">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 px-4 sm:px-6 py-2.5 sm:py-3 safe-px">
+      <header className="glass-nav sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 px-4 sm:px-6 pt-[calc(0.625rem+1px+env(safe-area-inset-top,0px))] pb-2.5 sm:pt-[calc(0.75rem+1px+env(safe-area-inset-top,0px))] sm:pb-3 safe-px">
           {/* Start cluster: hamburger (mobile only) + logo */}
           <div className="flex items-center gap-2 min-w-0">
             {hasDrawerControls && user && (
