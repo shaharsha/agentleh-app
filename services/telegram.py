@@ -89,28 +89,40 @@ def validate_bot_token(token: str) -> dict[str, Any]:
 
 
 def env_var_name_for(agent_id: str) -> str:
-    """Per-agent env var name used inside the OpenClaw container.
-    Matches the existing convention from create-agent.sh — uppercase
-    agent_id with hyphens→underscores, prefixed namespace."""
-    return f"TELEGRAM_BOT_TOKEN_{re.sub(r'[^A-Z0-9]', '_', agent_id.upper())}"
+    """Host-side (.env / docker-compose interpolation) variable name
+    for this agent's Telegram bot token.
+
+    Matches the existing agentleh convention from create-agent.sh:
+    <AGENT_ID_UPPER>_<VAR>, not <VAR>_<AGENT_ID>. Example:
+    `T1_SHEM_TOV_851D_TELEGRAM_BOT_TOKEN`. The compose entry then maps
+    this host-side var to the simpler container env var
+    `TELEGRAM_BOT_TOKEN`, which OpenClaw's openclaw.json references
+    via ${TELEGRAM_BOT_TOKEN}.
+    """
+    upper = re.sub(r"[^A-Z0-9]", "_", agent_id.upper())
+    return f"{upper}_TELEGRAM_BOT_TOKEN"
 
 
 def build_enable_patch(env_var: str) -> dict[str, Any]:
     """JSON Merge Patch body for enabling the Telegram channel.
 
-    We reference the token via a ${...} env var substitution in the
-    config; the provision-api's config/patch endpoint only rewrites the
-    JSON, it doesn't interpret substitutions. The actual token injection
-    into the container happens via env_additions (a separate field of
-    the same patch request) which writes to /opt/agentleh/.env and is
-    read by docker-compose on the restart that follows.
+    We reference the CONTAINER-SIDE env var name (TELEGRAM_BOT_TOKEN)
+    in openclaw.json — the host-side prefixed name (the `env_var`
+    argument) is what we write to /opt/agentleh/.env and what the
+    agent's compose entry maps from. OpenClaw's own schema rejects
+    any extra keys under channels.telegram, so we set ONLY the fields
+    the built-in Telegram extension accepts (enabled + botToken).
+    Older drafts included `mode: "polling"` — that's rejected with
+    'Unrecognized key: "mode"' since polling is implicit for managed
+    bots. Keep the signature `env_var` for symmetry with callers that
+    also need to write to /opt/agentleh/.env.
     """
+    del env_var  # accepted for API compatibility; openclaw.json uses the fixed container-side name
     return {
         "channels": {
             "telegram": {
                 "enabled": True,
-                "botToken": f"${{{env_var}}}",
-                "mode": "polling",
+                "botToken": "${TELEGRAM_BOT_TOKEN}",
             }
         }
     }
