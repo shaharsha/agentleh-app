@@ -63,20 +63,15 @@ export default function Layout({
 
             <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
               <img
-                src="/brand/logo-icon.svg"
-                alt=""
-                aria-hidden="true"
-                className="w-8 h-8 shrink-0 block dark:hidden"
+                src="/brand/logo-wordmark.svg"
+                alt="Agentiko"
+                className="h-6 sm:h-7 w-auto shrink-0 block dark:hidden"
               />
               <img
-                src="/brand/logo-icon-dark.svg"
-                alt=""
-                aria-hidden="true"
-                className="w-8 h-8 shrink-0 hidden dark:block"
+                src="/brand/logo-wordmark-dark.svg"
+                alt="Agentiko"
+                className="h-6 sm:h-7 w-auto shrink-0 hidden dark:block"
               />
-              <span className="text-[17px] font-semibold tracking-[-0.3px] truncate max-w-[160px] sm:max-w-none">
-                Agentiko
-              </span>
               {isAdminRoute && (
                 <span className="hidden sm:inline-block ms-2 text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 dark:text-purple-300 font-semibold">
                   {t({ he: 'ניהול', en: 'ADMIN' })}
