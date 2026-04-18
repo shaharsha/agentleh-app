@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { previewInvite, acceptInvite } from '../lib/api'
 import { useI18n, type Bilingual } from '../lib/i18n'
+import { useDocumentTitle } from '../lib/useDocumentTitle'
 import type { InvitePreview } from '../lib/types'
 
 /**
@@ -23,6 +24,7 @@ import type { InvitePreview } from '../lib/types'
  */
 export default function InviteAcceptPage() {
   const { t } = useI18n()
+  useDocumentTitle(t({ he: 'הזמנה', en: 'Invite' }))
   const [preview, setPreviewState] = useState<InvitePreview | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

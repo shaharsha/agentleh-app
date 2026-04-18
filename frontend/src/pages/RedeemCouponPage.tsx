@@ -7,6 +7,7 @@ import {
 } from '../lib/api'
 import StepIndicator from '../components/StepIndicator'
 import { useI18n, type Bilingual } from '../lib/i18n'
+import { useDocumentTitle } from '../lib/useDocumentTitle'
 import type { AppUser } from '../lib/types'
 
 interface RedeemCouponPageProps {
@@ -90,6 +91,7 @@ const ERROR_MSG: Record<string, Bilingual> = {
 
 export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageProps) {
   const { t, lang, dir } = useI18n()
+  useDocumentTitle(t({ he: 'הפעלת קופון', en: 'Redeem coupon' }))
   const [code, setCode] = useState('')
   const [preview, setPreview] = useState<CouponPreview | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
