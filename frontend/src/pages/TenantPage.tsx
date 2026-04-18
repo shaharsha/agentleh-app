@@ -124,6 +124,28 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // NB: hooks MUST run before the loading/error/null-detail early returns
+  // below. Putting useDocumentTitle after those returns caused the hook
+  // count to jump (7 → 8) between the loading render and the loaded
+  // render, violating Rules of Hooks and crashing TenantPage whenever
+  // the page mounted fresh (e.g. navigating in from onboarding).
+  const tabLabel = (tab: Tab): Bilingual =>
+    tab === 'dashboard'
+      ? { he: 'לוח בקרה', en: 'Dashboard' }
+      : tab === 'members'
+        ? { he: 'חברים', en: 'Members' }
+        : tab === 'usage'
+          ? { he: 'שימוש', en: 'Usage' }
+          : tab === 'audit'
+            ? { he: 'יומן אירועים', en: 'Audit log' }
+            : { he: 'הגדרות', en: 'Settings' }
+
+  const tenantDisplayName = detail?.tenant.name?.trim() || ''
+  const activeTabLabel = t(tabLabel(activeTab))
+  useDocumentTitle(
+    tenantDisplayName ? `${tenantDisplayName} · ${activeTabLabel}` : activeTabLabel,
+  )
+
   if (loading) {
     return (
       <div className="p-8 text-text-muted">
@@ -147,23 +169,6 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
 
   const setTab = (tab: Tab) =>
     onNavigate(`/tenants/${tenantId}${tab === 'dashboard' ? '' : '/' + tab}`)
-
-  const tabLabel = (tab: Tab): Bilingual =>
-    tab === 'dashboard'
-      ? { he: 'לוח בקרה', en: 'Dashboard' }
-      : tab === 'members'
-        ? { he: 'חברים', en: 'Members' }
-        : tab === 'usage'
-          ? { he: 'שימוש', en: 'Usage' }
-          : tab === 'audit'
-            ? { he: 'יומן אירועים', en: 'Audit log' }
-            : { he: 'הגדרות', en: 'Settings' }
-
-  const tenantDisplayName = detail?.tenant.name?.trim() || ''
-  const activeTabLabel = t(tabLabel(activeTab))
-  useDocumentTitle(
-    tenantDisplayName ? `${tenantDisplayName} · ${activeTabLabel}` : activeTabLabel,
-  )
 
   const tabButton = (tab: Tab) => (
     <button
@@ -358,6 +363,26 @@ function DashboardTab({
       setNewAgentPhone(parsedPhone.formatInternational())
     }
   }
+
+  // Modal UX: Escape closes the new-agent modal, but only when not
+  // mid-provisioning — the NDJSON stream would orphan otherwise.
+  useEffect(() => {
+    if (!showNewAgent) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !provisioning) setShowNewAgent(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showNewAgent, provisioning])
+
+  // Lock body scroll while the modal is open so the background doesn't
+  // scroll through the backdrop on tall forms.
+  useEffect(() => {
+    if (!showNewAgent) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [showNewAgent])
 
   // Real progress driven by the NDJSON stream from the backend:
   //   { step: N, total: M, label: "..." }
@@ -632,7 +657,32 @@ function DashboardTab({
         </div>
 
         {showNewAgent && isAdminOrOwner && subscription && (
-          <div className="mb-4 p-4 bg-surface-soft rounded-lg space-y-3">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(14, 19, 32, 0.40)' }}
+            onClick={() => { if (!provisioning) setShowNewAgent(false) }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-agent-title"
+          >
+            <div
+              className="glass-thick animate-dialog-in w-full max-w-[640px] max-h-[90vh] overflow-y-auto rounded-2xl p-8 space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h3 id="new-agent-title" className="text-lg font-semibold text-text-primary">
+                  {t({ he: 'סוכן חדש', en: 'New agent' })}
+                </h3>
+                {!provisioning && (
+                  <button
+                    onClick={() => setShowNewAgent(false)}
+                    className="text-text-muted hover:text-text-primary text-2xl leading-none"
+                    aria-label={t({ he: 'סגור', en: 'Close' })}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             {provisioning ? (
               /* ── Real-time progress driven by backend NDJSON stream ── */
               <div className="space-y-3">
@@ -878,23 +928,27 @@ function DashboardTab({
                 {provisionError && (
                   <div className="text-sm text-danger dark:text-red-300 bg-danger-light p-3 rounded">{provisionError}</div>
                 )}
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    onClick={handleProvision}
-                    disabled={!canProvision}
-                    className="btn-brand btn-md flex-1 sm:flex-none disabled:opacity-50"
-                  >
-                    {t({ he: 'צור סוכן', en: 'Create agent' })}
-                  </button>
+                {/* BRAND §18 footer: trailing-aligned, cancel on leading side,
+                    primary on trailing so Hebrew readers land on the primary
+                    action at their natural reading end. */}
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
                   <button
                     onClick={() => setShowNewAgent(false)}
                     className="btn-secondary btn-md"
                   >
                     {t({ he: 'ביטול', en: 'Cancel' })}
                   </button>
+                  <button
+                    onClick={handleProvision}
+                    disabled={!canProvision}
+                    className="btn-brand btn-md disabled:opacity-50"
+                  >
+                    {t({ he: 'צור סוכן', en: 'Create agent' })}
+                  </button>
                 </div>
               </>
             )}
+            </div>
           </div>
         )}
 
