@@ -606,7 +606,7 @@ export default function BridgesPanel({
                 'px-3 py-1 rounded-full ' +
                 (tgTab === 'quick'
                   ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-800 text-text-secondary')
+                  : 'bg-gray-100 text-text-secondary')
               }
               onClick={() => setTgTab('quick')}
             >
@@ -617,7 +617,7 @@ export default function BridgesPanel({
                 'px-3 py-1 rounded-full ' +
                 (tgTab === 'paste'
                   ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-800 text-text-secondary')
+                  : 'bg-gray-100 text-text-secondary')
               }
               onClick={() => setTgTab('paste')}
             >
@@ -656,7 +656,7 @@ export default function BridgesPanel({
                   </li>
                   <li>
                     {t({ he: 'שלח ', en: 'Send ' })}
-                    <code className="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">/newbot</code>
+                    <code className="font-mono bg-gray-100 px-1 rounded">/newbot</code>
                   </li>
                   <li>
                     {t({
