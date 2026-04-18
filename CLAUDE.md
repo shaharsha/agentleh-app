@@ -64,6 +64,10 @@ Three states on `app_users.onboarding_status`:
 
 Gates are on the backend: `POST /onboarding/submit` returns `402 no_active_subscription` if called from `pending`. The frontend polls `/auth/me` to route by state.
 
+Phone is **optional** on the onboarding form — matches the standalone tenant agent-create flow. When omitted, the agent is provisioned without a WhatsApp binding and the user can connect one later from the Bridges panel; the welcome-template send is skipped and the progress bar ends at step 4/4 instead of 5/5.
+
+`/onboarding/submit` is a `StreamingResponse` that forwards NDJSON progress events (`{type, step, total, label}`) from the provisioner's `provision_stream`. Shape matches `/tenants/{id}/agents` so both flows share the same frontend reader. `onboarding_status='complete'` is only flipped after the stream emits a successful `result`, so a mid-stream failure leaves the user in `plan_active` (re-tryable) instead of "complete but no agent."
+
 ### Coupon-based plan activation
 
 Plans are activated exclusively by redeeming a coupon ([app/lib/coupons.py](lib/coupons.py)). Two callers:
@@ -74,12 +78,12 @@ Plans are activated exclusively by redeeming a coupon ([app/lib/coupons.py](lib/
 Both converge on `coupons.redeem()`:
 
 1. `SELECT FOR UPDATE` on the coupon row + the tenant's most-recent active sub
-2. Computes supersession schedule (immediate upgrade / queued downgrade / queued same-plan renewal)
+2. Computes supersession schedule (immediate upgrade / queued downgrade / queued same-plan renewal). Renewal/downgrade `period_start` chains off `MAX(period_end)` across the tenant's full active-sub set — N same-plan redeems stack into N durations without colliding on `(tenant_id, period_start)`.
 3. INSERTs a new `agent_subscriptions` row keyed on `(tenant_id, period_start)` — append-only so historical `usage_events` stay bound to the pricing window they were billed against
 4. Marks the prior active row `status='superseded'` on immediate upgrades
 5. Writes the audit row in `coupon_redemptions`
 
-Partial unique index `(coupon_id, user_id) WHERE coupon_id IS NOT NULL` backstops `one_per_user=TRUE` coupons.
+`one_per_user=TRUE` is enforced in Python by `_validate_coupon_row` under the coupon's `FOR UPDATE` lock — no race between the check and the subsequent INSERT. A typed `psycopg.errors.UniqueViolation` catch at the redemption INSERT is kept as defense-in-depth (maps to `CouponAlreadyRedeemed` → HTTP 409) so any future overlapping index surfaces properly instead of hiding behind the route's generic 500. Meter migration 024 dropped the prior partial unique index on `(coupon_id, user_id)` because its predicate fired for every coupon, not just `one_per_user=TRUE` ones — breaking the common `max_redemptions > 1` case.
 
 ## Endpoints
 
@@ -100,6 +104,10 @@ All prefixed with `/api/`.
 | `GET` | `/invites/preview?token=...` | none |
 | `GET` | `/c/{code}` | none — 302 through `oauth_connect_shortlinks` |
 | `*` | `/admin/*` | superadmin |
+
+### Dashboard subscription fallback
+
+`/dashboard/tenants/{id}` pulls the subscription plate from the meter's `GET /admin/spend/tenant/{id}`. When the meter is unreachable (local `uv run dev` without the meter process, a brief prod blip), the response falls back to `db.get_active_subscription(tenant_id)` so the plate keeps rendering — users see a stale-but-present plan rather than a phantom "no active subscription" CTA sitting next to a perfectly live product. `totals` (usage aggregation from `usage_events`) stays `null` in the fallback path because only the meter computes it; the UI renders a zero-state for the spend numbers until the meter is back.
 
 ## Provisioning
 
