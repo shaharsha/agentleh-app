@@ -560,7 +560,7 @@ function DashboardTab({
           {isAdminOrOwner && (
             <button
               onClick={() => setShowRedeem(true)}
-              className="px-3 py-1.5 text-sm font-medium text-brand hover:text-brand-dark"
+              className="px-3 py-1.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark"
             >
               {subscription
                 ? t({ he: 'נהל / שדרג', en: 'Manage / upgrade' })
@@ -599,22 +599,12 @@ function DashboardTab({
             </div>
           </div>
         ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-text-muted">
-              {t({
-                he: 'אין מנוי פעיל. כדי ליצור סוכנים יש להפעיל תוכנית באמצעות קוד קופון.',
-                en: 'No active subscription. Activate a plan with a coupon code to create agents.',
-              })}
-            </p>
-            {isAdminOrOwner && (
-              <button
-                onClick={() => setShowRedeem(true)}
-                className="px-3 py-1.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark"
-              >
-                {t({ he: 'הפעל תוכנית', en: 'Activate plan' })}
-              </button>
-            )}
-          </div>
+          <p className="text-sm text-text-muted">
+            {t({
+              he: 'אין מנוי פעיל. כדי ליצור סוכנים יש להפעיל תוכנית באמצעות קוד קופון.',
+              en: 'No active subscription. Activate a plan with a coupon code to create agents.',
+            })}
+          </p>
         )}
       </div>
 
