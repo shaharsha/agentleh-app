@@ -370,6 +370,7 @@ async def start_telegram_managed_connect(
     _assert_agent_in_tenant(db, agent_id, tenant_id)
 
     token = telegram_deeplink.issue(
+        db,
         tenant_id=tenant_id,
         agent_id=agent_id,
         user_id=ctx.user_id,

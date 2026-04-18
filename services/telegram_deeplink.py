@@ -1,115 +1,122 @@
-"""Signed deep-link token used by the Telegram Managed Bots quick-connect flow.
+"""Short random-nonce deep-link tokens for the Telegram Quick-Connect flow.
 
-The Telegram deep-link is `https://t.me/AgentikoManagerBot?start=<token>`,
-where <token> carries everything the manager-bot webhook needs to tie
-an incoming `/start` message back to a specific (tenant, agent, user)
-triple — WITHOUT the webhook ever having to look up server-side state.
+The Telegram `/start` parameter has HARD limits per Bot API docs:
+  - 1-64 characters
+  - `[A-Za-z0-9_-]` only (no dots, slashes, base64 padding, etc.)
 
-Why signed rather than a DB row?
-  - The webhook is stateless + public; a signature lets us trust the
-    payload without hitting the DB on every inbound /start.
-  - Tokens are single-use by convention (the webhook idempotently
-    records completion in agent_bridges) and TTL-bounded so a leaked
-    Telegram chat history can't reuse an old link.
-  - 15-minute TTL matches the Telegram Managed Bots flow — plenty for
-    a user to tap, confirm in BotFather MiniApp, and land back.
+My first pass used an HMAC-signed compact base64url(payload).base64url(sig)
+token — about 100 chars with a literal `.` separator. Telegram either
+truncates on the dot or drops the whole parameter, which surfaced on
+the webhook side as `DeeplinkError: malformed_token` even for
+legitimate /start clicks.
 
-Wire format
-───────────
-  token  = base64url(payload_json) + "." + base64url(hmac_sha256(secret, payload_json))
-  payload_json = {"v":1,"t":<tenant_id>,"a":<agent_id>,"u":<user_id>,"e":<expires_unix>}
+Replacement: a short random nonce (20 urlsafe bytes = 27 chars) that
+indexes a DB row carrying the real (tenant, agent, user, expires)
+mapping. 160 bits of entropy = not guessable, no HMAC needed, and
+well under the 64-char ceiling.
 
-Telegram's /start argument accepts up to 64 characters of [A-Za-z0-9_-]
-per the Bot API spec, so we keep the payload compact and URL-safe.
+We store the pending mapping directly on `agent_bridges.config` for
+that agent's telegram bridge — no new table. The row's `enabled=false`
+flag + `managed_pending` object indicate an in-progress connect
+attempt; the webhook completes it by resolving nonce → row.
 """
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
 import json
-import os
+import secrets
 import time
 from typing import Any
 
-_TTL_SECONDS = 15 * 60
-_TOKEN_VERSION = 1
-_SECRET_ENV = "APP_TELEGRAM_DEEPLINK_SECRET"
+
+TTL_SECONDS = 15 * 60
 
 
 class DeeplinkError(Exception):
-    """Raised for any signature, expiry, or shape problem. The webhook
-    turns this into a no-op reply so probing isn't useful to attackers."""
+    """Raised when a /start nonce can't be resolved — unknown, expired,
+    or already consumed. The webhook turns this into a polite reply
+    without leaking which case it was."""
 
 
-def _secret() -> bytes:
-    raw = os.environ.get(_SECRET_ENV) or ""
-    if not raw:
-        # Dev fallback — never in prod (Cloud Run sets this via Secret
-        # Manager). Using a fixed string here so `uv run pytest` works
-        # without config, at the cost of trivial signatures in that env.
-        raw = "dev-only-deeplink-signing-secret"
-    return raw.encode("utf-8")
+def _generate_nonce() -> str:
+    # 20 urlsafe bytes = 27 base64url chars, all inside [A-Za-z0-9_-].
+    # Leaves plenty of headroom under Telegram's 64-char /start ceiling.
+    return secrets.token_urlsafe(20)
 
 
-def _b64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
-
-def _b64url_decode(data: str) -> bytes:
-    padding = "=" * (-len(data) % 4)
-    return base64.urlsafe_b64decode(data + padding)
-
-
-def issue(*, tenant_id: int, agent_id: str, user_id: int, ttl_seconds: int | None = None) -> str:
-    """Generate a signed, URL-safe deep-link token.
-
-    `agent_id` is stored verbatim; callers should have validated it
-    upstream (it's already constrained to [a-zA-Z0-9_-]+ by create-agent.sh
-    and Telegram's /start argument accepts the same char class).
-    """
-    expires = int(time.time()) + (ttl_seconds or _TTL_SECONDS)
+def issue(
+    db,
+    *,
+    tenant_id: int,
+    agent_id: str,
+    user_id: int,
+    ttl_seconds: int = TTL_SECONDS,
+) -> str:
+    """Mint a nonce for the Quick-Connect deep-link and persist the
+    mapping on the agent's telegram bridge row. Returns the nonce
+    (use as the /start parameter)."""
+    nonce = _generate_nonce()
+    expires = int(time.time()) + ttl_seconds
     payload: dict[str, Any] = {
-        "v": _TOKEN_VERSION,
-        "t": tenant_id,
-        "a": agent_id,
-        "u": user_id,
-        "e": expires,
+        "nonce": nonce,
+        "app_user_id": int(user_id),
+        "expires_at": expires,
     }
-    body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    sig = hmac.new(_secret(), body, hashlib.sha256).digest()
-    return f"{_b64url_encode(body)}.{_b64url_encode(sig)}"
+    # UPSERT: create the row if the telegram bridge doesn't exist yet,
+    # or overwrite a stale managed_pending from a prior abandoned
+    # attempt. Leaves enabled=false; the webhook flips it true on
+    # successful completion.
+    db._execute(
+        """
+        INSERT INTO agent_bridges
+            (agent_id, bridge_type, enabled, config, connected_at)
+        VALUES (%s, 'telegram', FALSE,
+                jsonb_build_object('managed_pending', %s::jsonb),
+                NULL)
+        ON CONFLICT (agent_id, bridge_type) DO UPDATE SET
+            config = agent_bridges.config || jsonb_build_object(
+                'managed_pending', %s::jsonb,
+                'managed_error', NULL
+            )
+        """,
+        (agent_id, json.dumps(payload), json.dumps(payload)),
+    )
+    return nonce
 
 
-def verify(token: str) -> dict[str, Any]:
-    """Parse + verify. Returns the payload dict ({t, a, u, e}) on success.
-    Raises DeeplinkError on any failure — unknown version, bad signature,
-    expired, malformed.
-    """
-    if not token or token.count(".") != 1:
-        raise DeeplinkError("malformed_token")
-    body_b64, sig_b64 = token.split(".", 1)
-    try:
-        body = _b64url_decode(body_b64)
-        sig = _b64url_decode(sig_b64)
-    except Exception as exc:  # noqa: BLE001
-        raise DeeplinkError("bad_base64") from exc
-
-    expected = hmac.new(_secret(), body, hashlib.sha256).digest()
-    if not hmac.compare_digest(sig, expected):
-        raise DeeplinkError("bad_signature")
-
-    try:
-        payload = json.loads(body.decode("utf-8"))
-    except Exception as exc:  # noqa: BLE001
-        raise DeeplinkError("bad_payload") from exc
-
-    if not isinstance(payload, dict) or payload.get("v") != _TOKEN_VERSION:
-        raise DeeplinkError("bad_version")
-    for key in ("t", "a", "u", "e"):
-        if key not in payload:
-            raise DeeplinkError(f"missing_field:{key}")
-    if int(payload["e"]) < int(time.time()):
+def resolve(db, nonce: str) -> dict[str, Any]:
+    """Look up a /start nonce. Returns {agent_id, tenant_id,
+    app_user_id, expires_at}. Raises DeeplinkError on any failure
+    — unknown, expired, malformed."""
+    if not nonce:
+        raise DeeplinkError("empty_nonce")
+    # Telegram may percent-encode unusual inputs; we accept only the
+    # urlsafe alphabet we mint. Defensive check so SQL jsonpath can't
+    # see anything surprising even if a user pastes a weird /start.
+    if any(c not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" for c in nonce):
+        raise DeeplinkError("malformed_nonce")
+    row = db._fetch_one(
+        """
+        SELECT ab.agent_id,
+               a.tenant_id,
+               (ab.config->'managed_pending'->>'app_user_id')::int AS app_user_id,
+               (ab.config->'managed_pending'->>'expires_at')::bigint AS expires_at
+          FROM agent_bridges ab
+          JOIN agents a ON a.agent_id = ab.agent_id
+         WHERE ab.bridge_type = 'telegram'
+           AND ab.config->'managed_pending'->>'nonce' = %s
+         LIMIT 1
+        """,
+        (nonce,),
+    )
+    if row is None:
+        raise DeeplinkError("unknown_nonce")
+    expires = int(row.get("expires_at") or 0)
+    if expires and expires < int(time.time()):
         raise DeeplinkError("expired")
-    return payload
+    return {
+        "agent_id": row["agent_id"],
+        "tenant_id": row["tenant_id"],
+        "app_user_id": row["app_user_id"],
+        "expires_at": expires,
+    }

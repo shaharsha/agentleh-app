@@ -87,32 +87,36 @@ def _extract_start_token(text: str) -> str | None:
 async def _handle_start_message(
     request: Request, chat_id: int, telegram_user_id: int, token: str
 ) -> None:
-    """User tapped the deep-link and /start fired. Verify the signed
-    token, store chat_id on the agent_bridges row, and send the
-    KeyboardButtonRequestManagedBot button."""
+    """User tapped the deep-link and /start fired. Resolve the nonce
+    against agent_bridges.config.managed_pending, stash the Telegram
+    chat/user ids on that same row so ManagedBotUpdated can later
+    correlate, and send the KeyboardButtonRequestManagedBot button."""
+    db = request.app.state.db
     try:
-        payload = telegram_deeplink.verify(token)
+        resolved = telegram_deeplink.resolve(db, token)
     except DeeplinkError as exc:
         # Reply politely — users who share a bot link publicly would
-        # otherwise see nothing, which is confusing. Don't leak that
-        # the signature was bad vs expired.
-        await asyncio.to_thread(
-            telegram_manager.send_message,
-            chat_id,
-            "This link is no longer valid. Please start again from the Agentiko web app.",
-        )
-        logger.info("telegram /start bad token: %s", exc)
+        # otherwise see nothing, which is confusing. Best-effort: if
+        # send_message errors too (e.g. chat not known to the bot
+        # yet), we still ack the webhook so Telegram doesn't retry.
+        logger.info("telegram /start bad nonce: %s", exc)
+        try:
+            await asyncio.to_thread(
+                telegram_manager.send_message,
+                chat_id,
+                "This link is no longer valid. Please start again from the Agentiko web app.",
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("follow-up send_message failed for bad /start", exc_info=True)
         return
 
-    tenant_id = int(payload["t"])
-    agent_id = str(payload["a"])
-    initiating_user_id = int(payload["u"])
+    tenant_id = int(resolved["tenant_id"])
+    agent_id = str(resolved["agent_id"])
+    initiating_user_id = int(resolved["app_user_id"])
 
-    db = request.app.state.db
-    # Persist the pending attempt so when ManagedBotUpdated arrives
-    # later we can match it to (tenant, agent, user). Keyed on
-    # telegram_user_id so multiple tenants' members can connect
-    # concurrently without colliding.
+    # Persist the telegram chat + user ids on the SAME managed_pending
+    # row the deep-link nonce lives in, so the subsequent
+    # ManagedBotUpdated event can look the attempt up by telegram_user_id.
     _record_pending_attempt(
         db,
         telegram_user_id=telegram_user_id,
@@ -268,29 +272,33 @@ def _record_pending_attempt(
     agent_id: str,
     app_user_id: int,
 ) -> None:
-    import json
-    import time
-
-    payload = {
-        "telegram_user_id": telegram_user_id,
-        "telegram_chat_id": telegram_chat_id,
-        "app_user_id": app_user_id,
-        "started_at": int(time.time()),
-    }
+    """Merge the Telegram chat + user ids into the existing
+    managed_pending object (already seeded by start-managed with the
+    nonce + expires + app_user_id). Uses jsonb_set so we PRESERVE
+    the nonce and ttl fields — an earlier overwrite would have
+    blown them away, which we'd regret if we ever added retries."""
     db._execute(
         """
-        INSERT INTO agent_bridges
-            (agent_id, bridge_type, enabled, config, connected_at)
-        VALUES (%s, 'telegram', FALSE,
-                jsonb_build_object('managed_pending', %s::jsonb),
-                NULL)
-        ON CONFLICT (agent_id, bridge_type) DO UPDATE SET
-            config = agent_bridges.config || jsonb_build_object(
-                'managed_pending', %s::jsonb,
-                'managed_error', NULL
-            )
+        UPDATE agent_bridges
+           SET config = jsonb_set(
+                   jsonb_set(
+                       jsonb_set(
+                           config,
+                           '{managed_pending,telegram_user_id}',
+                           to_jsonb(%s::bigint),
+                           true
+                       ),
+                       '{managed_pending,telegram_chat_id}',
+                       to_jsonb(%s::bigint),
+                       true
+                   ),
+                   '{managed_pending,started_at}',
+                   to_jsonb(extract(epoch from now())::bigint),
+                   true
+               )
+         WHERE agent_id = %s AND bridge_type = 'telegram'
         """,
-        (agent_id, json.dumps(payload), json.dumps(payload)),
+        (telegram_user_id, telegram_chat_id, agent_id),
     )
 
 
