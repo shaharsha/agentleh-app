@@ -330,6 +330,18 @@ const CAN_LABELS: Record<string, Bilingual> = {
     he: 'ניהול אירועים',
     en: 'Manage events',
   },
+  manage_email: {
+    he: 'ניהול מיילים (קריאה, מחיקה, סימון)',
+    en: 'Manage email (read, delete, mark)',
+  },
+  read_email: {
+    he: 'קריאת מיילים',
+    en: 'Read email',
+  },
+  manage_labels: {
+    he: 'ניהול תוויות',
+    en: 'Manage labels',
+  },
   send_email: {
     he: 'שליחת מיילים בשמך',
     en: 'Send email on your behalf',
