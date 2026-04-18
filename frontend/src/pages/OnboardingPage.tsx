@@ -1,29 +1,15 @@
 import { useState } from 'react'
 import { submitOnboarding, type ProvisionProgress } from '../lib/api'
+import ProvisionProgressBar from '../components/ProvisionProgressBar'
 import StepIndicator from '../components/StepIndicator'
 import VoicePicker from '../components/VoicePicker'
-import { useI18n, type Bilingual } from '../lib/i18n'
+import { useI18n } from '../lib/i18n'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import type { AppUser } from '../lib/types'
 
 interface OnboardingPageProps {
   user: AppUser
   onComplete: () => void
-}
-
-// Bilingual labels for the step numbers the backend streams. Mirrors the
-// standalone tenant agent-create flow's step layout so both progress UIs
-// narrate the same story. Step 5 only fires when the user gave a phone
-// and the welcome template is dispatched after provisioning.
-function defaultStepLabel(step: number): Bilingual {
-  switch (step) {
-    case 1: return { he: 'מכין סביבת עבודה…', en: 'Preparing workspace…' }
-    case 2: return { he: 'מגדיר קונפיגורציה…', en: 'Configuring…' }
-    case 3: return { he: 'מעדכן בסיס נתונים…', en: 'Updating database…' }
-    case 4: return { he: 'מפעיל קונטיינר ובודק תקינות…', en: 'Starting container & health checks…' }
-    case 5: return { he: 'שולח הודעת פתיחה בוואטסאפ…', en: 'Sending welcome message…' }
-    default: return { he: 'מעבד…', en: 'Working…' }
-  }
 }
 
 export default function OnboardingPage({ user, onComplete }: OnboardingPageProps) {
@@ -36,14 +22,6 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
     label: 'Connecting…',
   })
   const [error, setError] = useState<string | null>(null)
-
-  // Linear progress fills the bar even when the stream is sparse (cloud
-  // buffering, or between the VM's 4-step ticks and the optional welcome
-  // step). Matches TenantPage's 700ms easing for the same reason.
-  const progressPct = Math.min(
-    100,
-    Math.round((progress.step / Math.max(1, progress.total)) * 100),
-  )
 
   const [form, setForm] = useState({
     full_name: user.full_name || '',
@@ -257,48 +235,11 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
 
         {loading ? (
           <div className="glass-card-elevated rounded-[18px] sm:rounded-[22px] p-4 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between text-[15px]">
-              <span className="font-semibold">
-                {t({ he: 'מקים את הסוכן…', en: 'Provisioning your agent…' })}
-              </span>
-              <span className="tabular-nums text-text-secondary text-[13px]">{progressPct}%</span>
-            </div>
-            {/* 700ms easing smooths burst-delivered events — Cloud Run
-                sometimes buffers a few progress ticks and flushes them at
-                once. Without the easing the bar would teleport. */}
-            <div className="h-1.5 bg-border rounded-full overflow-hidden">
-              <div
-                className="h-full bg-brand-500 rounded-full transition-all duration-700 ease-out"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-            <ul className="space-y-2.5 text-[14px]">
-              {Array.from({ length: progress.total || 4 }).map((_, i) => {
-                const stepNum = i + 1
-                const done = progress.step > stepNum
-                const active = progress.step === stepNum
-                const label = t(defaultStepLabel(stepNum))
-                return (
-                  <li key={i} className="flex items-center gap-2.5">
-                    {done ? (
-                      <svg className="w-4 h-4 text-success shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : active ? (
-                      <svg className="w-4 h-4 text-brand-500 animate-spin shrink-0" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                    ) : (
-                      <div className="w-4 h-4 rounded-full border-2 border-border shrink-0" />
-                    )}
-                    <span className={done ? 'text-text-secondary/60' : active ? 'text-text-primary font-medium' : 'text-text-secondary/60'}>
-                      {label}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
+            <ProvisionProgressBar
+              progress={progress}
+              provisioning={loading}
+              heading={t({ he: 'מקים את הסוכן…', en: 'Provisioning your agent…' })}
+            />
             {error && (
               <div className="text-[13px] text-danger dark:text-red-300 bg-danger-light p-3 rounded-lg">
                 {error}
