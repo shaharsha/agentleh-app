@@ -405,6 +405,34 @@ html[data-theme="dark"] .glass-nav {
   box-shadow: 0 1px 4px rgba(var(--shadow-rgb), 0.04);
 }
 
+/* BRAND.md §18 Dialogs — modal sheet surface. Fully opaque cream-50 /
+ * navy-700 so form text stays crisp over the dimmed backdrop. BRAND spec
+ * names `glass-thick` for the blur material, but for tall forms legibility
+ * beats translucency — the drop-shadow + backdrop scrim carry the
+ * floating-chrome feel without needing backdrop-filter here. */
+.glass-thick {
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(14, 19, 32, 0.05),
+    0 12px 48px rgba(var(--shadow-rgb), 0.18);
+}
+html[data-theme="dark"] .glass-thick {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+    0 12px 48px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-dialog-in {
+  animation: dialog-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /* BRAND.md §18 canonical card — Paper-resting. Use this for every dashboard
  * pane. Ground tier (`bg-surface`) must not be used as a card fill: on cream
  * it's identical to the page body, so cards disappear. `.card` lifts to
