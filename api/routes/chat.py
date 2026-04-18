@@ -58,7 +58,13 @@ async def _validate_jwt_and_user(app, token: str) -> dict[str, Any] | None:
     if not supabase_uid:
         return None
     db = app.state.db
-    user = db.get_user_for_auth(supabase_uid, email, "")
+    from lib.db import AuthError
+
+    try:
+        user = db.get_user_for_auth(supabase_uid, email, "")
+    except AuthError as exc:
+        logger.info("webchat: get_user_for_auth rejected: %s", exc.code)
+        return None
     return user
 
 

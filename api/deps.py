@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from api.auth import decode_supabase_jwt
+from lib.db import AuthError
 
 _bearer = HTTPBearer()
 
@@ -51,27 +52,55 @@ async def get_current_user(
 
     Revoked-account protection: a valid JWT on its own is not enough. The
     DB gate below distinguishes three cases — active user (return the row),
-    first-time login (insert and return), and soft-deleted (return 401 so
-    the frontend clears its Supabase session and redirects to login). Before
-    this change the call was an unconditional UPSERT, which meant a JWT
-    issued before a user was deleted could silently resurrect them.
+    first-time login (insert and return), and a soft-deleted or
+    email-conflicted row (raise a typed AuthError, translated here to a
+    structured HTTPException). Before this change the call was an
+    unconditional UPSERT, which meant a JWT issued before a user was
+    deleted could silently resurrect them.
+
+    All error responses use the dict `{error, message, message_he}` shape
+    the frontend's error-mapping layer expects. Raw string-detail 401/500s
+    would cascade through `_couponCall` and surface as a generic
+    "coupon_error" in the UI.
     """
     try:
         payload = decode_supabase_jwt(creds.credentials)
     except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": "invalid_token",
+                "message": str(e),
+                "message_he": "אסימון האימות אינו תקף",
+            },
+        )
 
     uid = payload.get("sub")
     email = payload.get("email", "")
     name = payload.get("user_metadata", {}).get("full_name", "")
 
     if not uid:
-        raise HTTPException(status_code=401, detail="Missing sub in token")
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": "invalid_token",
+                "message": "Missing sub in token",
+                "message_he": "אסימון האימות אינו תקף",
+            },
+        )
 
     db = request.app.state.db
-    user = db.get_user_for_auth(supabase_uid=uid, email=email, full_name=name)
-    if user is None:
-        raise HTTPException(status_code=401, detail="account_revoked")
+    try:
+        user = db.get_user_for_auth(supabase_uid=uid, email=email, full_name=name)
+    except AuthError as exc:
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={
+                "error": exc.code,
+                "message": exc.message,
+                "message_he": exc.message_he,
+            },
+        )
     return user
 
 

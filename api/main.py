@@ -18,9 +18,10 @@ logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
 )
 
+import psycopg
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from api.invite_og import (
     extract_invite_fields,
@@ -105,6 +106,54 @@ app.include_router(admin_router, prefix="/api")
 app.include_router(google_oauth_router, prefix="/api")
 app.include_router(integrations_router, prefix="/api")
 app.include_router(voices_router, prefix="/api")
+
+
+@app.exception_handler(psycopg.Error)
+async def _db_error_handler(request: Request, exc: psycopg.Error) -> JSONResponse:
+    """Catch-all for unhandled psycopg errors.
+
+    Without this, an exception raised from a FastAPI dependency (e.g.
+    get_current_user) bypasses the route's own try/except and FastAPI
+    returns its default 500 with `{"detail": "Internal Server Error"}` —
+    a plain string. Domain-specific frontend wrappers like `_couponCall`
+    decode that as an empty detail and fall back to their hard-coded
+    error code (e.g. `coupon_error`), misleading the user into thinking
+    the coupon is broken when the real fault was in the auth layer.
+
+    Returning the canonical `detail: {error, message, message_he}` shape
+    here means every 5xx carries a generic `internal_error` code that
+    the frontend can map to a correct "something went wrong" message.
+    """
+    logger.exception("unhandled db error at %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": {
+                "error": "internal_error",
+                "message": "A database error occurred. Please try again.",
+                "message_he": "אירעה שגיאה פנימית. אנא נסה שוב.",
+            }
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Catch-all for any other uncaught exception so no 5xx leaves the
+    app with string-shaped `detail`. HTTPException and RequestValidationError
+    are handled by their own FastAPI/Starlette handlers before reaching
+    this one."""
+    logger.exception("unhandled error at %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": {
+                "error": "internal_error",
+                "message": "An unexpected error occurred. Please try again.",
+                "message_he": "אירעה שגיאה לא צפויה. אנא נסה שוב.",
+            }
+        },
+    )
 
 
 @app.get("/health")

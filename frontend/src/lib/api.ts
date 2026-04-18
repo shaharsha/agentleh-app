@@ -112,7 +112,12 @@ async function _couponCall<T>(url: string, body: unknown): Promise<T> {
       detail?: Record<string, unknown> & { error?: string }
     }
     const detail = errBody?.detail || {}
-    const code = (detail.error as string) || 'coupon_error'
+    // Prefer the server-provided `error` code. On 5xx with no code, fall
+    // back to `internal_error` (not `coupon_error`) — a 5xx is never a
+    // coupon-specific failure, so labelling it so misleads the user.
+    // Domain 4xx without a code keeps the `coupon_error` fallback.
+    const fallback = res.status >= 500 ? 'internal_error' : 'coupon_error'
+    const code = (detail.error as string) || fallback
     throw new CouponApiError(res.status, code, detail)
   }
   return res.json()

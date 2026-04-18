@@ -87,6 +87,27 @@ const ERROR_MSG: Record<string, Bilingual> = {
     en: 'Too many attempts — try again in a minute',
   },
   tenant_not_found: { he: 'סביבת עבודה לא נמצאה', en: 'Workspace not found' },
+  // Auth-layer codes that can surface through any authenticated call,
+  // not just coupon routes — included here because the redeem page is
+  // the first authenticated surface many users hit after sign-up, and
+  // bubbling a bare code like "שגיאה: account_revoked" is worse than
+  // bubbling a translated explanation.
+  account_revoked: {
+    he: 'חשבונך נמחק. לשחזור גישה פנה לתמיכה.',
+    en: 'Your account has been deleted. Contact support to restore access.',
+  },
+  email_already_registered: {
+    he: 'כתובת אימייל זו כבר רשומה עם שיטת כניסה אחרת. היכנס עם שיטת הכניסה המקורית שלך.',
+    en: 'This email is already registered under a different sign-in method. Sign in with your original method.',
+  },
+  invalid_token: {
+    he: 'פג תוקף החיבור. היכנס שוב.',
+    en: 'Your session has expired. Please sign in again.',
+  },
+  internal_error: {
+    he: 'אירעה שגיאה. אנא נסה שוב בעוד רגע.',
+    en: 'Something went wrong. Please try again in a moment.',
+  },
 }
 
 export default function RedeemCouponPage({ user, onComplete }: RedeemCouponPageProps) {
