@@ -37,7 +37,7 @@
   --color-success-light: #E4EBD8;
   --color-warning: #D4A24A;
   --color-warning-light: #F7EBCF;
-  --color-danger: var(--color-danger);
+  --color-danger: #A83E2E;
   --color-danger-light: #F4D6D0;
   --color-info: #6D8BA6;
   --color-info-light: #DDE5EC;
@@ -52,18 +52,21 @@
 :root {
   color-scheme: light;
 
-  /* Glass surfaces (rgba so backdrop-filter still shines through) */
-  --glass-nav-bg: rgba(255, 255, 255, 0.65);
-  --glass-nav-border: rgba(255, 255, 255, 0.3);
-  --glass-card-bg: rgba(255, 255, 255, 0.55);
-  --glass-card-bg-hover: rgba(255, 255, 255, 0.75);
-  --glass-card-border: rgba(255, 255, 255, 0.6);
-  --glass-elevated-bg: rgba(255, 255, 255, 0.72);
-  --glass-elevated-border: rgba(255, 255, 255, 0.5);
-  --glass-pill-bg: rgba(255, 255, 255, 0.5);
-  --glass-pill-border: rgba(255, 255, 255, 0.4);
-  --glass-input-bg: rgba(255, 255, 255, 0.6);
-  --glass-input-bg-focus: rgba(255, 255, 255, 0.95);
+  /* Glass surfaces (rgba so backdrop-filter still shines through).
+   * Light mode sits on cream #F3EAD3 — plain white lifts cards cleanly.
+   * Alpha was calibrated to keep enough tint for warmth while still
+   * giving a paper-on-field separation. */
+  --glass-nav-bg: rgba(255, 255, 255, 0.78);
+  --glass-nav-border: rgba(255, 255, 255, 0.4);
+  --glass-card-bg: rgba(255, 255, 255, 0.85);
+  --glass-card-bg-hover: rgba(255, 255, 255, 0.95);
+  --glass-card-border: rgba(255, 255, 255, 0.7);
+  --glass-elevated-bg: rgba(255, 255, 255, 0.95);
+  --glass-elevated-border: rgba(255, 255, 255, 0.6);
+  --glass-pill-bg: rgba(255, 255, 255, 0.7);
+  --glass-pill-border: rgba(255, 255, 255, 0.5);
+  --glass-input-bg: rgba(255, 255, 255, 0.85);
+  --glass-input-bg-focus: rgba(255, 255, 255, 1);
 
   /* Shadow tints */
   --shadow-rgb: 0, 0, 0;
@@ -102,9 +105,9 @@ html[data-theme="dark"] {
     --color-surface-soft: #141828;
     --color-text-primary: #F3EAD3;
     --color-text-secondary: #D4C4A0;
-    --color-text-muted: #8A7860;
-    --color-border: #1F2740;
-    --color-border-light: #141828;
+    --color-text-muted: #B8A595;
+    --color-border: #2A3350;
+    --color-border-light: #1F2740;
     --color-brand-50: #2A1810;
     --color-brand-100: #3D2416;
     --color-success-light: #0F2A1C;
@@ -156,18 +159,21 @@ html[data-theme="dark"] {
     --color-purple-100: rgb(52 28 90);
     --color-purple-200: rgb(72 42 120);
 
-    /* Glass goes dark-tinted */
-    --glass-nav-bg: rgba(22, 18, 14, 0.72);
+    /* Glass goes navy-tinted (mix navy-700 #141828 and navy-500 #1F2740
+     * over the navy-900 body so cards lift visibly — the old warm-black
+     * rgba(30,24,20) was left over from the pre-Antennae theme and
+     * clashed with the navy body, producing no visible elevation). */
+    --glass-nav-bg: rgba(20, 24, 40, 0.78);
     --glass-nav-border: rgba(255, 255, 255, 0.06);
-    --glass-card-bg: rgba(30, 24, 20, 0.55);
-    --glass-card-bg-hover: rgba(38, 30, 24, 0.7);
+    --glass-card-bg: rgba(31, 39, 64, 0.7);
+    --glass-card-bg-hover: rgba(41, 49, 74, 0.85);
     --glass-card-border: rgba(255, 255, 255, 0.08);
-    --glass-elevated-bg: rgba(38, 30, 24, 0.72);
-    --glass-elevated-border: rgba(255, 255, 255, 0.08);
-    --glass-pill-bg: rgba(30, 24, 20, 0.5);
-    --glass-pill-border: rgba(255, 255, 255, 0.06);
-    --glass-input-bg: rgba(30, 24, 20, 0.55);
-    --glass-input-bg-focus: rgba(36, 28, 22, 0.85);
+    --glass-elevated-bg: rgba(41, 49, 74, 0.82);
+    --glass-elevated-border: rgba(255, 255, 255, 0.1);
+    --glass-pill-bg: rgba(31, 39, 64, 0.6);
+    --glass-pill-border: rgba(255, 255, 255, 0.08);
+    --glass-input-bg: rgba(20, 24, 40, 0.7);
+    --glass-input-bg-focus: rgba(31, 39, 64, 0.9);
 
     --shadow-rgb: 0, 0, 0;
 
