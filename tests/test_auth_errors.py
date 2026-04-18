@@ -166,7 +166,12 @@ def test_email_collision_soft_deleted_raises_account_revoked():
             _unique_violation(),
         ],
         second_cursor_behaviours=[
-            {"deleted_at": "2026-04-17T16:04:08Z"},
+            {
+                "id": 7,
+                "supabase_uid": "different-uid",
+                "email": "conflict@b.com",
+                "deleted_at": "2026-04-17T16:04:08Z",
+            },
         ],
     )
     with pytest.raises(AuthAccountRevoked):
@@ -182,11 +187,51 @@ def test_email_collision_live_raises_already_registered():
             _unique_violation(),
         ],
         second_cursor_behaviours=[
-            {"deleted_at": None},
+            {
+                "id": 99,
+                "supabase_uid": "different-uid",
+                "deleted_at": None,
+                "email": "conflict@b.com",
+            },
         ],
     )
     with pytest.raises(AuthEmailAlreadyRegistered):
         db.get_user_for_auth(supabase_uid="new-uid", email="conflict@b.com")
+
+
+def test_email_collision_same_uid_returns_winning_row():
+    """Concurrent first-sign-in inserts from the same Supabase session.
+
+    If two parallel auth'd requests arrive for a brand-new user, both
+    hit SELECT miss + INSERT. One wins; the loser's INSERT can still
+    trip the email UNIQUE depending on which constraint Postgres checks
+    first (ON CONFLICT (supabase_uid) DO NOTHING only handles the
+    supabase_uid conflict). When the existing row has the *same*
+    supabase_uid as the caller, we return it — it's us.
+    """
+    db = _make_db(
+        cursor_behaviours=[
+            None,
+            _unique_violation(),
+        ],
+        second_cursor_behaviours=[
+            {
+                "id": 42,
+                "supabase_uid": "new-uid",  # SAME uid — race partner
+                "email": "same@b.com",
+                "deleted_at": None,
+                "full_name": "",
+                "phone": None,
+                "gender": None,
+                "onboarding_status": "pending",
+                "role": "user",
+                "created_at": None,
+            },
+        ],
+    )
+    out = db.get_user_for_auth(supabase_uid="new-uid", email="same@b.com")
+    assert out["id"] == 42
+    assert out["supabase_uid"] == "new-uid"
 
 
 # ─── HTTP-level tests: get_current_user translates to shaped detail ───

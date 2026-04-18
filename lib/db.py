@@ -282,13 +282,25 @@ class AppDatabase:
                     )
                 except psycopg.errors.UniqueViolation as exc:
                     # Email collision: another app_users row owns this
-                    # email under a different supabase_uid. Branch on
-                    # whether that row is live (account takeover risk —
-                    # reject) or soft-deleted (revoked — reject without
-                    # resurrection).
+                    # email. Three sub-cases:
+                    #
+                    #   (a) SAME supabase_uid — a concurrent request for
+                    #       this same user won the INSERT race. Postgres
+                    #       doesn't guarantee which unique constraint it
+                    #       checks first, so ON CONFLICT (supabase_uid)
+                    #       DO NOTHING can still surface the email
+                    #       constraint violation when both conflicts
+                    #       apply simultaneously. Just re-SELECT the
+                    #       winner and return it — this is us.
+                    #   (b) Different supabase_uid, live row — genuine
+                    #       cross-account collision. Reject with 409.
+                    #   (c) Different supabase_uid, soft-deleted — the
+                    #       account was revoked. Reject with 403.
                     conn.rollback()
                     other = self._fetch_one(
-                        "SELECT deleted_at FROM app_users WHERE lower(email) = lower(%s)",
+                        "SELECT id, supabase_uid, email, full_name, phone, gender, "
+                        "onboarding_status, role, deleted_at, created_at "
+                        "FROM app_users WHERE lower(email) = lower(%s)",
                         (email,),
                     )
                     if other is None:
@@ -296,6 +308,13 @@ class AppDatabase:
                         # recognize — surface the original error rather
                         # than silently swallowing it.
                         raise exc
+                    if other["supabase_uid"] == supabase_uid:
+                        # Race with a concurrent insert from us. Return
+                        # the winning row, unless it's somehow been
+                        # soft-deleted in the interim.
+                        if other["deleted_at"] is not None:
+                            raise AuthAccountRevoked() from exc
+                        return dict(other)
                     if other["deleted_at"] is not None:
                         raise AuthAccountRevoked() from exc
                     raise AuthEmailAlreadyRegistered() from exc
