@@ -6,6 +6,7 @@ import {
 } from '../lib/api'
 import { useI18n, type Bilingual } from '../lib/i18n'
 import type { IntegrationsResponse } from '../lib/types'
+import { DisclosureChevronIcon } from './icons'
 
 interface IntegrationsPanelProps {
   tenantId: number
@@ -40,7 +41,7 @@ export default function IntegrationsPanel({
   agentId,
   onChange,
 }: IntegrationsPanelProps) {
-  const { t, lang } = useI18n()
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<IntegrationsResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -223,11 +224,6 @@ export default function IntegrationsPanel({
     }
   }
 
-  // Chevron that points AT the target. In LTR: ▶ (right). In RTL: ◀
-  // (left). Open state is direction-agnostic: ▼ (down).
-  const isRtl = lang === 'he'
-  const chevron = open ? '▼' : isRtl ? '◀' : '▶'
-
   // Summary badge for the collapsed header. Always visible once we've
   // fetched status, so users immediately see whether this agent has
   // Google wired up without having to click to expand.
@@ -242,7 +238,7 @@ export default function IntegrationsPanel({
         className="w-full flex items-center justify-between text-sm text-text-secondary hover:text-text-primary transition"
       >
         <span className="flex items-center gap-2">
-          <span aria-hidden="true">{chevron}</span>
+          <DisclosureChevronIcon open={open} />
           <span>{t({ he: 'אינטגרציות', en: 'Integrations' })}</span>
         </span>
         {googleStatus == null ? (
