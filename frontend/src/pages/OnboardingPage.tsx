@@ -162,7 +162,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
               dir="ltr"
               aria-describedby="onboarding-phone-help"
               className="input-glass w-full px-4 py-3 text-[15px]"
-              placeholder="+972..."
+              placeholder="050-123-4567"
             />
             <p id="onboarding-phone-help" className="text-[12px] text-text-muted mt-1.5">
               {t({
