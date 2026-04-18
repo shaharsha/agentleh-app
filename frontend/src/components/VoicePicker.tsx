@@ -257,7 +257,7 @@ export default function VoicePicker({
           non-visible the other is promoted). Without padding, the edge
           cards' borders and the 2px `ring-2` selection halo get clipped
           flush by the container. p-1 = 4px breathing room on all sides. */}
-      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[60vh] sm:max-h-[360px] overflow-y-auto p-1">
+      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[200px] overflow-y-auto p-1">
         {filtered.map((voice: VoiceManifestEntry) => {
           const isSelected = voice.name === value
           const isPlaying = playing === voice.name
