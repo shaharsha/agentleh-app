@@ -88,19 +88,19 @@ def render_og_block(
         safe_inviter = html.escape(inviter_name or "", quote=True)
         safe_tenant = html.escape(tenant_name or "", quote=True)
         if lang == "en":
-            title = f"{safe_inviter} invited you to {safe_tenant} on Agentiko"
+            title = f"{safe_inviter} invited you to {safe_tenant} on agentiko"
             description = (
-                f"Join {safe_tenant} as {html.escape(role or 'a member', quote=True)} on Agentiko."
+                f"Join {safe_tenant} as {html.escape(role or 'a member', quote=True)} on agentiko."
             )
         else:
-            title = f"{safe_inviter} הזמין/ה אותך ל-{safe_tenant} ב-Agentiko"
-            description = f"הצטרף/י ל-{safe_tenant} ב-Agentiko."
+            title = f"{safe_inviter} הזמין/ה אותך ל-{safe_tenant} ב-agentiko"
+            description = f"הצטרף/י ל-{safe_tenant} ב-agentiko."
     else:
         if lang == "en":
-            title = "You've been invited to Agentiko"
+            title = "You've been invited to agentiko"
             description = "An AI employee in WhatsApp, for the price of a coffee a day."
         else:
-            title = "הוזמנת ל-Agentiko"
+            title = "הוזמנת ל-agentiko"
             description = "עובד AI בוואטסאפ, במחיר של קפה ביום."
 
     og_locale = "he_IL" if lang == "he" else "en_US"
@@ -108,7 +108,7 @@ def render_og_block(
     return "\n    ".join(
         [
             f'<meta name="description" content="{description}" />',
-            f'<meta property="og:site_name" content="Agentiko" />',
+            f'<meta property="og:site_name" content="agentiko" />',
             f'<meta property="og:type" content="website" />',
             f'<meta property="og:locale" content="{og_locale}" />',
             f'<meta property="og:title" content="{title}" />',
@@ -118,7 +118,7 @@ def render_og_block(
             f'<meta property="og:image:width" content="1200" />',
             f'<meta property="og:image:height" content="630" />',
             f'<meta property="og:image:type" content="image/png" />',
-            f'<meta property="og:image:alt" content="Agentiko" />',
+            f'<meta property="og:image:alt" content="agentiko" />',
             f'<meta name="twitter:card" content="summary_large_image" />',
             f'<meta name="twitter:title" content="{title}" />',
             f'<meta name="twitter:description" content="{description}" />',

@@ -3,7 +3,7 @@
 Covers the four-case matrix from the plan:
 
   1. Bot UA + valid token   -> dynamic "{inviter} invited you to {tenant}"
-  2. Bot UA + invalid token -> generic "invited to Agentiko" fallback
+  2. Bot UA + invalid token -> generic "invited to agentiko" fallback
                                (must NOT leak inviter/tenant from cache)
   3. Human UA                -> untouched SPA index.html
   4. Missing token on bot UA -> same generic fallback
@@ -36,9 +36,9 @@ from api.invite_og import (  # noqa: E402
 INDEX_TEMPLATE = """<!doctype html>
 <html lang="he" dir="rtl">
 <head>
-  <title>Agentiko</title>
+  <title>agentiko</title>
   <!-- OG:START -->
-  <meta property="og:title" content="Agentiko" />
+  <meta property="og:title" content="agentiko" />
   <meta property="og:description" content="An AI employee in WhatsApp, for the price of a coffee a day." />
   <meta property="og:image" content="https://app.agentiko.io/og-image.png" />
   <!-- OG:END -->
@@ -108,7 +108,7 @@ def test_human_ua_gets_untouched_spa(client):
     client.app.state.db.get_invite_by_token.assert_not_called()
     # Original static OG block untouched
     assert "Yossi" not in resp.text
-    assert 'content="Agentiko"' in resp.text
+    assert 'content="agentiko"' in resp.text
 
 
 def test_bot_without_token_gets_generic_og(client):
@@ -128,7 +128,7 @@ def test_english_accept_language_renders_english(client):
             "Accept-Language": "en-US,en;q=0.9",
         },
     )
-    assert "invited you to Salon Dalia on Agentiko" in resp.text
+    assert "invited you to Salon Dalia on agentiko" in resp.text
 
 
 # ── Pure-function unit tests ─────────────────────────────────────────────
@@ -194,7 +194,7 @@ def test_render_og_block_generic_when_no_invite():
         role=None,
         lang="en",
     )
-    assert "invited to Agentiko" in block
+    assert "invited to agentiko" in block
 
 
 def test_render_og_block_escapes_hostile_input():
@@ -215,20 +215,20 @@ def test_inject_og_replaces_marker_region():
     html = (
         "<head>\n"
         "    <!-- OG:START -->\n"
-        '    <meta property="og:title" content="Agentiko" />\n'
+        '    <meta property="og:title" content="agentiko" />\n'
         "    <!-- OG:END -->\n"
         "</head>"
     )
     replacement = '<meta property="og:title" content="Custom" />'
     out = inject_og(html, replacement)
     assert "Custom" in out
-    assert 'content="Agentiko"' not in out
+    assert 'content="agentiko"' not in out
     assert "<!-- OG:START -->" in out
     assert "<!-- OG:END -->" in out
 
 
 def test_inject_og_passthrough_when_markers_missing():
-    html = "<head><title>Agentiko</title></head>"
+    html = "<head><title>agentiko</title></head>"
     out = inject_og(html, '<meta property="og:title" content="Custom" />')
     # Missing markers => return untouched so we never serve broken HTML
     assert out == html
