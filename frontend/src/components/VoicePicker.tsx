@@ -334,15 +334,17 @@ function FilterButton({
 }
 
 function PlayIcon({ playing }: { playing: boolean }) {
-  // Idle state uses a muted brand wash (brand-50) instead of white — BRAND §17
-  // reserves white for input fields, and white-on-cream read as a ghost chip
-  // against the voice card's cream-50 fill. brand-50 also makes the idle→
-  // playing transition a natural voice-dot crescendo (quiet wash → full
-  // terracotta = "the agent is speaking now") per §2.
+  // Idle: page-cream disc (one tier darker than the card, reads as a
+  // pressed-in well) with a terracotta hairline + terracotta icon. Keeps
+  // the voice-dot semantic (§2) visible without coating each of 12+ voice
+  // cards in terracotta fill (§6 "≤ 8% terracotta per screen"). Playing:
+  // the ring fills solid — satisfying quiet→voice crescendo.
   return (
     <div
-      className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 ${
-        playing ? 'bg-brand-500 text-white' : 'bg-brand-50 text-brand-500'
+      className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+        playing
+          ? 'bg-brand text-white border border-brand'
+          : 'bg-surface text-brand border border-brand/60'
       }`}
     >
       {playing ? (
