@@ -149,6 +149,9 @@ Both routed via the shared Global HTTPS LB (`34.111.24.95`) → backend service 
 ```bash
 uv run dev-with-meter     # landing + app + meter + local Postgres, auto-wired
 uv run app                # app only (implies db-up)
+uv run dev-gcp            # same stack wired to agentleh_dev Cloud SQL via proxy
+                          # (use for debugging with real shared dev state — writes
+                          # are visible to all devs and CI; see parent CLAUDE.md)
 ```
 
 The parent orchestrator injects `DATABASE_URL` (local Postgres on :15432), `APP_METER_BASE_URL=http://127.0.0.1:8080`, and `APP_METER_ADMIN_TOKEN` for you. Shell-exported values win over orchestrator defaults if you need to point at Cloud SQL proxy or the deployed dev meter.
