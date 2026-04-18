@@ -138,20 +138,81 @@ export async function redeemCoupon(
   })
 }
 
-export async function submitOnboarding(data: {
-  full_name: string
-  phone: string
-  gender: string
-  agent_name: string
-  agent_gender: string
-  tts_voice_name?: string
-}) {
+export async function submitOnboarding(
+  data: {
+    full_name: string
+    phone: string
+    gender: string
+    agent_name: string
+    agent_gender: string
+    tts_voice_name?: string
+  },
+  onProgress?: (progress: ProvisionProgress) => void,
+): Promise<ProvisionSuccess> {
+  // NDJSON stream — identical shape to /api/tenants/{id}/agents so the
+  // onboarding UI and the standalone agent-create UI can show the same
+  // real progress bar:
+  //   {"type": "progress", "step": N, "total": M, "label": "..."}
+  //   ...
+  //   {"type": "result",   "success": true|false, ...}
   const res = await authFetch('/api/onboarding/submit', {
     method: 'POST',
     body: JSON.stringify(data),
   })
-  if (!res.ok) throw new Error('Onboarding failed')
-  return res.json()
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}))
+    throw new Error(
+      errBody?.detail?.message_he ||
+        errBody?.detail?.message ||
+        errBody?.detail?.error ||
+        errBody?.detail ||
+        'Onboarding failed',
+    )
+  }
+  if (!res.body) throw new Error('No response body from onboarding endpoint')
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim()
+        if (!line) continue
+        let event: any
+        try {
+          event = JSON.parse(line)
+        } catch {
+          continue
+        }
+        if (event.type === 'progress') {
+          onProgress?.({ step: event.step, total: event.total, label: event.label })
+        } else if (event.type === 'result') {
+          if (event.success) {
+            return {
+              agent_id: event.agent_id,
+              gateway_url: event.gateway_url || '',
+              port: event.port || 0,
+              status: event.status || 'active',
+            }
+          }
+          throw new Error(event.error || 'Onboarding failed')
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  throw new Error('Onboarding stream ended unexpectedly')
 }
 
 // ─── Voices (voice picker for onboarding + dashboard) ──────────────

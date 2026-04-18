@@ -513,32 +513,49 @@ def redeem(
                     (supersede_id,),
                 )
 
-            # 7. Insert the audit row.
-            cur.execute(
-                """
-                INSERT INTO coupon_redemptions (
-                    coupon_id, user_id, tenant_id, subscription_id,
-                    plan_id, duration_days, period_start, period_end,
-                    granted_by_admin
-                ) VALUES (
-                    %s, %s, %s, %s,
-                    %s, %s, %s, %s,
-                    %s
+            # 7. Insert the audit row. The UniqueViolation catch here is
+            # defense-in-depth against re-introduction of a partial unique
+            # index on (coupon_id, user_id). Meter migration 024 dropped
+            # such an index because it fired for *every* coupon regardless
+            # of the coupons.one_per_user flag (partial predicates can't
+            # reference another table's column). The app-layer rule for
+            # one_per_user=TRUE is enforced by _validate_coupon_row above
+            # under FOR UPDATE on the coupon; a duplicate here implies a
+            # schema drift. Surface it as a typed 409 rather than letting
+            # the route's generic 500 hide the cause.
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO coupon_redemptions (
+                        coupon_id, user_id, tenant_id, subscription_id,
+                        plan_id, duration_days, period_start, period_end,
+                        granted_by_admin
+                    ) VALUES (
+                        %s, %s, %s, %s,
+                        %s, %s, %s, %s,
+                        %s
+                    )
+                    RETURNING id
+                    """,
+                    (
+                        coupon_row["id"] if coupon_row else None,
+                        user_id,
+                        tenant_id,
+                        new_sub_id,
+                        plan["plan_id"],
+                        duration_days,
+                        period_start,
+                        period_end,
+                        granted_by_admin,
+                    ),
                 )
-                RETURNING id
-                """,
-                (
-                    coupon_row["id"] if coupon_row else None,
-                    user_id,
-                    tenant_id,
-                    new_sub_id,
-                    plan["plan_id"],
-                    duration_days,
-                    period_start,
-                    period_end,
-                    granted_by_admin,
-                ),
-            )
+            except psycopg.errors.UniqueViolation as exc:
+                raise CouponAlreadyRedeemed(
+                    detail={
+                        "code": coupon_row["code"] if coupon_row else None,
+                        "reason": "coupon_redemptions_unique_violation",
+                    }
+                ) from exc
             redemption_id = int(cur.fetchone()["id"])
 
             # 8. Bump the coupon's redemption count (skip for admin grants).
