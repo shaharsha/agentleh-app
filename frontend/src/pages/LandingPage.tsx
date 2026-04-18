@@ -50,7 +50,7 @@ export default function LandingPage({ initialMode = 'login' }: LandingPageProps)
         <a
           href={landingHref('', lang)}
           aria-label={t({ he: 'חזרה לעמוד הבית', en: 'Back to home page' })}
-          className="inline-flex items-center gap-1.5 h-9 px-3 text-xs font-semibold rounded-lg border border-border-light bg-surface/60 text-text-secondary hover:text-text-primary transition-colors"
+          className="inline-flex items-center gap-1.5 h-9 px-3 text-xs font-semibold rounded-lg border border-border-light bg-surface/60 text-text-secondary hover:text-text-primary hover:border-text-muted hover:bg-surface-soft transition-colors"
         >
           <ChevronLeftIcon className="w-[14px] h-[14px] rtl:rotate-180" />
           <span>{t({ he: 'חזרה לעמוד הבית', en: 'Back to home page' })}</span>

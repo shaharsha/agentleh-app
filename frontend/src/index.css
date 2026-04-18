@@ -172,8 +172,8 @@ html[data-theme="dark"] {
     --glass-card-bg: rgba(20, 24, 40, 0.92);         /* navy-700 near-solid */
     --glass-card-bg-hover: rgba(31, 39, 64, 0.95);   /* lift to navy-500 on hover */
     --glass-card-border: rgba(31, 39, 64, 0.8);      /* navy-500 */
-    --glass-elevated-bg: rgba(31, 39, 64, 0.95);     /* navy-500 */
-    --glass-elevated-border: rgba(58, 64, 85, 0.7);  /* navy-300 hairline */
+    --glass-elevated-bg: rgba(20, 24, 40, 0.95);     /* navy-700 — BRAND §19.2: both card variants render at same Paper-resting tier */
+    --glass-elevated-border: rgba(31, 39, 64, 0.7);  /* navy-500 hairline */
     --glass-pill-bg: rgba(20, 24, 40, 0.82);
     --glass-pill-border: rgba(31, 39, 64, 0.7);
     /* Inputs lift ABOVE the card (navy-700) to navy-500 so fields read
@@ -488,7 +488,8 @@ html[data-theme="dark"] .glass-nav {
   padding: 12px 24px; font-size: 15px;
   min-height: 44px;
   font-weight: 500; font-family: inherit; cursor: pointer;
-  transition: border-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+  transition: background 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
               transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
               box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -498,9 +499,17 @@ html[data-theme="dark"] .btn-secondary {
 }
 @media (hover: hover) and (pointer: fine) {
   .btn-secondary:hover {
+    background: var(--color-surface-soft);
     border-color: var(--color-text-muted);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(var(--shadow-rgb), 0.06);
+    box-shadow: 0 2px 8px rgba(var(--shadow-rgb), 0.08);
+  }
+  html[data-theme="dark"] .btn-secondary:hover {
+    background: #2A3350; /* navy-400 — one tier above resting navy-500 */
+    border-color: #3A4055; /* navy-300 hairline, per BRAND.md §6 */
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 4px 12px rgba(0, 0, 0, 0.4);
   }
 }
 .btn-secondary:active { transform: translateY(0); }
