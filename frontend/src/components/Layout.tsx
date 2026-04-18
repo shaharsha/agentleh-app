@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState, type MouseEvent, type ReactNode } from 'react'
 import type { AppUser, TenantMembership } from '../lib/types'
 import TenantSwitcher from './TenantSwitcher'
 import LanguageSwitcher from './LanguageSwitcher'
@@ -15,6 +15,7 @@ interface LayoutProps {
   activeTenantId?: number | null
   onTenantSelect?: (tenantId: number) => void
   onRefreshTenants?: () => void
+  onNavigate?: (path: string) => void
 }
 
 export default function Layout({
@@ -24,6 +25,7 @@ export default function Layout({
   activeTenantId,
   onTenantSelect,
   onRefreshTenants,
+  onNavigate,
 }: LayoutProps) {
   const { t } = useI18n()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -44,6 +46,18 @@ export default function Layout({
 
   const hasDrawerControls = tenants.length > 0 || isSuperadmin || !!user
 
+  const homeHref =
+    user?.onboarding_status === 'complete' && activeTenantId
+      ? `/tenants/${activeTenantId}`
+      : '/'
+
+  function handleHomeClick(e: MouseEvent<HTMLAnchorElement>) {
+    if (!onNavigate) return
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+    e.preventDefault()
+    onNavigate(homeHref)
+  }
+
   return (
     <div className="min-h-screen section-gradient">
       <header className="glass-nav sticky top-0 z-50 safe-pt">
@@ -62,16 +76,23 @@ export default function Layout({
             )}
 
             <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-              <img
-                src="/brand/logo-wordmark.svg"
-                alt="Agentiko"
-                className="h-6 sm:h-7 w-auto shrink-0 block dark:hidden"
-              />
-              <img
-                src="/brand/logo-wordmark-dark.svg"
-                alt="Agentiko"
-                className="h-6 sm:h-7 w-auto shrink-0 hidden dark:block"
-              />
+              <a
+                href={homeHref}
+                onClick={handleHomeClick}
+                aria-label={t({ he: 'דף הבית', en: 'Home' })}
+                className="flex items-center shrink-0 rounded-md cursor-pointer hover:opacity-80 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <img
+                  src="/brand/logo-wordmark.svg"
+                  alt="Agentiko"
+                  className="h-6 sm:h-7 w-auto shrink-0 block dark:hidden"
+                />
+                <img
+                  src="/brand/logo-wordmark-dark.svg"
+                  alt="Agentiko"
+                  className="h-6 sm:h-7 w-auto shrink-0 hidden dark:block"
+                />
+              </a>
               {isAdminRoute && (
                 <span className="hidden sm:inline-block ms-2 text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 dark:text-purple-300 font-semibold">
                   {t({ he: 'ניהול', en: 'ADMIN' })}

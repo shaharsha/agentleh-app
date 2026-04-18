@@ -166,6 +166,7 @@ export default function App() {
       activeTenantId={activeTenantId}
       onTenantSelect={selectTenant}
       onRefreshTenants={refreshUser}
+      onNavigate={navigate}
     >
       {route.kind === 'admin' && isSuperadmin && <AdminPage />}
       {route.kind === 'admin' && !isSuperadmin && (
