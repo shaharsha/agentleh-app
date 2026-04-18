@@ -3,6 +3,7 @@ import { submitOnboarding } from '../lib/api'
 import StepIndicator from '../components/StepIndicator'
 import VoicePicker from '../components/VoicePicker'
 import { useI18n } from '../lib/i18n'
+import { useDocumentTitle } from '../lib/useDocumentTitle'
 import type { AppUser } from '../lib/types'
 
 interface OnboardingPageProps {
@@ -12,6 +13,7 @@ interface OnboardingPageProps {
 
 export default function OnboardingPage({ user, onComplete }: OnboardingPageProps) {
   const { t, dir } = useI18n()
+  useDocumentTitle(t({ he: 'הגדרת סוכן', en: 'Onboarding' }))
   const [loading, setLoading] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)

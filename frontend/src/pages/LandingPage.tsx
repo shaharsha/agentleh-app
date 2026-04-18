@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useI18n } from '../lib/i18n'
+import { useDocumentTitle } from '../lib/useDocumentTitle'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import ThemeSwitcher from '../components/ThemeSwitcher'
 import { ChevronLeftIcon } from '../components/icons'
@@ -25,6 +26,13 @@ interface LandingPageProps {
 export default function LandingPage({ initialMode = 'login' }: LandingPageProps) {
   const [mode, setMode] = useState<'login' | 'signup'>(initialMode)
   const { t, dir, lang } = useI18n()
+  useDocumentTitle(
+    t(
+      mode === 'login'
+        ? { he: 'כניסה', en: 'Sign in' }
+        : { he: 'הרשמה', en: 'Sign up' },
+    ),
+  )
 
   async function loginWithGoogle() {
     await supabase.auth.signInWithOAuth({

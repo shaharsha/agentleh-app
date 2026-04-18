@@ -20,8 +20,16 @@ logging.basicConfig(
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
+from api.invite_og import (
+    extract_invite_fields,
+    inject_og,
+    is_bot_ua,
+    pick_locale,
+    read_index_html,
+    render_og_block,
+)
 from api.routes.admin import router as admin_router
 from api.routes.agents import router as agents_router
 from api.routes.auth import router as auth_router
@@ -164,6 +172,58 @@ def _shortlink_error_html() -> str:
   </div>
 </body>
 </html>"""
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Dynamic OG injection for /invites/accept?token=...
+#
+# Invite links get shared cold over WhatsApp / Slack / LinkedIn. For
+# those scrapers we swap the static OG block in the built index.html for
+# a dynamic "{inviter} invited you to {tenant} on Agentiko" preview.
+# Humans always get the normal SPA shell. See api/invite_og.py for the
+# pure string-manipulation helpers + rationale.
+#
+# Registered BEFORE /{full_path:path} so it wins route matching.
+# ─────────────────────────────────────────────────────────────────────────
+@app.get("/invites/accept", response_model=None)
+def invites_accept_og(request: Request, token: str | None = None):
+    idx = STATIC_DIR / "index.html"
+    if not idx.exists():
+        raise HTTPException(status_code=404, detail="No frontend build found")
+
+    ua = request.headers.get("User-Agent", "")
+    if not is_bot_ua(ua):
+        # Humans get the untouched SPA — it boots and reads ?token=...
+        # client-side, same as before this handler existed.
+        return FileResponse(idx)
+
+    invite: dict | None = None
+    if token:
+        try:
+            invite = request.app.state.db.get_invite_by_token(token)
+        except Exception:
+            # Never let a DB hiccup turn a scraper hit into a 500 —
+            # the generic fallback card is still a usable preview.
+            logger.exception("invites_accept_og: invite lookup failed")
+
+    inviter_name, tenant_name, role = extract_invite_fields(invite)
+    lang = pick_locale(request.headers.get("Accept-Language"))
+    og_block = render_og_block(
+        url=str(request.url),
+        inviter_name=inviter_name,
+        tenant_name=tenant_name,
+        role=role,
+        lang=lang,
+    )
+
+    html_body = read_index_html(STATIC_DIR)
+    if html_body is None:
+        raise HTTPException(status_code=500, detail="Failed to read index.html")
+
+    return HTMLResponse(
+        content=inject_og(html_body, og_block),
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 @app.get("/{full_path:path}")

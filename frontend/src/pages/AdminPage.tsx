@@ -40,6 +40,7 @@ import type {
   UsageEvent,
 } from '../lib/types'
 import { useI18n } from '../lib/i18n'
+import { useDocumentTitle } from '../lib/useDocumentTitle'
 
 type AdminTab = 'agents' | 'users' | 'plans' | 'coupons' | 'tenants' | 'stats'
 const VALID_TABS: readonly AdminTab[] = ['agents', 'users', 'plans', 'coupons', 'tenants', 'stats']
@@ -69,6 +70,7 @@ function fmtDate(s: string | null | undefined): string {
 
 export default function AdminPage() {
   const { t } = useI18n()
+  useDocumentTitle(t({ he: 'ניהול', en: 'Admin' }))
   const [loading, setLoading] = useState(true)
   const [overview, setOverview] = useState<AdminOverview | null>(null)
   const [error, setError] = useState<string | null>(null)

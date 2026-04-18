@@ -20,6 +20,7 @@ import {
 } from '../lib/api'
 import parsePhoneNumberFromString from 'libphonenumber-js'
 import { useI18n, type Bilingual } from '../lib/i18n'
+import { useDocumentTitle } from '../lib/useDocumentTitle'
 import { planLabel, statusLabel } from '../lib/labels'
 import TenantName from '../components/TenantName'
 import IntegrationsPanel from '../components/IntegrationsPanel'
@@ -157,6 +158,12 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
           : tab === 'audit'
             ? { he: 'יומן אירועים', en: 'Audit log' }
             : { he: 'הגדרות', en: 'Settings' }
+
+  const tenantDisplayName = detail?.tenant.name?.trim() || ''
+  const activeTabLabel = t(tabLabel(activeTab))
+  useDocumentTitle(
+    tenantDisplayName ? `${tenantDisplayName} · ${activeTabLabel}` : activeTabLabel,
+  )
 
   const tabButton = (tab: Tab) => (
     <button
