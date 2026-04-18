@@ -252,7 +252,12 @@ export default function VoicePicker({
       {/* Grid — single column on narrow phones, two on slightly wider ones,
           three on tablet+. Height caps at 60vh on short viewports so the
           filter buttons above never get pushed off-screen on mobile. */}
-      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[60vh] sm:max-h-[360px] overflow-y-auto">
+      {/* Padding on the scroll container matters: `overflow-y-auto` forces
+          `overflow-x` to compute as `auto` too (CSS spec — if one axis is
+          non-visible the other is promoted). Without padding, the edge
+          cards' borders and the 2px `ring-2` selection halo get clipped
+          flush by the container. p-1 = 4px breathing room on all sides. */}
+      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[60vh] sm:max-h-[360px] overflow-y-auto p-1">
         {filtered.map((voice: VoiceManifestEntry) => {
           const isSelected = voice.name === value
           const isPlaying = playing === voice.name
@@ -329,10 +334,15 @@ function FilterButton({
 }
 
 function PlayIcon({ playing }: { playing: boolean }) {
+  // Idle state uses a muted brand wash (brand-50) instead of white — BRAND §17
+  // reserves white for input fields, and white-on-cream read as a ghost chip
+  // against the voice card's cream-50 fill. brand-50 also makes the idle→
+  // playing transition a natural voice-dot crescendo (quiet wash → full
+  // terracotta = "the agent is speaking now") per §2.
   return (
     <div
       className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 ${
-        playing ? 'bg-brand-500 text-white' : 'bg-white/80 dark:bg-white/10 text-brand-500'
+        playing ? 'bg-brand-500 text-white' : 'bg-brand-50 text-brand-500'
       }`}
     >
       {playing ? (
