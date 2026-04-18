@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -87,7 +88,17 @@ async def submit(
     tenant = db.ensure_default_tenant(fresh_user["id"])
 
     provisioner = request.app.state.provisioner
-    agent_id = f"agent-{user['id']}-{body.agent_name.replace(' ', '-').lower()}"
+    # Hebrew-first product — agent_name is usually Hebrew, but the
+    # downstream create-agent.sh uses AGENT_ID as a Docker service key,
+    # shell env-var prefix, and filesystem directory, all of which
+    # require ASCII. Slug the name to [a-z0-9-], fall back to "agent"
+    # when the slug collapses to empty (e.g. fully-Hebrew input). Same
+    # pattern as the sibling tenant-scoped create flow in
+    # api/routes/tenants.py — keep them aligned or a user's first agent
+    # via onboarding will fail while the same name works from the
+    # dashboard agent-create modal.
+    slug = re.sub(r"[^a-z0-9-]+", "-", body.agent_name.lower()).strip("-") or "agent"
+    agent_id = f"agent-{user['id']}-{slug}"
     user_name = body.full_name or user["full_name"]
 
     async def event_stream():
