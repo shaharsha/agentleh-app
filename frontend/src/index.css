@@ -52,20 +52,22 @@
 :root {
   color-scheme: light;
 
-  /* Glass surfaces (rgba so backdrop-filter still shines through).
-   * Light mode sits on cream #F3EAD3 — plain white lifts cards cleanly.
-   * Alpha was calibrated to keep enough tint for warmth while still
-   * giving a paper-on-field separation. */
-  --glass-nav-bg: rgba(255, 255, 255, 0.78);
-  --glass-nav-border: rgba(255, 255, 255, 0.4);
-  --glass-card-bg: rgba(255, 255, 255, 0.85);
-  --glass-card-bg-hover: rgba(255, 255, 255, 0.95);
-  --glass-card-border: rgba(255, 255, 255, 0.7);
-  --glass-elevated-bg: rgba(255, 255, 255, 0.95);
-  --glass-elevated-border: rgba(255, 255, 255, 0.6);
-  --glass-pill-bg: rgba(255, 255, 255, 0.7);
-  --glass-pill-border: rgba(255, 255, 255, 0.5);
-  --glass-input-bg: rgba(255, 255, 255, 0.85);
+  /* Glass surfaces — tuned to BRAND.md §6 "cream commitment": cards on
+   * cream use cream-50 #FAF5E8 (NOT white — white is reserved for input
+   * fields and inline code). The lift comes from a visible cream-200
+   * border, not from a whitened fill. Alpha stays high (0.92+) so the
+   * hue reads true while backdrop-blur still softens the background. */
+  --glass-nav-bg: rgba(250, 245, 232, 0.82);      /* cream-50 at .82 */
+  --glass-nav-border: rgba(232, 220, 190, 0.6);   /* cream-200 at .6 */
+  --glass-card-bg: rgba(250, 245, 232, 0.92);     /* cream-50 near-solid */
+  --glass-card-bg-hover: rgba(253, 250, 240, 0.98);
+  --glass-card-border: rgba(232, 220, 190, 0.8);  /* cream-200 */
+  --glass-elevated-bg: rgba(253, 250, 240, 0.98); /* cream-50 slightly brighter */
+  --glass-elevated-border: rgba(232, 220, 190, 0.7);
+  --glass-pill-bg: rgba(250, 245, 232, 0.82);
+  --glass-pill-border: rgba(232, 220, 190, 0.7);
+  /* Input fields — white is explicitly spec-allowed for inputs (§3). */
+  --glass-input-bg: rgba(255, 255, 255, 0.9);
   --glass-input-bg-focus: rgba(255, 255, 255, 1);
 
   /* Shadow tints */
@@ -105,7 +107,7 @@ html[data-theme="dark"] {
     --color-surface-soft: #141828;
     --color-text-primary: #F3EAD3;
     --color-text-secondary: #D4C4A0;
-    --color-text-muted: #B8A595;
+    --color-text-muted: #D4C4A0; /* BRAND.md §6 dark theme: cream-300 */
     --color-border: #2A3350;
     --color-border-light: #1F2740;
     --color-brand-50: #2A1810;
@@ -159,21 +161,25 @@ html[data-theme="dark"] {
     --color-purple-100: rgb(52 28 90);
     --color-purple-200: rgb(72 42 120);
 
-    /* Glass goes navy-tinted (mix navy-700 #141828 and navy-500 #1F2740
-     * over the navy-900 body so cards lift visibly — the old warm-black
-     * rgba(30,24,20) was left over from the pre-Antennae theme and
-     * clashed with the navy body, producing no visible elevation). */
-    --glass-nav-bg: rgba(20, 24, 40, 0.78);
-    --glass-nav-border: rgba(255, 255, 255, 0.06);
-    --glass-card-bg: rgba(31, 39, 64, 0.7);
-    --glass-card-bg-hover: rgba(41, 49, 74, 0.85);
-    --glass-card-border: rgba(255, 255, 255, 0.08);
-    --glass-elevated-bg: rgba(41, 49, 74, 0.82);
-    --glass-elevated-border: rgba(255, 255, 255, 0.1);
-    --glass-pill-bg: rgba(31, 39, 64, 0.6);
-    --glass-pill-border: rgba(255, 255, 255, 0.08);
-    --glass-input-bg: rgba(20, 24, 40, 0.7);
-    --glass-input-bg-focus: rgba(31, 39, 64, 0.9);
+    /* Glass surfaces — BRAND.md §6 dark theme map:
+     *   card bg: var(--navy-700) #141828
+     *   elevated: var(--navy-500) #1F2740
+     *   border: var(--navy-500) #1F2740 (hairline)
+     * Alpha stays high (0.92+) so the navy hue reads true against the
+     * navy-900 body while backdrop-blur keeps the liquid-glass feel. */
+    --glass-nav-bg: rgba(20, 24, 40, 0.82);          /* navy-700 */
+    --glass-nav-border: rgba(31, 39, 64, 0.6);       /* navy-500 hairline */
+    --glass-card-bg: rgba(20, 24, 40, 0.92);         /* navy-700 near-solid */
+    --glass-card-bg-hover: rgba(31, 39, 64, 0.95);   /* lift to navy-500 on hover */
+    --glass-card-border: rgba(31, 39, 64, 0.8);      /* navy-500 */
+    --glass-elevated-bg: rgba(31, 39, 64, 0.95);     /* navy-500 */
+    --glass-elevated-border: rgba(58, 64, 85, 0.7);  /* navy-300 hairline */
+    --glass-pill-bg: rgba(20, 24, 40, 0.82);
+    --glass-pill-border: rgba(31, 39, 64, 0.7);
+    /* Inputs lift ABOVE the card (navy-700) to navy-500 so fields read
+     * as interactive rather than dissolving into the card color. */
+    --glass-input-bg: rgba(31, 39, 64, 0.95);
+    --glass-input-bg-focus: rgba(42, 51, 80, 1);
 
     --shadow-rgb: 0, 0, 0;
 
@@ -315,48 +321,57 @@ button:not(:disabled) {
 /* ── Liquid Glass ─────────────────────────── */
 
 .glass-nav {
+  /* BRAND.md §10 Liquid Glass, Agentiko-tuned: 24px blur, saturate 140%,
+   * brightness 1.06. Inner specular top + contact bottom for depth. */
   background: var(--glass-nav-bg);
-  backdrop-filter: blur(24px) saturate(200%);
-  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  backdrop-filter: blur(24px) saturate(140%) brightness(1.06);
+  -webkit-backdrop-filter: blur(24px) saturate(140%) brightness(1.06);
   border-bottom: 1px solid var(--glass-nav-border);
-  box-shadow: 0 1px 3px rgba(var(--shadow-rgb), 0.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(14, 19, 32, 0.05),
+    0 1px 3px rgba(var(--shadow-rgb), 0.04);
+}
+html[data-theme="dark"] .glass-nav {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+    0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
+/* Per BRAND.md §10.4, dashboard cards + settings forms are Paper, not
+ * Liquid Glass. Glass is reserved for floating chrome (nav, dropdowns,
+ * modals, toasts). The class names .glass-card / .glass-card-elevated
+ * are kept for existing JSX call-sites but the rules below render
+ * them as Paper-resting / Paper-elevated per the spec's elevation
+ * tiers (§10.1): cream-50/navy-700 fill, cream-200/navy-500 hairline,
+ * no blur, no saturation tricks. */
 .glass-card {
+  /* BRAND.md §10 Paper-resting: bg-elevated + 1px border, NO shadow.
+   * Resting cards must feel paper-flat; they're not floating chrome. */
   background: var(--glass-card-bg);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--glass-card-border);
-  box-shadow:
-    0 0 0 1px rgba(var(--shadow-rgb), 0.03),
-    0 2px 8px rgba(var(--shadow-rgb), 0.04),
-    0 8px 32px rgba(var(--shadow-rgb), 0.06);
 }
 
 .glass-card-elevated {
   background: var(--glass-elevated-bg);
-  backdrop-filter: blur(24px) saturate(200%);
-  -webkit-backdrop-filter: blur(24px) saturate(200%);
   border: 1px solid var(--glass-elevated-border);
   box-shadow:
-    0 0 0 1px rgba(var(--shadow-rgb), 0.03),
-    0 4px 16px rgba(var(--shadow-rgb), 0.06),
-    0 16px 48px rgba(var(--shadow-rgb), 0.08);
+    0 2px 8px rgba(var(--shadow-rgb), 0.05),
+    0 8px 24px rgba(var(--shadow-rgb), 0.06);
 }
 
+/* BRAND.md §3 "Static by default — the mark is the only thing that moves".
+ * No translate, no scale, no lift on content surfaces. Hover shifts only
+ * the border color (paper-hover tier from §10.1) and hairline underlay. */
 .glass-card-hover {
-  transition: background 0.4s cubic-bezier(0.22, 1, 0.36, 1),
-              transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
-              box-shadow 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: border-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @media (hover: hover) and (pointer: fine) {
   .glass-card-hover:hover {
-    background: var(--glass-card-bg-hover);
-    transform: translateY(-4px);
-    box-shadow:
-      0 0 0 1px rgba(184,90,58,0.08),
-      0 8px 24px rgba(184,90,58,0.08),
-      0 16px 48px rgba(var(--shadow-rgb), 0.08);
+    border-color: var(--color-cream-300, #D4C4A0);
+    box-shadow: 0 2px 8px rgba(14, 19, 32, 0.06);
   }
 }
 
@@ -442,6 +457,10 @@ button:not(:disabled) {
 
 .btn-secondary {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  /* Uses surface-soft (cream-50 in light, navy-700 in dark) — on a Paper
+   * card this reads as a lifted button on a slightly-darker surround.
+   * In dark mode specifically, the button is OVERRIDDEN below to navy-500
+   * so it lifts ABOVE the navy-700 card per BRAND.md §10 elevation tiers. */
   background: var(--color-surface); color: var(--color-text-primary);
   border: 1px solid var(--color-border); border-radius: 100px;
   padding: 12px 24px; font-size: 15px;
@@ -450,6 +469,10 @@ button:not(:disabled) {
   transition: border-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
               transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
               box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+html[data-theme="dark"] .btn-secondary {
+  background: #1F2740; /* navy-500 — lifts above navy-700 cards */
+  border-color: #2A3350;
 }
 @media (hover: hover) and (pointer: fine) {
   .btn-secondary:hover {
@@ -479,7 +502,7 @@ button:not(:disabled) {
 .input-glass:focus {
   background: var(--glass-input-bg-focus);
   border-color: var(--color-brand);
-  box-shadow: 0 0 0 3px rgba(212, 98, 43, 0.15);
+  box-shadow: 0 0 0 3px rgba(184, 90, 58, 0.15);
   outline: none;
 }
 @media (max-width: 640px) {
