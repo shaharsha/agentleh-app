@@ -112,7 +112,7 @@ export default function ProfileMenu({ user, onLogout }: Props) {
                   setOpen(false)
                   onLogout()
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2.5 min-h-[44px] rounded-lg text-sm text-red-600 hover:bg-red-500/10 text-start cursor-pointer"
+                className="w-full flex items-center gap-2 px-3 py-2.5 min-h-[44px] rounded-lg text-sm text-danger hover:bg-danger/10 text-start cursor-pointer"
                 role="menuitem"
               >
                 <LogOutIcon className={logoutIconClass} />

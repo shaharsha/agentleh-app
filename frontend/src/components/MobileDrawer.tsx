@@ -243,7 +243,7 @@ export default function MobileDrawer({
                       </button>
                     </div>
                     {createError && (
-                      <p className="text-xs text-red-500">{createError}</p>
+                      <p className="text-xs text-danger">{createError}</p>
                     )}
                   </div>
                 ) : (
@@ -379,7 +379,7 @@ export default function MobileDrawer({
                   onClose()
                   onLogout()
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-red-600 hover:bg-red-500/10 min-h-[44px] text-sm text-start transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-danger hover:bg-danger/10 min-h-[44px] text-sm text-start transition-colors"
               >
                 <LogOutIcon className="w-4 h-4 shrink-0 icon-flip" />
                 {t({ he: 'התנתקות', en: 'Sign out' })}

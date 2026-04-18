@@ -117,7 +117,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
         <section className="glass-card-elevated rounded-[18px] sm:rounded-[22px] p-4 sm:p-6 space-y-4">
           <div className="flex items-center gap-2.5 mb-2">
             <div className="w-9 h-9 rounded-[12px] bg-brand-50 flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4622B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B85A3A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
@@ -176,7 +176,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
         <section className="glass-card-elevated rounded-[18px] sm:rounded-[22px] p-4 sm:p-6 space-y-4">
           <div className="flex items-center gap-2.5 mb-2">
             <div className="w-9 h-9 rounded-[12px] bg-brand-50 flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4622B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B85A3A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
             </div>
@@ -246,7 +246,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
               </span>
               <span className="tabular-nums text-text-secondary text-[13px]">{progressPct}%</span>
             </div>
-            <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-1.5 bg-border rounded-full overflow-hidden">
               <div
                 className="h-full bg-brand-500 rounded-full transition-all duration-1000 ease-linear"
                 style={{ width: `${progressPct}%` }}
@@ -259,7 +259,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
                 return (
                   <li key={i} className="flex items-center gap-2.5">
                     {done ? (
-                      <svg className="w-4.5 h-4.5 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <svg className="w-4.5 h-4.5 text-success shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     ) : active ? (
@@ -268,7 +268,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
                     ) : (
-                      <div className="w-4.5 h-4.5 rounded-full border-2 border-gray-300 shrink-0" />
+                      <div className="w-4.5 h-4.5 rounded-full border-2 border-border shrink-0" />
                     )}
                     <span className={done ? 'text-text-secondary/60' : active ? 'text-text-primary font-medium' : 'text-text-secondary/60'}>
                       {step.label}

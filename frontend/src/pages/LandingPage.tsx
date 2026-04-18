@@ -222,8 +222,8 @@ function EmailForm({ mode }: { mode: 'login' | 'signup' }) {
       />
 
       {error && (
-        <div className="bg-red-50 border border-red-200/60 rounded-[14px] px-4 py-2.5">
-          <p className="text-[13px] text-red-600">{error}</p>
+        <div className="bg-danger-light border border-danger/40/60 rounded-[14px] px-4 py-2.5">
+          <p className="text-[13px] text-danger">{error}</p>
         </div>
       )}
 

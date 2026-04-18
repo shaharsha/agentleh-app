@@ -13,28 +13,34 @@
   --breakpoint-xs: 360px;
 
   /* Brand (invariant across light/dark) */
-  --color-brand: #D4622B;
-  --color-brand-light: #E8854F;
-  --color-brand-dark: #B84E1D;
-  --color-brand-50: #FFF5F0;
-  --color-brand-100: #FCE0CC;
+  --color-brand: #B85A3A;
+  --color-brand-light: #D08060;
+  --color-brand-dark: #6E3420;
+  --color-brand-50: #FBEEE7;
+  --color-brand-100: #F0C6B2;
 
   /* Surface + text + border tokens. Defined here so Tailwind utility
    * classes (`bg-surface`, `text-text-primary`, `border-border`) compile
    * against them. Runtime dark-mode swap happens in the :root block
    * below — same variable names, later-wins cascade. */
-  --color-surface: #FFFFFF;
-  --color-surface-soft: #F8F8F7;
+  --color-surface: #F3EAD3;
+  --color-surface-soft: #FAF5E8;
 
-  --color-text-primary: #1A1A1A;
-  --color-text-secondary: #4A4A4A;
-  --color-text-muted: #9A9A9A;
+  --color-text-primary: #0E1320;
+  --color-text-secondary: #3A4055;
+  --color-text-muted: #8A7860;
 
-  --color-border: #E8E8E6;
-  --color-border-light: #F0F0F0;
+  --color-border: #E8DCBE;
+  --color-border-light: #F0E6C8;
 
-  --color-success: #30D158;
-  --color-success-light: #D1FAE5;
+  --color-success: #6B8E5A;
+  --color-success-light: #E4EBD8;
+  --color-warning: #D4A24A;
+  --color-warning-light: #F7EBCF;
+  --color-danger: var(--color-danger);
+  --color-danger-light: #F4D6D0;
+  --color-info: #6D8BA6;
+  --color-info-light: #DDE5EC;
 
   --font-family-sans: "Rubik", sans-serif;
 }
@@ -63,15 +69,15 @@
   --shadow-rgb: 0, 0, 0;
 
   /* Section gradient stops */
-  --section-stop-1: #FDF8F4;
-  --section-stop-2: #FAF5F1;
-  --section-stop-3: #F5F0EC;
-  --section-alt-1: #F5F0EC;
-  --section-alt-2: #FBF7F4;
-  --section-alt-3: #FDF8F4;
-  --section-hero-1: #FEF6F0;
-  --section-hero-2: #FBF5EF;
-  --section-hero-3: #F8F3ED;
+  --section-stop-1: #FAF5E8;
+  --section-stop-2: #F3EAD3;
+  --section-stop-3: #EEE2C5;
+  --section-alt-1: #EEE2C5;
+  --section-alt-2: #F3EAD3;
+  --section-alt-3: #FAF5E8;
+  --section-hero-1: #FAF5E8;
+  --section-hero-2: #F3EAD3;
+  --section-hero-3: #EEE2C5;
 
   /* Subtle neutral for hover-fill on icon buttons in the header */
   --icon-btn-hover-bg: rgba(0, 0, 0, 0.05);
@@ -92,13 +98,13 @@ html[data-theme="dark"] {
     color-scheme: dark;
 
     /* Override @theme tokens for dark mode */
-    --color-surface: #16120E;
-    --color-surface-soft: #1E1814;
-    --color-text-primary: #F5EFE8;
-    --color-text-secondary: #B8A595;
-    --color-text-muted: #7A6B5E;
-    --color-border: #2B2319;
-    --color-border-light: #221B13;
+    --color-surface: #0E1320;
+    --color-surface-soft: #141828;
+    --color-text-primary: #F3EAD3;
+    --color-text-secondary: #D4C4A0;
+    --color-text-muted: #8A7860;
+    --color-border: #1F2740;
+    --color-border-light: #141828;
     --color-brand-50: #2A1810;
     --color-brand-100: #3D2416;
     --color-success-light: #0F2A1C;
@@ -165,15 +171,15 @@ html[data-theme="dark"] {
 
     --shadow-rgb: 0, 0, 0;
 
-    --section-stop-1: #0F0B08;
-    --section-stop-2: #13100C;
-    --section-stop-3: #16120E;
-    --section-alt-1: #16120E;
-    --section-alt-2: #120E0B;
-    --section-alt-3: #0F0B08;
-    --section-hero-1: #14100C;
-    --section-hero-2: #100C09;
-    --section-hero-3: #0C0907;
+    --section-stop-1: #0E1320;
+    --section-stop-2: #141828;
+    --section-stop-3: #1F2740;
+    --section-alt-1: #1F2740;
+    --section-alt-2: #141828;
+    --section-alt-3: #0E1320;
+    --section-hero-1: #05070F;
+    --section-hero-2: #0E1320;
+    --section-hero-3: #141828;
 
     --icon-btn-hover-bg: rgba(255, 255, 255, 0.06);
 }
@@ -342,8 +348,8 @@ button:not(:disabled) {
     background: var(--glass-card-bg-hover);
     transform: translateY(-4px);
     box-shadow:
-      0 0 0 1px rgba(212,98,43,0.08),
-      0 8px 24px rgba(212,98,43,0.08),
+      0 0 0 1px rgba(184,90,58,0.08),
+      0 8px 24px rgba(184,90,58,0.08),
       0 16px 48px rgba(var(--shadow-rgb), 0.08);
   }
 }
@@ -360,23 +366,23 @@ button:not(:disabled) {
 
 .section-gradient {
   background:
-    radial-gradient(ellipse at 30% 20%, rgba(212,98,43,0.07) 0%, transparent 50%),
-    radial-gradient(ellipse at 70% 80%, rgba(232,133,79,0.05) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 50%, rgba(184,78,29,0.03) 0%, transparent 60%),
+    radial-gradient(ellipse at 30% 20%, rgba(184,90,58,0.07) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 80%, rgba(196,116,134,0.05) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(110,52,32,0.03) 0%, transparent 60%),
     linear-gradient(180deg, var(--section-stop-1) 0%, var(--section-stop-2) 50%, var(--section-stop-3) 100%);
 }
 
 .section-gradient-alt {
   background:
-    radial-gradient(ellipse at 80% 30%, rgba(212,98,43,0.06) 0%, transparent 50%),
-    radial-gradient(ellipse at 20% 70%, rgba(232,133,79,0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 30%, rgba(184,90,58,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 20% 70%, rgba(196,116,134,0.04) 0%, transparent 50%),
     linear-gradient(180deg, var(--section-alt-1) 0%, var(--section-alt-2) 50%, var(--section-alt-3) 100%);
 }
 
 .section-gradient-hero {
   background:
-    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(212,98,43,0.08) 0%, transparent 60%),
-    radial-gradient(ellipse at 20% 60%, rgba(232,133,79,0.05) 0%, transparent 50%),
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(184,90,58,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse at 20% 60%, rgba(196,116,134,0.05) 0%, transparent 50%),
     linear-gradient(180deg, var(--section-hero-1) 0%, var(--section-hero-2) 40%, var(--section-hero-3) 100%);
 }
 
@@ -392,8 +398,8 @@ button:not(:disabled) {
   cursor: pointer; text-decoration: none; letter-spacing: -0.2px;
   min-height: 48px;
   box-shadow:
-    0 2px 8px rgba(212,98,43,0.25),
-    0 8px 24px rgba(212,98,43,0.15),
+    0 2px 8px rgba(184,90,58,0.25),
+    0 8px 24px rgba(184,90,58,0.15),
     inset 0 1px 0 rgba(255,255,255,0.15);
   transition: background 0.3s cubic-bezier(0.22, 1, 0.36, 1),
               transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
@@ -411,13 +417,13 @@ button:not(:disabled) {
   .btn-brand:hover {
     background: var(--color-brand-dark); transform: translateY(-3px);
     box-shadow:
-      0 4px 12px rgba(212,98,43,0.3),
-      0 16px 40px rgba(212,98,43,0.2),
+      0 4px 12px rgba(184,90,58,0.3),
+      0 16px 40px rgba(184,90,58,0.2),
       inset 0 1px 0 rgba(255,255,255,0.15);
   }
 }
 .btn-brand:active { transform: translateY(-1px); }
-.btn-brand:disabled { opacity: 0.5; transform: none; box-shadow: 0 2px 8px rgba(212,98,43,0.15); cursor: default; }
+.btn-brand:disabled { opacity: 0.5; transform: none; box-shadow: 0 2px 8px rgba(184,90,58,0.15); cursor: default; }
 .btn-brand:disabled:hover { transform: none; }
 .btn-brand:disabled::after { display: none; }
 
@@ -477,11 +483,11 @@ button:not(:disabled) {
 }
 
 .input-glass[aria-invalid="true"] {
-  border-color: #E5484D;
+  border-color: var(--color-danger);
 }
 .input-glass[aria-invalid="true"]:focus {
-  border-color: #E5484D;
-  box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.15);
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px rgba(168,62,46, 0.15);
 }
 
 /* ═══════════════════════════════════════════

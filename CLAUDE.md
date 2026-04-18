@@ -199,4 +199,16 @@ Shared with the landing page (`agentleh-landing` repo). Same CSS classes:
 
 All URLs configurable via `VITE_*` env vars. No hardcoded domains in code.
 
+### Brand tokens
+
+The full brand + design system lives at the parent repo root: [BRAND.md](../BRAND.md) (spec) + [BRAND.html](../BRAND.html) / [BRAND.pdf](../BRAND.pdf) (printable brand book). Primary palette: cream `#F3EAD3`, navy `#0E1320`, terracotta `#B85A3A`. Use semantic tokens rather than raw Tailwind color classes:
+
+- **Brand**: `bg-brand` / `text-brand` / `ring-brand` (+ `-light` / `-dark` / `-50` / `-100` tiers)
+- **Surface**: `bg-surface` / `bg-surface-soft` — NEVER `bg-white` for surfaces (white is reserved for input fields)
+- **Text**: `text-text-primary` / `text-text-secondary` / `text-text-muted` — NEVER `text-gray-*`
+- **Border**: `border-border` / `border-border-light` — NEVER `border-gray-*`
+- **Semantic**: `text-danger` / `bg-danger-light`, `text-warning` / `bg-warning-light`, `text-success` / `bg-success-light`, `text-info` / `bg-info-light` — NEVER raw `text-red-*` / `bg-amber-*` etc.
+
+Canonical logo assets at [frontend/public/brand/](frontend/public/brand/) (icon + wordmark, light + dark, SVG + PNG). Theme-aware swap pattern: `<img class="block dark:hidden" src="/brand/logo-icon.svg">` paired with `<img class="hidden dark:block" src="/brand/logo-icon-dark.svg">`.
+
 The language switcher, tenant switcher, superadmin godmode icon, and logout sit in a shared `Layout` header. The LogOut icon flips horizontally in RTL so the arrow head faces the reading edge.

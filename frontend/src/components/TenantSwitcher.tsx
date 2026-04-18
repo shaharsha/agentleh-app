@@ -92,10 +92,10 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
   const roleBadge = (role: TenantRole) => {
     const color =
       role === 'owner'
-        ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
+        ? 'bg-warning-light text-warning dark:bg-warning/15 dark:text-amber-300'
         : role === 'admin'
-          ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-300'
-          : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300'
+          ? 'bg-brand-50 text-brand-dark dark:bg-brand/20 dark:text-brand'
+          : 'bg-surface-soft text-text-secondary dark:bg-white/10 dark:text-gray-300'
     return (
       <span className={`inline-block px-1.5 py-0.5 text-[10px] font-medium rounded ${color}`}>
         {roleLabel(role)}
@@ -112,13 +112,13 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
     <div ref={containerRef} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-text-primary hover:text-text-primary hover:bg-surface-soft rounded-lg transition-colors cursor-pointer"
       >
         <span className="max-w-[180px] truncate">
           <TenantName tenant={activeTenant} />
         </span>
         {tenants.length > 1 && (
-          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-4 h-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         )}
@@ -130,7 +130,7 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
             className={`absolute ${anchorClass} mt-2 w-[min(18rem,calc(100vw-2rem))] bg-surface rounded-xl shadow-lg border border-border-light z-20 overflow-hidden`}
           >
             <div className="p-2">
-              <div className="px-2 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              <div className="px-2 py-1 text-xs font-semibold text-text-muted uppercase tracking-wide">
                 {t({ he: 'סביבות העבודה שלך', en: 'Your workspaces' })}
               </div>
               {tenants.map((tenant) => (
@@ -161,7 +161,7 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     placeholder={t({ he: 'שם סביבת העבודה', en: 'Workspace name' })}
-                    className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="flex-1 px-2 py-1 text-sm border border-border rounded focus:outline-none focus:ring-2 focus:ring-brand"
                     autoFocus
                     dir="auto"
                     onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
@@ -169,7 +169,7 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
                   <button
                     onClick={handleCreate}
                     disabled={!newName.trim()}
-                    className="px-3 py-1 text-sm text-white bg-indigo-600 rounded disabled:opacity-40 hover:bg-indigo-700"
+                    className="px-3 py-1 text-sm text-white bg-brand rounded disabled:opacity-40 hover:bg-indigo-700"
                   >
                     {t({ he: 'יצירה', en: 'Create' })}
                   </button>
@@ -177,7 +177,7 @@ export default function TenantSwitcher({ tenants, activeTenantId, onSelect, onRe
               ) : (
                 <button
                   onClick={() => setCreating(true)}
-                  className="w-full px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-2 text-start"
+                  className="w-full px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-surface-soft flex items-center gap-2 text-start"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

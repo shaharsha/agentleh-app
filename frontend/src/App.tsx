@@ -138,7 +138,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-gray-500">
+        <div className="text-text-muted">
           {t({ he: 'טוען…', en: 'Loading…' })}
         </div>
       </div>
@@ -169,7 +169,7 @@ export default function App() {
     >
       {route.kind === 'admin' && isSuperadmin && <AdminPage />}
       {route.kind === 'admin' && !isSuperadmin && (
-        <div className="p-8 text-red-600">
+        <div className="p-8 text-danger">
           {t({
             he: '403 — דרושה גישת סופראדמין.',
             en: '403 — superadmin access required.',
@@ -198,7 +198,7 @@ export default function App() {
         // don't blank the page if the backend returns an inconsistent
         // me payload. Plain-text message is enough — the user should
         // contact support rather than land on a broken dashboard.
-        <div className="p-8 text-center text-gray-600">
+        <div className="p-8 text-center text-text-secondary">
           {t({
             he: 'סביבת העבודה לא נטענה. נסה לרענן את הדף או פנה לתמיכה.',
             en: 'Could not load your workspace. Try refreshing the page or contact support.',

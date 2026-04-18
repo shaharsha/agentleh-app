@@ -239,27 +239,27 @@ export default function IntegrationsPanel({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between text-sm text-gray-600 hover:text-gray-900 transition"
+        className="w-full flex items-center justify-between text-sm text-text-secondary hover:text-text-primary transition"
       >
         <span className="flex items-center gap-2">
           <span aria-hidden="true">{chevron}</span>
           <span>{t({ he: 'אינטגרציות', en: 'Integrations' })}</span>
         </span>
         {googleStatus == null ? (
-          <span className="text-gray-400 text-xs">
+          <span className="text-text-muted text-xs">
             {loading
               ? t({ he: 'טוען…', en: 'Loading…' })
               : t({ he: 'גוגל · יומן · מייל', en: 'Google · Calendar · Mail' })}
           </span>
         ) : connected ? (
-          <span className="flex items-center gap-1.5 text-xs text-green-700 dark:text-green-300">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />
+          <span className="flex items-center gap-1.5 text-xs text-success dark:text-green-300">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-success" />
             <span>
               {t({ he: 'גוגל מחובר', en: 'Google connected' })}
             </span>
           </span>
         ) : (
-          <span className="flex items-center gap-1.5 text-xs text-gray-500">
+          <span className="flex items-center gap-1.5 text-xs text-text-muted">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
             <span>
               {t({ he: 'גוגל לא מחובר', en: 'Google not connected' })}
@@ -271,12 +271,12 @@ export default function IntegrationsPanel({
       {open && (
         <div className="mt-3 space-y-3">
           {loading && status === null && (
-            <div className="text-sm text-gray-500 py-2">
+            <div className="text-sm text-text-muted py-2">
               {t({ he: 'טוען…', en: 'Loading…' })}
             </div>
           )}
           {error && (
-            <div className="rounded-lg bg-red-50 text-red-700 dark:text-red-300 px-3 py-2 text-sm">
+            <div className="rounded-lg bg-danger-light text-danger dark:text-red-300 px-3 py-2 text-sm">
               {error}
             </div>
           )}
@@ -291,7 +291,7 @@ export default function IntegrationsPanel({
               <button
                 type="button"
                 onClick={stopPolling}
-                className="text-indigo-700 dark:text-indigo-300 hover:text-indigo-900 dark:hover:text-indigo-200 text-xs font-medium underline"
+                className="text-brand-dark dark:text-brand hover:text-brand dark:hover:text-brand-light text-xs font-medium underline"
               >
                 {t({ he: 'ביטול', en: 'Cancel' })}
               </button>
@@ -387,17 +387,17 @@ function GoogleIntegrationCard(props: {
 
   if (!status.connected) {
     return (
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+      <div className="bg-surface-soft border border-border-light rounded-lg p-4 space-y-3">
         <div className="flex items-center gap-3">
           <GoogleLogo />
           <div className="flex-1">
-            <div className="text-sm font-semibold text-gray-900">
+            <div className="text-sm font-semibold text-text-primary">
               {t({
                 he: 'גוגל: יומן + שליחת מיילים',
                 en: 'Google: Calendar + Mail',
               })}
             </div>
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-text-muted">
               {t({
                 he: 'בחר אילו הרשאות לתת לסוכן',
                 en: 'Choose which permissions to grant the agent',
@@ -407,7 +407,7 @@ function GoogleIntegrationCard(props: {
         </div>
 
         <div className="space-y-2">
-          <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+          <label className="flex items-start gap-2 text-sm text-text-primary cursor-pointer">
             <input
               type="checkbox"
               checked={wantCalendar}
@@ -418,7 +418,7 @@ function GoogleIntegrationCard(props: {
               <div className="font-medium">
                 {t({ he: 'יומן', en: 'Calendar' })}
               </div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-text-muted">
                 {t({
                   he: 'לראות, ליצור, לעדכן ולמחוק אירועים',
                   en: 'View, create, update, and delete events',
@@ -427,7 +427,7 @@ function GoogleIntegrationCard(props: {
             </div>
           </label>
 
-          <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+          <label className="flex items-start gap-2 text-sm text-text-primary cursor-pointer">
             <input
               type="checkbox"
               checked={wantEmail}
@@ -438,7 +438,7 @@ function GoogleIntegrationCard(props: {
               <div className="font-medium">
                 {t({ he: 'שליחת מיילים', en: 'Send email' })}
               </div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-text-muted">
                 {t({
                   he: 'שליחת מיילים בשמך (לא קריאה של התיבה)',
                   en: 'Send email on your behalf (not read your inbox)',
@@ -451,7 +451,7 @@ function GoogleIntegrationCard(props: {
         <details
           open={showAdvanced}
           onToggle={(e) => setShowAdvanced((e.target as HTMLDetailsElement).open)}
-          className="text-xs text-gray-500"
+          className="text-xs text-text-muted"
         >
           <summary className="cursor-pointer select-none py-1">
             {t({
@@ -465,9 +465,9 @@ function GoogleIntegrationCard(props: {
             placeholder="you@gmail.com"
             value={loginHint}
             onChange={(e) => setLoginHint(e.target.value)}
-            className="mt-2 w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="mt-2 w-full px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand"
           />
-          <p className="mt-1 text-gray-500">
+          <p className="mt-1 text-text-muted">
             {t({
               he: 'אם יש כמה חשבונות גוגל, אפשר לבחור מראש. ריק = גוגל יציג בחירה.',
               en: 'If you have multiple Google accounts, pre-select one. Leave empty = Google will ask.',
@@ -479,7 +479,7 @@ function GoogleIntegrationCard(props: {
           type="button"
           onClick={onConnect}
           disabled={busy || (!wantCalendar && !wantEmail)}
-          className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full px-4 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {busy
             ? t({ he: 'מתחבר…', en: 'Connecting…' })
@@ -492,15 +492,15 @@ function GoogleIntegrationCard(props: {
   const { can, cannot } = status.capabilities
 
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+    <div className="bg-surface-soft border border-border-light rounded-lg p-4 space-y-3">
       <div className="flex items-center gap-3">
         <GoogleLogo />
         <div className="flex-1">
-          <div className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+          <div className="text-sm font-semibold text-text-primary flex items-center gap-2">
             <span>{t({ he: 'גוגל', en: 'Google' })}</span>
-            <span className="text-green-600">✓</span>
+            <span className="text-success">✓</span>
           </div>
-          <div className="text-xs text-gray-500" dir="ltr">
+          <div className="text-xs text-text-muted" dir="ltr">
             {status.email}
           </div>
         </div>
@@ -508,13 +508,13 @@ function GoogleIntegrationCard(props: {
 
       {can.length > 0 && (
         <div>
-          <div className="text-xs font-semibold text-gray-700 mb-1">
+          <div className="text-xs font-semibold text-text-primary mb-1">
             {t({ he: 'ניתן לסוכן:', en: 'The agent can:' })}
           </div>
-          <ul className="text-xs text-gray-600 space-y-0.5">
+          <ul className="text-xs text-text-secondary space-y-0.5">
             {can.map((k) => (
               <li key={k} className="flex items-start gap-1.5">
-                <span className="text-green-600">✓</span>
+                <span className="text-success">✓</span>
                 <span>{CAN_LABELS[k] ? t(CAN_LABELS[k]) : k}</span>
               </li>
             ))}
@@ -524,13 +524,13 @@ function GoogleIntegrationCard(props: {
 
       {cannot.length > 0 && (
         <div>
-          <div className="text-xs font-semibold text-gray-700 mb-1">
+          <div className="text-xs font-semibold text-text-primary mb-1">
             {t({ he: 'לא ניתן לסוכן:', en: 'The agent cannot:' })}
           </div>
-          <ul className="text-xs text-gray-500 space-y-0.5">
+          <ul className="text-xs text-text-muted space-y-0.5">
             {cannot.map((k) => (
               <li key={k} className="flex items-start gap-1.5">
-                <span className="text-gray-400">×</span>
+                <span className="text-text-muted">×</span>
                 <span>{CANNOT_LABELS[k] ? t(CANNOT_LABELS[k]) : k}</span>
               </li>
             ))}
@@ -539,7 +539,7 @@ function GoogleIntegrationCard(props: {
       )}
 
       {status.granted_at && (
-        <div className="text-xs text-gray-400">
+        <div className="text-xs text-text-muted">
           {t({ he: 'חובר ב-', en: 'Connected on ' })}
           {new Date(status.granted_at).toLocaleDateString('en-GB')}
         </div>
@@ -549,7 +549,7 @@ function GoogleIntegrationCard(props: {
         type="button"
         onClick={onDisconnect}
         disabled={busy}
-        className="w-full px-4 py-2 text-sm font-medium text-red-600 bg-surface border border-red-200 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50"
+        className="w-full px-4 py-2 text-sm font-medium text-danger bg-surface border border-danger/40 rounded-lg hover:bg-danger-light dark:hover:bg-danger/10 disabled:opacity-50"
       >
         {busy
           ? t({ he: 'מנתק…', en: 'Disconnecting…' })

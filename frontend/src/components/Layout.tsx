@@ -62,20 +62,18 @@ export default function Layout({
             )}
 
             <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-[10px] bg-brand flex items-center justify-center shadow-sm shrink-0">
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="white"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-              </div>
+              <img
+                src="/brand/logo-icon.svg"
+                alt=""
+                aria-hidden="true"
+                className="w-8 h-8 shrink-0 block dark:hidden"
+              />
+              <img
+                src="/brand/logo-icon-dark.svg"
+                alt=""
+                aria-hidden="true"
+                className="w-8 h-8 shrink-0 hidden dark:block"
+              />
               <span className="text-[17px] font-semibold tracking-[-0.3px] truncate max-w-[160px] sm:max-w-none">
                 Agentiko
               </span>

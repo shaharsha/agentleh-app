@@ -76,7 +76,7 @@ function ChatIcon() {
   return (
     <span
       aria-hidden
-      className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-indigo-500 text-white shrink-0"
+      className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-brand text-white shrink-0"
     >
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -378,17 +378,17 @@ export default function BridgesPanel({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between text-sm text-gray-600 hover:text-gray-900 transition"
+        className="w-full flex items-center justify-between text-sm text-text-secondary hover:text-text-primary transition"
       >
         <span className="flex items-center gap-2">
           <span aria-hidden="true">{chevron}</span>
           <span>{t({ he: 'גשרים', en: 'Bridges' })}</span>
         </span>
-        <span className="flex items-center gap-1.5 text-xs text-gray-500">
+        <span className="flex items-center gap-1.5 text-xs text-text-muted">
           <span
             className={
               'inline-block w-1.5 h-1.5 rounded-full ' +
-              ((wa?.enabled || tg?.enabled) ? 'bg-green-500' : 'bg-gray-400')
+              ((wa?.enabled || tg?.enabled) ? 'bg-success' : 'bg-gray-400')
             }
           />
           <span>
@@ -400,7 +400,7 @@ export default function BridgesPanel({
       {open && (
         <div className="mt-2 space-y-3 rounded-lg border border-border bg-surface/60 p-3">
           {error && (
-            <div className="text-xs text-red-600 dark:text-red-300">{error}</div>
+            <div className="text-xs text-danger dark:text-red-300">{error}</div>
           )}
           {loading && !data && (
             <div className="text-xs text-text-muted">
@@ -430,14 +430,14 @@ export default function BridgesPanel({
                     <>
                       <button
                         onClick={() => openWhatsappModal(wa.phone)}
-                        className="text-xs text-indigo-600 hover:text-indigo-700"
+                        className="text-xs text-brand hover:text-brand-dark"
                       >
                         {t({ he: 'ערוך מספר', en: 'Edit phone' })}
                       </button>
                       <button
                         onClick={disconnectWhatsapp}
                         disabled={waBusy}
-                        className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
+                        className="text-xs text-danger hover:text-danger disabled:opacity-50"
                       >
                         {t({ he: 'ניתוק', en: 'Disconnect' })}
                       </button>
@@ -445,7 +445,7 @@ export default function BridgesPanel({
                   ) : (
                     <button
                       onClick={() => openWhatsappModal(null)}
-                      className="text-xs text-green-600 hover:text-green-700"
+                      className="text-xs text-success hover:text-success"
                     >
                       {t({ he: 'חיבור', en: 'Connect' })}
                     </button>
@@ -469,7 +469,7 @@ export default function BridgesPanel({
                         target="_blank"
                         rel="noreferrer"
                         dir="ltr"
-                        className="font-mono text-indigo-600 hover:underline"
+                        className="font-mono text-brand hover:underline"
                       >
                         @{tg.bot_username}
                       </a>
@@ -488,20 +488,20 @@ export default function BridgesPanel({
                     <>
                       <button
                         onClick={testTelegram}
-                        className="text-xs text-indigo-600 hover:text-indigo-700"
+                        className="text-xs text-brand hover:text-brand-dark"
                       >
                         {t({ he: 'בדיקה', en: 'Test' })}
                       </button>
                       <button
                         onClick={openTelegramModal}
-                        className="text-xs text-indigo-600 hover:text-indigo-700"
+                        className="text-xs text-brand hover:text-brand-dark"
                       >
                         {t({ he: 'עדכן טוקן', en: 'Update token' })}
                       </button>
                       <button
                         onClick={disconnectTelegram}
                         disabled={tgBusy}
-                        className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
+                        className="text-xs text-danger hover:text-danger disabled:opacity-50"
                       >
                         {t({ he: 'ניתוק', en: 'Disconnect' })}
                       </button>
@@ -509,7 +509,7 @@ export default function BridgesPanel({
                   ) : (
                     <button
                       onClick={openTelegramModal}
-                      className="text-xs text-green-600 hover:text-green-700"
+                      className="text-xs text-success hover:text-success"
                     >
                       {t({ he: 'חיבור', en: 'Connect' })}
                     </button>
@@ -534,7 +534,7 @@ export default function BridgesPanel({
             </div>
             <button
               onClick={onOpenChat}
-              className="text-xs text-indigo-600 hover:text-indigo-700"
+              className="text-xs text-brand hover:text-brand-dark"
             >
               {t({ he: 'פתח צ\'אט', en: 'Open chat' })}
             </button>
@@ -564,7 +564,7 @@ export default function BridgesPanel({
             className="input-glass w-full px-3 py-2.5 text-sm"
           />
           {waPhoneAvailable === false ? (
-            <p className="text-[11px] text-red-600 dark:text-red-300 mt-1">
+            <p className="text-[11px] text-danger dark:text-red-300 mt-1">
               {t({
                 he: 'מספר זה כבר משויך לסוכן אחר. כל מספר טלפון יכול להיות מחובר לסוכן אחד בלבד.',
                 en: 'This phone is already connected to another agent. Each phone can only be connected to one agent.',
@@ -579,7 +579,7 @@ export default function BridgesPanel({
               )}
             </p>
           ) : waPhoneInput.trim() ? (
-            <p className="text-[11px] text-red-600 dark:text-red-300 mt-1">
+            <p className="text-[11px] text-danger dark:text-red-300 mt-1">
               {t({
                 he: 'מספר לא תקין — נסה שוב (למשל 050-123-4567)',
                 en: 'Not a valid phone number — try again (e.g. 050-123-4567)',
@@ -587,7 +587,7 @@ export default function BridgesPanel({
             </p>
           ) : null}
           {waError && (
-            <p className="text-xs text-red-600 dark:text-red-300 mt-2">{waError}</p>
+            <p className="text-xs text-danger dark:text-red-300 mt-2">{waError}</p>
           )}
           <div className="flex gap-2 mt-4">
             <button
@@ -622,8 +622,8 @@ export default function BridgesPanel({
               className={
                 'px-3 py-1 rounded-full ' +
                 (tgTab === 'quick'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-text-secondary')
+                  ? 'bg-brand text-white'
+                  : 'bg-surface-soft text-text-secondary')
               }
               onClick={() => setTgTab('quick')}
             >
@@ -633,8 +633,8 @@ export default function BridgesPanel({
               className={
                 'px-3 py-1 rounded-full ' +
                 (tgTab === 'paste'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-text-secondary')
+                  ? 'bg-brand text-white'
+                  : 'bg-surface-soft text-text-secondary')
               }
               onClick={() => setTgTab('paste')}
             >
@@ -667,13 +667,13 @@ export default function BridgesPanel({
                       href="https://t.me/BotFather"
                       target="_blank"
                       rel="noreferrer"
-                      className="text-indigo-600 hover:underline"
+                      className="text-brand hover:underline"
                     >@BotFather</a>
                     {t({ he: ' בטלגרם', en: ' on Telegram' })}
                   </li>
                   <li>
                     {t({ he: 'שלח ', en: 'Send ' })}
-                    <code className="font-mono bg-gray-100 px-1 rounded">/newbot</code>
+                    <code className="font-mono bg-surface-soft px-1 rounded">/newbot</code>
                   </li>
                   <li>
                     {t({
@@ -704,7 +704,7 @@ export default function BridgesPanel({
                 className="input-glass w-full px-3 py-2.5 text-sm font-mono"
               />
               {tgError && (
-                <p className="text-xs text-red-600 dark:text-red-300 mt-2">{tgError}</p>
+                <p className="text-xs text-danger dark:text-red-300 mt-2">{tgError}</p>
               )}
               <div className="flex gap-2 mt-4">
                 <button
@@ -792,7 +792,7 @@ function TelegramQuickConnect({
   if (status === 'error' || status === 'expired') {
     return (
       <div className="text-center py-4">
-        <p className="text-sm text-red-600 dark:text-red-300 mb-3">
+        <p className="text-sm text-danger dark:text-red-300 mb-3">
           {status === 'expired'
             ? t({
                 he: 'הזמן שהוקצב להשלמה עבר. נסה שוב.',
@@ -872,7 +872,7 @@ function TelegramQuickConnect({
       </div>
 
       <div className="flex items-center justify-center gap-2 text-xs text-text-muted">
-        <span className="inline-block h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+        <span className="inline-block h-2 w-2 rounded-full bg-brand animate-pulse" />
         {t({
           he: 'ממתין לאישור בטלגרם…',
           en: 'Waiting for confirmation in Telegram…',
@@ -880,13 +880,13 @@ function TelegramQuickConnect({
       </div>
 
       {error && (
-        <p className="text-[11px] text-red-600 dark:text-red-300 text-center">{error}</p>
+        <p className="text-[11px] text-danger dark:text-red-300 text-center">{error}</p>
       )}
 
       <div className="text-center">
         <button
           onClick={onPasteToken}
-          className="text-[11px] text-indigo-600 hover:underline"
+          className="text-[11px] text-brand hover:underline"
         >
           {t({
             he: 'יש לך בוט קיים? הדבק טוקן ידנית',
