@@ -78,9 +78,10 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
     }
   }
 
+  // Phone is optional — mirrors the standalone agent-create flow in
+  // TenantPage. User can connect WhatsApp later from the Bridges panel.
   const isValid =
     form.full_name &&
-    form.phone &&
     form.gender &&
     form.agent_name &&
     form.agent_gender &&
@@ -146,20 +147,29 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
 
           <div>
             <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
-              {t({ he: 'טלפון (WhatsApp)', en: 'Phone (WhatsApp)' })}
+              {t({
+                he: 'טלפון (WhatsApp) — לא חובה',
+                en: 'Phone (WhatsApp) — optional',
+              })}
             </label>
             <input
               value={form.phone}
               onChange={(e) => update('phone', e.target.value)}
-              required
               type="tel"
               inputMode="tel"
               autoComplete="tel"
               maxLength={20}
               dir="ltr"
+              aria-describedby="onboarding-phone-help"
               className="input-glass w-full px-4 py-3 text-[15px]"
               placeholder="+972..."
             />
+            <p id="onboarding-phone-help" className="text-[12px] text-text-muted mt-1.5">
+              {t({
+                he: 'אפשר להשאיר ריק ולחבר וואטסאפ מאוחר יותר מתוך לשונית "גשרים" של הסוכן.',
+                en: "Leave empty to create without WhatsApp — you can connect it later from the agent's Bridges panel.",
+              })}
+            </p>
           </div>
 
           <div>

@@ -12,7 +12,11 @@ router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
 class OnboardingSubmit(BaseModel):
     full_name: str = ""
-    phone: str
+    # Phone is optional — mirrors the standalone agent-create flow in
+    # routes/tenants.py. When omitted, the agent is provisioned without a
+    # WhatsApp binding and the user can connect one later from the Bridges
+    # panel.
+    phone: str | None = None
     gender: str
     agent_name: str
     agent_gender: str
@@ -49,13 +53,18 @@ async def submit(
     if user["onboarding_status"] not in ("plan_active",):
         raise HTTPException(status_code=400, detail="Already onboarded")
 
-    # Update user profile
-    db.update_user(
-        user["id"],
-        full_name=body.full_name or user["full_name"],
-        phone=body.phone,
-        gender=body.gender,
-    )
+    # Update user profile. Only overwrite phone when the caller actually
+    # provided one — otherwise keep whatever is already on the app_users
+    # row so an optional-phone onboarding can't blank out a phone the user
+    # already gave us through another path.
+    phone = (body.phone or "").strip() or None
+    update_fields: dict[str, str] = {
+        "full_name": body.full_name or user["full_name"],
+        "gender": body.gender,
+    }
+    if phone:
+        update_fields["phone"] = phone
+    db.update_user(user["id"], **update_fields)
 
     # Ensure a default tenant exists before provisioning. ensure_default_tenant
     # is idempotent — if the user already has a tenant (e.g., they were invited
@@ -76,7 +85,7 @@ async def submit(
     result = await asyncio.to_thread(
         provisioner.provision,
         agent_id=agent_id,
-        phone=body.phone,
+        phone=phone or "",
         agent_name=body.agent_name,
         user_name=body.full_name or user["full_name"],
         tenant_id=tenant["id"],
@@ -92,9 +101,12 @@ async def submit(
     if not result.success:
         raise HTTPException(status_code=500, detail=f"Provisioning failed: {result.error}")
 
-    # Send welcome message (mocked)
-    whatsapp = request.app.state.whatsapp
-    whatsapp.send_welcome(body.phone, body.agent_name, body.agent_gender)
+    # Welcome message only makes sense when WhatsApp is actually wired up —
+    # skip when the agent was provisioned without a phone so we don't send
+    # a template to nobody (mirrors routes/tenants.py:768-792).
+    if phone:
+        whatsapp = request.app.state.whatsapp
+        whatsapp.send_welcome(phone, body.agent_name, body.agent_gender)
 
     # Mark onboarding complete
     db.update_user(user["id"], onboarding_status="complete")
