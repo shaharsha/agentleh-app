@@ -366,6 +366,86 @@ def _vm_stats_token() -> str:
     return os.environ.get("APP_VM_STATS_TOKEN", "")
 
 
+# ─── Agent-capacity heuristic ────────────────────────────────────────────────
+# Tunable constants driving the "how many more OpenClaws fit on this VM"
+# indicator. These are empirical blends of steady-state and burst footprint,
+# not hard caps — the per-container `mem_limit: 3g` in create-agent.sh is the
+# OOM ceiling; TYPICAL_AGENT_MB is what we plan against so the indicator
+# doesn't swing every time one agent briefly spikes. Raise TYPICAL_AGENT_MB
+# if the tile ever reads "0 remaining" while adding another agent still works;
+# lower it if the tile reads "2 remaining" and the next provision OOM-kills.
+_RESERVED_OVERHEAD_MB = 2200  # OS 700 + whisper 1100 + vector 30 + docker 300 + buffer
+_SAFETY_MARGIN_MB = 512       # head-room so "0 remaining" means really at cap
+_TYPICAL_AGENT_MB = 1500      # steady + peak blend, not the 3 GB mem_limit
+_BOOT_DISK_AGENT_GB = 0.5     # per-agent image share + log drift
+_DATA_DISK_AGENT_GB = 1.0     # /data footprint per agent (observed 50-200 MB, conservative)
+_LOAD_PER_AGENT = 0.3         # sustained load contribution under typical Hebrew traffic
+_BOOT_DISK_RESERVE_GB = 5.0   # OS + logs floor on /
+_DATA_DISK_RESERVE_GB = 2.0   # snapshot + growth floor on /data
+_CPU_HEADROOM = 0.5           # leave half a core of unallocated load
+
+
+def _compute_capacity(live: dict[str, Any]) -> dict[str, Any] | None:
+    """How many more OpenClaw agents fit on this VM before a resize.
+
+    Returns None when the live payload is missing fields we need (so the
+    frontend can render a graceful "unknown" state). Otherwise returns the
+    minimum across four constraints (RAM, CPU, boot disk, /data) and names
+    the binding one — the user wants to see *why* capacity is tight.
+    """
+    try:
+        memory = live["memory"]
+        cpu = live["cpu"]
+        disk = live["disk"]
+    except (KeyError, TypeError):
+        return None
+
+    available_mb = memory.get("available_mb")
+    cores = cpu.get("cores")
+    load_avg = cpu.get("load_avg_5m")
+    root = disk.get("root") or {}
+    data = disk.get("data") or {}
+    root_free_gb = root.get("free_gb")
+    data_free_gb = data.get("free_gb")
+
+    if None in (available_mb, cores, load_avg, root_free_gb, data_free_gb):
+        return None
+
+    ram_budget_mb = available_mb - _SAFETY_MARGIN_MB - _RESERVED_OVERHEAD_MB
+    ram_agents = max(0, int(ram_budget_mb // _TYPICAL_AGENT_MB))
+
+    cpu_budget = cores - load_avg - _CPU_HEADROOM
+    cpu_agents = max(0, int(cpu_budget // _LOAD_PER_AGENT))
+
+    boot_budget_gb = root_free_gb - _BOOT_DISK_RESERVE_GB
+    boot_agents = max(0, int(boot_budget_gb // _BOOT_DISK_AGENT_GB))
+
+    data_budget_gb = data_free_gb - _DATA_DISK_RESERVE_GB
+    data_agents = max(0, int(data_budget_gb // _DATA_DISK_AGENT_GB))
+
+    per_constraint = {
+        "ram": ram_agents,
+        "cpu": cpu_agents,
+        "boot_disk": boot_agents,
+        "data_disk": data_agents,
+    }
+    binding, agents_remaining = min(per_constraint.items(), key=lambda kv: kv[1])
+
+    return {
+        "agents_remaining": agents_remaining,
+        "binding_constraint": binding,
+        "per_constraint": per_constraint,
+        "assumptions": {
+            "typical_agent_mb": _TYPICAL_AGENT_MB,
+            "reserved_overhead_mb": _RESERVED_OVERHEAD_MB,
+            "safety_margin_mb": _SAFETY_MARGIN_MB,
+            "load_per_agent": _LOAD_PER_AGENT,
+            "boot_disk_agent_gb": _BOOT_DISK_AGENT_GB,
+            "data_disk_agent_gb": _DATA_DISK_AGENT_GB,
+        },
+    }
+
+
 @router.get("/vm-stats")
 async def admin_vm_stats(
     request: Request,
@@ -408,6 +488,10 @@ async def admin_vm_stats(
         docker["containers"] = agent_containers
         docker["total"] = len(agent_containers)
         docker["running"] = sum(1 for c in agent_containers if c.get("state") == "running")
+
+    # How many more agents fit — computed after the docker filter so the
+    # tile matches the containers the user sees in the table below it.
+    capacity = _compute_capacity(live) if live else None
 
     db = request.app.state.db
     history = db._fetch_all(
@@ -541,6 +625,7 @@ async def admin_vm_stats(
     return {
         "live": live,
         "live_error": live_error,
+        "capacity": capacity,
         "history": history,
         "events_per_hour": events_per_hour,
         "top_agents": top_agents,
