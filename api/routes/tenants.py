@@ -751,6 +751,19 @@ async def provision_agent(
         # UPDATE needed. agent_id from the VM result is authoritative.
         result_agent_id = vm_result.get("agent_id") or agent_id
 
+        # Creator attribution. create-agent.sh and MockProvisioner both
+        # write the agents row without a creator (they don't know who
+        # authenticated the HTTP request), so we set it here now that
+        # the row exists. Non-fatal on failure — the agent is live; at
+        # worst the admin panel shows "—" under "Created by".
+        try:
+            db.set_agent_creator(result_agent_id, ctx.user_id)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "set_agent_creator failed for %s (user=%s)",
+                result_agent_id, ctx.user_id, exc_info=True,
+            )
+
         db.log_audit(
             tenant_id=tenant_id,
             actor_user_id=ctx.user_id,

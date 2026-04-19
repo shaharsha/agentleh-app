@@ -111,9 +111,17 @@ export interface AdminAgentRow {
   tenant_id: number | null
   agent_name: string | null
   agent_gender: string | null
+  // `user_*` = tenant owner (joined via tenants.owner_user_id). Name
+  // kept for backward compat; rendered under the "Tenant owner" header.
   user_id: number | null
   user_email: string | null
   user_full_name: string | null
+  // `created_by_*` = actual provisioner of this specific agent
+  // (captured in app/api/routes/{tenants,onboarding}.py post-provision).
+  // NULL for rows created before meter migration 025.
+  created_by_user_id: number | null
+  created_by_email: string | null
+  created_by_full_name: string | null
   plan_id: string | null
   plan_name_he: string | null
   billing_mode: string | null
@@ -167,6 +175,9 @@ export interface AdminAgentDetail {
     user_id: number | null
     user_email: string | null
     user_full_name: string | null
+    created_by_user_id: number | null
+    created_by_email: string | null
+    created_by_full_name: string | null
   }
   recent_events: UsageEvent[]
   spend: {

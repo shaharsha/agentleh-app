@@ -559,6 +559,13 @@ class AppDatabase:
         )
 
     def list_all_agents_with_owner_and_plan(self) -> list[dict[str, Any]]:
+        # `user_*` fields carry the **tenant owner** (joined via
+        # tenants.owner_user_id) — kept under the original name for
+        # backwards compatibility with older admin UI code paths.
+        # `created_by_*` fields carry the actual **agent creator**
+        # (the user who called POST /agents/stream or /onboarding/submit).
+        # Historical rows predating migration 025 have a NULL creator and
+        # render as "—" in the admin UI.
         return self._fetch_all(
             """
             SELECT
@@ -574,6 +581,9 @@ class AppDatabase:
                 u.email     AS user_email,
                 u.full_name AS user_full_name,
                 u.role      AS user_role,
+                a.created_by_user_id,
+                creator.email     AS created_by_email,
+                creator.full_name AS created_by_full_name,
                 s.id                     AS subscription_id,
                 s.plan_id,
                 s.status                 AS subscription_status,
@@ -591,6 +601,7 @@ class AppDatabase:
             FROM agents a
             LEFT JOIN tenants   t ON t.id = a.tenant_id
             LEFT JOIN app_users u ON u.id = t.owner_user_id
+            LEFT JOIN app_users creator ON creator.id = a.created_by_user_id
             LEFT JOIN LATERAL (
                 SELECT *
                 FROM agent_subscriptions s
@@ -616,13 +627,36 @@ class AppDatabase:
                 CASE WHEN a.deleted_at IS NULL
                      THEN 'active' ELSE 'deleted' END   AS link_status,
                 u.id AS user_id, u.email AS user_email,
-                u.full_name AS user_full_name, u.role AS user_role
+                u.full_name AS user_full_name, u.role AS user_role,
+                a.created_by_user_id,
+                creator.email     AS created_by_email,
+                creator.full_name AS created_by_full_name
             FROM agents a
             LEFT JOIN tenants   t ON t.id = a.tenant_id
             LEFT JOIN app_users u ON u.id = t.owner_user_id
+            LEFT JOIN app_users creator ON creator.id = a.created_by_user_id
             WHERE a.agent_id = %s AND a.deleted_at IS NULL
             """,
             (agent_id,),
+        )
+
+    def set_agent_creator(self, agent_id: str, user_id: int) -> None:
+        """Record who provisioned `agent_id`. Idempotent-ish: refuses to
+        overwrite an existing non-null creator so a repeat call can't
+        mis-attribute a historical row, but happily fills in NULLs.
+
+        Called immediately after a successful provision from the
+        `/tenants/{id}/agents/stream` and `/onboarding/submit` routes.
+        Failure here is non-fatal — the agent is already live; we'd
+        rather log and move on than 500 a working provision."""
+        self._execute(
+            """
+            UPDATE agents
+               SET created_by_user_id = %s
+             WHERE agent_id = %s
+               AND created_by_user_id IS NULL
+            """,
+            (user_id, agent_id),
         )
 
     def list_recent_usage_events(
