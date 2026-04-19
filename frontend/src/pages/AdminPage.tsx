@@ -323,9 +323,13 @@ function AgentsTab({
               </div>
 
               <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                <div className="text-text-muted">Owner</div>
+                <div className="text-text-muted">Tenant owner</div>
                 <div className="text-end truncate">
                   {a.user_email || '—'}
+                </div>
+                <div className="text-text-muted">Created by</div>
+                <div className="text-end truncate">
+                  {a.created_by_email || <span className="text-text-muted">—</span>}
                 </div>
                 <div className="text-text-muted">Plan</div>
                 <div className="text-end truncate">
@@ -389,7 +393,8 @@ function AgentsTab({
           <thead className="bg-surface-soft">
             <tr>
               <th className="text-left p-3">Agent</th>
-              <th className="text-left p-3">Owner</th>
+              <th className="text-left p-3">Tenant owner</th>
+              <th className="text-left p-3">Created by</th>
               <th className="text-left p-3">Plan</th>
               <th className="text-right p-3">Used</th>
               <th className="text-right p-3">Cap</th>
@@ -411,6 +416,9 @@ function AgentsTab({
                   </td>
                   <td className="p-3">
                     {a.user_email || <span className="text-text-muted">—</span>}
+                  </td>
+                  <td className="p-3">
+                    {a.created_by_email || <span className="text-text-muted">—</span>}
                   </td>
                   <td className="p-3">
                     {a.plan_name_he || <span className="text-text-muted">—</span>}
@@ -2237,7 +2245,14 @@ function AgentDetailModal({
                   <code>{detail.agent.agent_id}</code>
                 </div>
                 <div>
-                  <strong>Owner:</strong> {detail.agent.user_email || '—'}
+                  <strong>Tenant owner:</strong>{' '}
+                  {detail.agent.user_email || '—'}
+                </div>
+                <div>
+                  <strong>Created by:</strong>{' '}
+                  {detail.agent.created_by_email || (
+                    <span className="text-text-muted">— (pre-migration)</span>
+                  )}
                 </div>
                 <div>
                   <strong>Gateway:</strong>{' '}

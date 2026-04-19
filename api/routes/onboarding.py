@@ -161,6 +161,19 @@ async def submit(
 
         result_agent_id = vm_result.get("agent_id") or agent_id
 
+        # Creator attribution — the onboarding caller is always the
+        # tenant's first owner, so under current flows this matches
+        # tenants.owner_user_id. We still set it explicitly so the admin
+        # panel's "Created by" column is never NULL for post-migration-025
+        # agents, regardless of how the tenant structure evolves.
+        try:
+            db.set_agent_creator(result_agent_id, user["id"])
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "set_agent_creator failed for %s (user=%s)",
+                result_agent_id, user["id"], exc_info=True,
+            )
+
         # Welcome-message step is only meaningful when WhatsApp is bound.
         # Skip entirely when onboarding without a phone so the progress
         # bar ends cleanly at 4/4 instead of a ghost "sending to nobody"
