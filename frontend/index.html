@@ -56,14 +56,33 @@
     <script>
       // Resolve the active theme BEFORE React mounts. Single line goal:
       // no flash of light content on a dark-mode-pinned user, and vice
-      // versa. Must match the resolution order in src/lib/theme.tsx:
-      //   1. localStorage['agentleh.theme'] if it's 'light' or 'dark'
-      //   2. prefers-color-scheme media query (the 'auto' path)
+      // versa. Must match the resolution order in src/lib/themeStore.ts:
+      //   1. cookie `agentleh.theme` — shared with agentiko.io via
+      //      Domain=.agentiko.io, so a pick on the landing rides the
+      //      top-level navigation across.
+      //   2. localStorage['agentleh.theme'] — per-origin fallback for
+      //      users who set a pick before the cookie rollout.
+      //   3. prefers-color-scheme media query (the 'auto' path).
       (function () {
         try {
+          function readCookie(name) {
+            var prefix = name + '=';
+            var parts = document.cookie.split(';');
+            for (var i = 0; i < parts.length; i++) {
+              var p = parts[i].replace(/^\s+/, '');
+              if (p.indexOf(prefix) === 0) {
+                try { return decodeURIComponent(p.slice(prefix.length)); }
+                catch (e) { return p.slice(prefix.length); }
+              }
+            }
+            return null;
+          }
+          var cookie = readCookie('agentleh.theme');
           var saved = localStorage.getItem('agentleh.theme');
           var mode;
-          if (saved === 'light' || saved === 'dark') {
+          if (cookie === 'light' || cookie === 'dark') {
+            mode = cookie;
+          } else if (saved === 'light' || saved === 'dark') {
             mode = saved;
           } else {
             mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -86,24 +105,46 @@
       // I18nProvider useEffect firing.
       //
       // Resolution order MUST match src/lib/i18n.tsx::pickInitialLang:
-      //   1. localStorage explicit pick (user clicked switcher)
-      //   2. navigator.languages walk — first supported primary tag
+      //   0. ?lang= URL handoff from the landing (belt-and-suspenders)
+      //   1. cookie `agentleh.lang` — shared with agentiko.io via
+      //      Domain=.agentiko.io
+      //   2. localStorage explicit pick (user clicked switcher here
+      //      before the cookie rollout)
+      //   3. navigator.languages walk — first supported primary tag
       //      wins. `iw` is the legacy Chrome code for Hebrew.
-      //   3. Product default: Hebrew (agentleh is Israeli-first; any
+      //   4. Product default: Hebrew (agentleh is Israeli-first; any
       //      non-he/en browser language falls to Hebrew, not English).
       (function () {
         try {
+          function readCookie(name) {
+            var prefix = name + '=';
+            var parts = document.cookie.split(';');
+            for (var i = 0; i < parts.length; i++) {
+              var p = parts[i].replace(/^\s+/, '');
+              if (p.indexOf(prefix) === 0) {
+                try { return decodeURIComponent(p.slice(prefix.length)); }
+                catch (e) { return p.slice(prefix.length); }
+              }
+            }
+            return null;
+          }
           var lang;
-          // 0. ?lang= handoff from the landing page (different origin,
-          //    so localStorage isn't shared). If present, honor it and
-          //    persist — the React-side pickInitialLang also strips the
-          //    param via replaceState so it never leaks into bookmarks.
+          // 0. ?lang= handoff from the landing page. If present, honor
+          //    it and persist — the React-side pickInitialLang also
+          //    strips the param via replaceState so it never leaks
+          //    into bookmarks, and also writes the cookie.
           var params = new URLSearchParams(window.location.search);
           var param = params.get('lang');
           if (param === 'he' || param === 'en') {
             localStorage.setItem('agentleh.lang', param);
             lang = param;
           }
+          // 1. Cross-origin cookie.
+          if (!lang) {
+            var cookie = readCookie('agentleh.lang');
+            if (cookie === 'he' || cookie === 'en') lang = cookie;
+          }
+          // 2. Same-origin localStorage fallback.
           var saved = lang || localStorage.getItem('agentleh.lang');
           if (saved === 'he' || saved === 'en') {
             lang = saved;

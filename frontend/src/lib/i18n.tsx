@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { LANG_COOKIE, readCookie, writeCookie } from './prefsCookie'
 
 /**
  * Tiny bilingual i18n system — zero dependencies, ~80 lines.
@@ -92,18 +93,19 @@ const I18nContext = createContext<I18nContextValue | null>(null)
 function pickInitialLang(): Lang {
   if (typeof window === 'undefined') return 'he'
 
-  // 0. Handoff from the landing page via ?lang=he|en. localStorage
-  //    isn't shared across agentiko.io ↔ app.agentiko.io, so the
-  //    landing passes the visitor's chosen language via URL param when
-  //    they click "Sign up". Persist it to localStorage and strip the
-  //    param so the clean URL replaces it in history — no bookmark
-  //    pollution, and ?lang= can't silently override a later explicit
-  //    switcher click.
+  // 0. Handoff from the landing page via ?lang=he|en. Belt-and-suspenders
+  //    against third-party-cookie blockers or users who clicked before
+  //    the landing wrote the cookie. When present, this is treated as an
+  //    explicit pick: we persist it to cookie + localStorage and strip
+  //    the param so the clean URL replaces it in history — no bookmark
+  //    pollution, and ?lang= can't silently override a later switcher
+  //    click.
   try {
     const url = new URL(window.location.href)
     const param = url.searchParams.get('lang')
     if (param === 'he' || param === 'en') {
       window.localStorage.setItem(LS_KEY, param)
+      writeCookie(LANG_COOKIE, param)
       url.searchParams.delete('lang')
       window.history.replaceState(null, '', url.pathname + url.search + url.hash)
       return param
@@ -112,11 +114,22 @@ function pickInitialLang(): Lang {
     // URL parsing / localStorage disabled — fall through to the next step
   }
 
-  // 1. Explicit saved choice
-  const saved = window.localStorage.getItem(LS_KEY)
-  if (saved === 'he' || saved === 'en') return saved
+  // 1. Cross-origin cookie — shared with the landing page via
+  //    `Domain=.agentiko.io`. The user's pick on either surface wins.
+  const cookie = readCookie(LANG_COOKIE)
+  if (cookie === 'he' || cookie === 'en') return cookie
 
-  // 2. Browser locale walk
+  // 2. Same-origin localStorage fallback — users who set a preference
+  //    before the cookie rollout still have their pick honored. Seed
+  //    the cookie so the next visit to the landing picks it up without
+  //    a second click.
+  const saved = window.localStorage.getItem(LS_KEY)
+  if (saved === 'he' || saved === 'en') {
+    writeCookie(LANG_COOKIE, saved)
+    return saved
+  }
+
+  // 3. Browser locale walk
   const langs =
     navigator.languages && navigator.languages.length
       ? navigator.languages
@@ -127,7 +140,7 @@ function pickInitialLang(): Lang {
     if (primary === 'en') return 'en'
   }
 
-  // 3. Product default
+  // 4. Product default
   return 'he'
 }
 
@@ -152,6 +165,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       // localStorage can throw in private mode — ignore, the in-memory
       // state still updates so the switch works for the session.
     }
+    // Cross-origin share with the landing. Cookie write is best-effort;
+    // if the browser rejects cookies the localStorage mirror above still
+    // keeps the within-origin behavior working.
+    writeCookie(LANG_COOKIE, next)
   }, [])
 
   const value = useMemo<I18nContextValue>(() => {
