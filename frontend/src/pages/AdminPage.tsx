@@ -1274,10 +1274,10 @@ function InfoTip({
       {open && (
         <span
           role="tooltip"
-          className={`absolute z-50 top-full mt-2 ${bubbleSide} w-64 max-w-[80vw] rounded-lg bg-gray-900 text-white text-xs font-normal normal-case leading-relaxed px-3 py-2 shadow-xl pointer-events-none`}
+          className={`absolute z-50 top-full mt-2 ${bubbleSide} w-64 max-w-[80vw] rounded-lg bg-text-primary text-surface text-xs font-normal normal-case leading-relaxed px-3 py-2 shadow-xl pointer-events-none`}
         >
           <span
-            className={`absolute -top-1 ${arrowSide} w-2 h-2 bg-gray-900 rotate-45`}
+            className={`absolute -top-1 ${arrowSide} w-2 h-2 bg-text-primary rotate-45`}
           />
           {text}
         </span>
