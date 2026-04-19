@@ -11,13 +11,19 @@
  *      data-theme before first paint; the React store just mirrors
  *      what's already on <html> so nothing flashes.
  *
- * Persistence: `localStorage['agentleh.theme']` holds the user's
- * explicit pick. Auto clears the key — that's the default.
+ * Persistence: cookie `agentleh.theme` (scoped to `.agentiko.io`) is
+ * the cross-origin source of truth, shared with the landing page.
+ * `localStorage['agentleh.theme']` mirrors the pick on the local origin
+ * for backwards compat and for cross-tab sync via the `storage` event.
+ * Auto clears both — that's the default.
  *
  * Cross-tab sync: a `storage`-event listener propagates theme changes
  * across open tabs on the same origin so picking Dark in one tab
- * updates the rest without a reload.
+ * updates the rest without a reload. Cross-origin sync (landing ↔ app)
+ * happens on the next top-level navigation via the cookie.
  */
+
+import { THEME_COOKIE, clearCookie, readCookie, writeCookie } from './prefsCookie'
 
 export type Theme = 'auto' | 'light' | 'dark'
 
@@ -44,9 +50,18 @@ function computeResolved(theme: Theme): 'light' | 'dark' {
 
 function readStoredTheme(): Theme {
   if (typeof window === 'undefined') return 'auto'
+  // Cross-origin cookie wins — shared with the landing.
+  const cookie = readCookie(THEME_COOKIE)
+  if (cookie === 'light' || cookie === 'dark') return cookie
+  // localStorage fallback for users who set a pick pre-cookie rollout.
+  // Seed the cookie so the next visit to the landing picks it up.
   try {
     const v = window.localStorage.getItem(LS_KEY)
-    if (v === 'light' || v === 'dark' || v === 'auto') return v
+    if (v === 'light' || v === 'dark') {
+      writeCookie(THEME_COOKIE, v)
+      return v
+    }
+    if (v === 'auto') return v
   } catch {
     // localStorage disabled — fall through to default
   }
@@ -103,6 +118,9 @@ export function setTheme(next: Theme) {
   } catch {
     // localStorage disabled — in-memory state still updates
   }
+  // Cross-origin share with the landing.
+  if (next === 'auto') clearCookie(THEME_COOKIE)
+  else writeCookie(THEME_COOKIE, next)
   notify()
 }
 
