@@ -1105,6 +1105,24 @@ interface VmStatsResponse {
     hostname?: string
   } | null
   live_error: string | null
+  capacity: {
+    agents_remaining: number
+    binding_constraint: 'ram' | 'cpu' | 'boot_disk' | 'data_disk'
+    per_constraint: {
+      ram: number
+      cpu: number
+      boot_disk: number
+      data_disk: number
+    }
+    assumptions: {
+      typical_agent_mb: number
+      reserved_overhead_mb: number
+      safety_margin_mb: number
+      load_per_agent: number
+      boot_disk_agent_gb: number
+      data_disk_agent_gb: number
+    }
+  } | null
   history: Array<{
     ts: string
     cpu_percent: number | null
@@ -1350,7 +1368,7 @@ function LiveCard({ data }: { data: VmStatsResponse }) {
           up {uptimeDays}d {uptimeHours}h · updates every 10s
         </div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         {cpu && (
           <MetricTile
             label="CPU"
@@ -1409,6 +1427,17 @@ function LiveCard({ data }: { data: VmStatsResponse }) {
             red={80}
             sub={`${docker.running} running`}
             info="Docker containers on this VM (running / total). One per agent (OpenClaw) plus shared services like Vector. Bar is scaled against a soft cap of 25."
+          />
+        )}
+        {data.capacity && (
+          <MetricTile
+            label="Agents left"
+            value={data.capacity.agents_remaining}
+            pct={Math.max(0, 100 - data.capacity.agents_remaining * 40)}
+            yellow={55}
+            red={85}
+            sub={`${data.capacity.binding_constraint.replace('_', ' ')}-bound`}
+            info={`How many more OpenClaw agents fit before this VM needs a resize. Min across 4 constraints — RAM (${data.capacity.per_constraint.ram}), CPU (${data.capacity.per_constraint.cpu}), boot disk (${data.capacity.per_constraint.boot_disk}), /data (${data.capacity.per_constraint.data_disk}). Assumes ~${(data.capacity.assumptions.typical_agent_mb / 1024).toFixed(1)} G RAM per typical agent plus ${(data.capacity.assumptions.reserved_overhead_mb / 1024).toFixed(1)} G fixed overhead (OS + whisper + docker). Heuristic — tune if it's ever wrong in prod.`}
           />
         )}
       </div>
