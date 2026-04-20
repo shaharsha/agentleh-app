@@ -44,6 +44,8 @@ import type {
 } from '../lib/types'
 import { useI18n } from '../lib/i18n'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
+import { DeleteAgentModal } from '../components/DeleteAgentModal'
+import { SwitchModelModal } from '../components/SwitchModelModal'
 
 type AdminTab = 'agents' | 'users' | 'plans' | 'coupons' | 'tenants' | 'stats'
 const VALID_TABS: readonly AdminTab[] = ['agents', 'users', 'plans', 'coupons', 'tenants', 'stats']
@@ -106,6 +108,28 @@ export default function AdminPage() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [agentDetail, setAgentDetail] = useState<AdminAgentDetail | null>(null)
   const [tab, setTab] = useState<AdminTab>(readTabFromUrl)
+  // Delete-agent modal state. Superadmin-scoped: a single agent at a time,
+  // confirmed via the shared DeleteAgentModal (same UX tenant admins see on
+  // their own /tenants/{id} page).
+  const [deletingAgent, setDeletingAgent] = useState<{
+    agent_id: string
+    agent_name: string | null
+    tenant_id: number
+  } | null>(null)
+  const [deleteInProgress, setDeleteInProgress] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  // Model-switch modal state. Intentionally separate from delete state so
+  // a stale modal close doesn't cross-talk. The dropdown's onChange sets
+  // this; the modal's Confirm button runs the API call.
+  const [switchingModel, setSwitchingModel] = useState<{
+    agent_id: string
+    agent_name: string | null
+    from: string | null
+    to: AgentModel
+  } | null>(null)
+  const [switchInProgress, setSwitchInProgress] = useState(false)
+  const [switchError, setSwitchError] = useState<string | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -159,59 +183,83 @@ export default function AdminPage() {
     }
   }
 
-  async function handleDeleteAgent(agentId: string, tenantId: number | null, agentName: string | null) {
-    // The tenant-scoped DELETE /api/tenants/{tid}/agents/{aid} endpoint
-    // already accepts superadmins via the role-hierarchy bypass in
-    // get_active_tenant_member. Reusing it here keeps a single delete
-    // code path (VM deprovision + DB soft-delete + audit log) and means
-    // any future change to delete semantics only has to be made once.
+  // Two-step delete: click button → open modal (this handler). The modal's
+  // Confirm button calls handleConfirmDeleteAgent below. This keeps the
+  // single-responsibility shape of the tenant-side flow and avoids the
+  // native prompt()/alert() chrome in the admin panel.
+  //
+  // Reuses DELETE /api/tenants/{tid}/agents/{aid} via the superadmin
+  // role-hierarchy bypass in get_active_tenant_member — no dedicated
+  // admin endpoint needed.
+  function handleDeleteAgent(
+    agentId: string,
+    tenantId: number | null,
+    agentName: string | null,
+  ) {
     if (tenantId == null) {
+      // Legacy rows predating the tenants migration — no clean delete
+      // path from the admin panel. Inline alert is acceptable here since
+      // the modal would be misleading (would suggest we can delete when
+      // we can't).
       alert(
         `Cannot delete "${agentId}" from the admin panel — this agent has ` +
-          `no tenant_id (legacy row predating the tenants migration). SSH to ` +
-          `the VM and run /opt/agentleh/delete-agent.sh manually.`,
+          `no tenant_id (legacy row). SSH to the VM and run ` +
+          `/opt/agentleh/delete-agent.sh manually.`,
       )
       return
     }
-    const display = agentName ? `${agentName} (${agentId})` : agentId
-    const typed = prompt(
-      `⚠️  DELETE ${display}?\n\n` +
-        `This tears down the container, revokes the meter key, clears phone_routes, ` +
-        `deletes OAuth credentials, and soft-deletes the agents row. A 90-day GCS ` +
-        `backup is taken so the data isn't immediately lost.\n\n` +
-        `Type the agent_id exactly to confirm:`,
-    )
-    if (typed == null) return // cancel
-    if (typed.trim() !== agentId) {
-      alert(`Agent ID mismatch — delete cancelled.`)
-      return
-    }
+    setDeletingAgent({ agent_id: agentId, agent_name: agentName, tenant_id: tenantId })
+    setDeleteError(null)
+  }
+
+  async function handleConfirmDeleteAgent() {
+    if (!deletingAgent) return
+    setDeleteInProgress(true)
+    setDeleteError(null)
     try {
-      await deleteAgent(tenantId, agentId)
+      await deleteAgent(deletingAgent.tenant_id, deletingAgent.agent_id)
+      setDeletingAgent(null)
       await reload()
     } catch (e) {
-      alert(`Failed: ${(e as Error).message}`)
+      setDeleteError((e as Error).message)
+    } finally {
+      setDeleteInProgress(false)
     }
   }
 
-  async function handleSwitchModel(agentId: string, currentModel: string | null, newModel: AgentModel) {
-    const from = fmtModel(currentModel)
-    const to = fmtModel(newModel)
-    if (from === to) return
-    if (
-      !confirm(
-        `Switch ${agentId} from ${from} → ${to}?\n\n` +
-          `OpenClaw will hot-reload within ~300ms. No message lost, no container restart. ` +
-          `The choice survives template reconciles (STICKY_PATHS).`,
-      )
-    ) {
-      return
+  // Two-step switch: dropdown onChange → open modal (this handler). The
+  // modal's Confirm button calls handleConfirmSwitchModel below. Same
+  // pattern as delete; keeps the native chrome out of the admin panel.
+  function handleSwitchModel(
+    agentId: string,
+    currentModel: string | null,
+    newModel: AgentModel,
+  ) {
+    if ((currentModel ?? 'google/gemini-3-flash-preview') === newModel) {
+      return // no-op — already there
     }
+    const agent = overview?.agents.find((a) => a.agent_id === agentId) ?? null
+    setSwitchingModel({
+      agent_id: agentId,
+      agent_name: agent?.agent_name ?? null,
+      from: currentModel,
+      to: newModel,
+    })
+    setSwitchError(null)
+  }
+
+  async function handleConfirmSwitchModel() {
+    if (!switchingModel) return
+    setSwitchInProgress(true)
+    setSwitchError(null)
     try {
-      await setAgentModel(agentId, newModel)
+      await setAgentModel(switchingModel.agent_id, switchingModel.to)
+      setSwitchingModel(null)
       await reload()
     } catch (e) {
-      alert(`Failed: ${(e as Error).message}`)
+      setSwitchError((e as Error).message)
+    } finally {
+      setSwitchInProgress(false)
     }
   }
 
@@ -352,6 +400,42 @@ export default function AdminPage() {
         <AgentDetailModal
           detail={agentDetail}
           onClose={() => setSelectedAgentId(null)}
+        />
+      )}
+
+      {switchingModel && (
+        <SwitchModelModal
+          agentId={switchingModel.agent_id}
+          agentName={switchingModel.agent_name || switchingModel.agent_id}
+          fromLabel={fmtModel(switchingModel.from)}
+          toLabel={fmtModel(switchingModel.to)}
+          inProgress={switchInProgress}
+          error={switchError}
+          onConfirm={handleConfirmSwitchModel}
+          onCancel={() => {
+            setSwitchingModel(null)
+            setSwitchError(null)
+          }}
+        />
+      )}
+
+      {deletingAgent && (
+        <DeleteAgentModal
+          agentId={deletingAgent.agent_id}
+          agentName={deletingAgent.agent_name || deletingAgent.agent_id}
+          inProgress={deleteInProgress}
+          error={deleteError}
+          onConfirm={handleConfirmDeleteAgent}
+          onCancel={() => {
+            setDeletingAgent(null)
+            setDeleteError(null)
+          }}
+          // Superadmin-specific banner — emphasize this is a cross-tenant
+          // action so the operator doesn't delete by muscle memory.
+          extraWarning={{
+            he: 'פעולת סופר־אדמין: הסוכן שייך ללקוח אחר. וודא שזה המכוון.',
+            en: 'Superadmin action: this agent belongs to a customer tenant. Confirm this is intentional.',
+          }}
         />
       )}
     </div>
