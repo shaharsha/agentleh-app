@@ -27,10 +27,12 @@ import {
   getAdminAgentDetail,
   getAdminVmStats,
   rotateMeterKey,
+  setAgentModel,
   setUserRole,
   type AdminCouponRedemptionRow,
   type AdminCouponRow,
   type AdminTenantRow,
+  type AgentModel,
 } from '../lib/api'
 import type {
   AdminOverview,
@@ -66,6 +68,32 @@ function pct(used: number | null | undefined, total: number | null | undefined):
 function fmtDate(s: string | null | undefined): string {
   if (!s) return '—'
   return new Date(s).toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem' })
+}
+
+// Chat model choices for the admin dropdown. Keep in lockstep with the
+// four other places the allowlist lives:
+//   app/api/routes/admin.py             _ALLOWED_MODELS
+//   agent-config/ops/create-agent.sh    --model case/esac
+//   agent-config/ops/provision-api.py   ALLOWED_MODELS
+//   agent-config/openclaw/openclaw.json agents.defaults.models + providers catalog
+// A divergence at any one point creates silent drift bugs.
+const MODEL_OPTIONS: ReadonlyArray<{ value: AgentModel; label: string; hint?: string }> = [
+  {
+    value: 'google/gemini-3-flash-preview',
+    label: 'Gemini 3 Flash',
+    hint: 'default, proven on Nylas 2-phase flow',
+  },
+  {
+    value: 'google/gemma-4-31b-it',
+    label: 'Gemma 4 31B',
+    hint: 'cheaper, pilot only',
+  },
+]
+
+function fmtModel(model: string | null | undefined): string {
+  if (!model) return 'Flash (default)'
+  const opt = MODEL_OPTIONS.find((o) => o.value === model)
+  return opt ? opt.label : model
 }
 
 export default function AdminPage() {
@@ -125,6 +153,27 @@ export default function AdminPage() {
           `Save this now — it will not be shown again. ` +
           `You must update /opt/agentleh/.env on the VM and restart the container.`,
       )
+    } catch (e) {
+      alert(`Failed: ${(e as Error).message}`)
+    }
+  }
+
+  async function handleSwitchModel(agentId: string, currentModel: string | null, newModel: AgentModel) {
+    const from = fmtModel(currentModel)
+    const to = fmtModel(newModel)
+    if (from === to) return
+    if (
+      !confirm(
+        `Switch ${agentId} from ${from} → ${to}?\n\n` +
+          `OpenClaw will hot-reload within ~300ms. No message lost, no container restart. ` +
+          `The choice survives template reconciles (STICKY_PATHS).`,
+      )
+    ) {
+      return
+    }
+    try {
+      await setAgentModel(agentId, newModel)
+      await reload()
     } catch (e) {
       alert(`Failed: ${(e as Error).message}`)
     }
@@ -245,6 +294,7 @@ export default function AdminPage() {
           plans={overview.plans}
           onSelect={setSelectedAgentId}
           onRotateKey={handleRotateKey}
+          onSwitchModel={handleSwitchModel}
           onGranted={reload}
         />
       )}
@@ -276,12 +326,14 @@ function AgentsTab({
   plans,
   onSelect,
   onRotateKey,
+  onSwitchModel,
   onGranted,
 }: {
   agents: AdminAgentRow[]
   plans: AdminOverview['plans']
   onSelect: (id: string) => void
   onRotateKey: (id: string) => void
+  onSwitchModel: (id: string, current: string | null, next: AgentModel) => void
   onGranted: () => void
 }) {
   const [grantTenantId, setGrantTenantId] = useState<number | null>(null)
@@ -343,6 +395,23 @@ function AgentsTab({
                 <div className="text-end tabular-nums">
                   {pct(a.used_micros, cap || null)}
                 </div>
+                <div className="text-text-muted">Model</div>
+                <div className="text-end">
+                  <select
+                    value={a.model ?? 'google/gemini-3-flash-preview'}
+                    onChange={(e) =>
+                      onSwitchModel(a.agent_id, a.model, e.target.value as AgentModel)
+                    }
+                    className="text-xs bg-surface border border-border rounded px-2 py-1 w-full max-w-[160px]"
+                    aria-label={`Chat model for ${a.agent_id}`}
+                  >
+                    {MODEL_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {cap > 0 && (
@@ -396,6 +465,7 @@ function AgentsTab({
               <th className="text-left p-3">Tenant owner</th>
               <th className="text-left p-3">Created by</th>
               <th className="text-left p-3">Plan</th>
+              <th className="text-left p-3">Model</th>
               <th className="text-right p-3">Used</th>
               <th className="text-right p-3">Cap</th>
               <th className="text-right p-3">%</th>
@@ -422,6 +492,25 @@ function AgentsTab({
                   </td>
                   <td className="p-3">
                     {a.plan_name_he || <span className="text-text-muted">—</span>}
+                  </td>
+                  <td className="p-3">
+                    <select
+                      value={a.model ?? 'google/gemini-3-flash-preview'}
+                      onChange={(e) =>
+                        onSwitchModel(a.agent_id, a.model, e.target.value as AgentModel)
+                      }
+                      className="text-xs bg-surface border border-border rounded px-2 py-1"
+                      aria-label={`Chat model for ${a.agent_id}`}
+                    >
+                      {MODEL_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    {a.model == null && (
+                      <div className="text-[10px] text-text-muted mt-0.5">inherits default</div>
+                    )}
                   </td>
                   <td className="p-3 text-right font-mono">{fmtUsd(a.used_micros)}</td>
                   <td className="p-3 text-right font-mono">{fmtUsd(cap || null)}</td>

@@ -132,6 +132,10 @@ export interface AdminAgentRow {
   overage_cap_micros: number | null
   overage_used_micros: number | null
   wallet_balance_micros: number | null
+  // Per-agent chat model override. NULL = inherit system default (Flash).
+  // DB mirror of agents.defaults.model on the VM; see the drift-detection
+  // note in admin.py::admin_get_live_agent_model for when this may lag.
+  model: string | null
 }
 
 export interface BillingPlan {
