@@ -197,6 +197,196 @@ async def admin_rotate_meter_key(
     return await _meter_post(f"/admin/keys/rotate/{agent_id}")
 
 
+# Chat model allowlist — MUST stay in sync with:
+#   agent-config/ops/create-agent.sh        (provisioning-time --model allowlist)
+#   agent-config/ops/provision-api.py       (VM-side ALLOWED_MODELS)
+#   agent-config/openclaw/openclaw.json     (agents.defaults.models + catalog)
+#   meter/migrations/026_gemma4_pricing.sql (pricing rows)
+# Widening any one in isolation creates drift (allowlist lets through a model
+# that has no pricing row → $0 billing; or has pricing but not in catalog →
+# OpenClaw rejects at boot).
+_ALLOWED_MODELS: frozenset[str] = frozenset(
+    {
+        "google/gemini-3-flash-preview",
+        "google/gemma-4-31b-it",
+    }
+)
+
+
+@router.get("/agents/{agent_id}/model/live")
+async def admin_get_live_agent_model(
+    agent_id: str,
+    request: Request,
+    _: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    """Authoritative live-read of the agent's chat model from the VM, with
+    drift detection against the DB mirror.
+
+    Returns: {db_model: str|null, live_model: str|null, drift: bool,
+              live_reachable: bool, error?: str}.
+
+    Used by the admin detail view (one VM roundtrip per open — NOT the list
+    view which stays fast on the DB mirror). If `drift=true`, the UI shows
+    a warning and offers a "Re-sync DB from VM" action which writes the
+    live value back into `agents.model` so the list view catches up.
+
+    Drift sources (present or future):
+      - Someone SSHes to the VM and hand-edits openclaw.json.
+      - A future tenant self-serve UI writes via a path that skips
+        /admin/agents/{id}/model (it shouldn't — the architecture expects
+        all writes to route through the app so VM + DB update atomically).
+      - An in-agent skill modifies the model (same architectural rule
+        applies — skill should call back into the app, not the VM).
+    """
+    db = request.app.state.db
+    details = db.get_agent_details(agent_id)
+    if details is None:
+        raise HTTPException(status_code=404, detail="agent_not_found")
+    db_model = details.get("model")
+
+    provisioner = request.app.state.provisioner
+    live_result = provisioner.get_agent_model(agent_id)
+    if not live_result.get("success"):
+        # Can't read live — surface the reason but keep the endpoint 200
+        # so the UI can still show the DB value.
+        return {
+            "agent_id": agent_id,
+            "db_model": db_model,
+            "live_model": None,
+            "drift": False,
+            "live_reachable": False,
+            "error": live_result.get("error"),
+        }
+
+    live_model = live_result.get("model")
+    return {
+        "agent_id": agent_id,
+        "db_model": db_model,
+        "live_model": live_model,
+        # Normalise: DB NULL is equivalent to whatever the VM reports for
+        # brand-new agents that never went through the set-model path.
+        # Drift only fires when both sides have concrete values and disagree.
+        "drift": (db_model is not None) and (live_model is not None) and db_model != live_model,
+        "live_reachable": True,
+    }
+
+
+@router.post("/agents/{agent_id}/model/resync")
+async def admin_resync_agent_model_from_vm(
+    agent_id: str,
+    request: Request,
+    _: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    """Pull the live model from the VM and write it to the DB mirror.
+
+    The inverse of /model — instead of setting VM from admin input, this
+    sets DB from what the VM reports. Used to resolve drift detected by
+    /model/live without doing a write to the VM.
+    """
+    db = request.app.state.db
+    details = db.get_agent_details(agent_id)
+    if details is None:
+        raise HTTPException(status_code=404, detail="agent_not_found")
+
+    provisioner = request.app.state.provisioner
+    live_result = provisioner.get_agent_model(agent_id)
+    if not live_result.get("success"):
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": "vm_get_model_failed",
+                "vm_error": live_result.get("error"),
+                "vm_detail": live_result.get("detail"),
+            },
+        )
+    live_model = live_result.get("model")
+    updated = db.set_agent_model(agent_id, live_model)
+    return {
+        "success": True,
+        "agent_id": agent_id,
+        "db_model": live_model,
+        "synced_from_vm": True,
+        "db_updated": updated is not None,
+    }
+
+
+@router.patch("/agents/{agent_id}/model")
+async def admin_set_agent_model(
+    agent_id: str,
+    request: Request,
+    body: dict[str, Any] = Body(...),
+    _: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    """Flip an agent's chat model.
+
+    Body: {"model": "google/gemini-3-flash-preview" | "google/gemma-4-31b-it"}.
+    `model=null` resets the DB mirror to NULL (= inherit default) — useful if
+    drift is detected and you want to force re-sync on next set.
+
+    Write ordering: VM first, then DB. If the VM write fails the DB is left
+    unchanged so the admin UI still reflects reality. If the VM write succeeds
+    but the DB update fails (unlikely; SupabasePG is the same instance the
+    request began with), the UI shows the old model until the next set — the
+    VM is the authoritative source for routing anyway.
+    """
+    model = body.get("model")
+    if model is not None and (not isinstance(model, str) or model not in _ALLOWED_MODELS):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "model_not_allowed",
+                "allowed": sorted(_ALLOWED_MODELS) + [None],
+            },
+        )
+
+    db = request.app.state.db
+    # Confirm the agent exists up front so the admin gets a clean 404 instead
+    # of the VM's "agent_not_found" bubbling back (same message but cleaner
+    # provenance).
+    details = db.get_agent_details(agent_id)
+    if details is None:
+        raise HTTPException(status_code=404, detail="agent_not_found")
+
+    # model=null means "unset the DB mirror only" (admin reset / drift fix).
+    # Don't touch the VM in that case — the VM's openclaw.json is the source
+    # of truth and a `null` value there would crash the agent at load.
+    if model is None:
+        updated = db.set_agent_model(agent_id, None)
+        return {
+            "success": True,
+            "agent_id": agent_id,
+            "model": None,
+            "vm_updated": False,
+            "db_updated": updated is not None,
+        }
+
+    provisioner = request.app.state.provisioner
+    vm_result = provisioner.set_agent_model(agent_id, model)
+    if not vm_result.get("success"):
+        # Pass VM error through so the admin can distinguish
+        # "agent_not_found" / "model_not_allowed" / "config_write_failed" /
+        # "provision-api unreachable" — all actionable differently.
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": "vm_set_model_failed",
+                "vm_error": vm_result.get("error"),
+                "vm_detail": vm_result.get("detail"),
+            },
+        )
+
+    updated = db.set_agent_model(agent_id, model)
+    return {
+        "success": True,
+        "agent_id": agent_id,
+        "model": model,
+        "previous_model": vm_result.get("previous_model"),
+        "no_op": bool(vm_result.get("no_op")),
+        "vm_updated": True,
+        "db_updated": updated is not None,
+    }
+
+
 @router.post("/agents/{agent_id}/subscription")
 async def admin_upsert_subscription(
     agent_id: str,

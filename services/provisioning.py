@@ -80,6 +80,8 @@ class AgentProvisioner(Protocol):
     ) -> AsyncIterator[dict[str, Any]]: ...
     def deprovision(self, agent_id: str) -> DeprovisionResult: ...
     def check_health(self, agent_id: str) -> bool: ...
+    def set_agent_model(self, agent_id: str, model: str) -> dict[str, Any]: ...
+    def get_agent_model(self, agent_id: str) -> dict[str, Any]: ...
 
 
 class MockProvisioner:
@@ -96,6 +98,10 @@ class MockProvisioner:
         # Fallback to a realistic ws:// URL so test assertions match the
         # shape create-agent.sh produces (ws://10.10.0.x:port).
         self.gateway_base_url = gateway_base_url or "ws://127.0.0.1:18800"
+        # In-memory model state so get_agent_model echoes the last
+        # set_agent_model call within the same process — useful for
+        # manual dev + test drift-detection scenarios.
+        self._mock_models: dict[str, str] = {}
 
     def provision(
         self,
@@ -256,6 +262,32 @@ class MockProvisioner:
             "agent_id": agent_id,
             "revision": "mock0000",
             "restarted": restart,
+        }
+
+    def set_agent_model(self, agent_id: str, model: str) -> dict[str, Any]:
+        """Mock variant — logs + returns success, so admin-panel tests and
+        local dev can exercise the model-switch flow without a real VM."""
+        logger.info("MOCK: set_agent_model agent=%s model=%s", agent_id, model)
+        # Minimal in-memory state so get_agent_model reflects the last set
+        # within the same process (useful for manual testing against a
+        # MockProvisioner in dev).
+        self._mock_models[agent_id] = model
+        return {
+            "success": True,
+            "agent_id": agent_id,
+            "previous_model": None,
+            "model": model,
+            "no_op": False,
+        }
+
+    def get_agent_model(self, agent_id: str) -> dict[str, Any]:
+        """Mock variant — returns the last set_agent_model value for this
+        agent in this process, or None if never set."""
+        logger.info("MOCK: get_agent_model agent=%s", agent_id)
+        return {
+            "success": True,
+            "agent_id": agent_id,
+            "model": self._mock_models.get(agent_id),
         }
 
 
@@ -549,6 +581,79 @@ class VmHttpProvisioner:
                 )
         except httpx.HTTPError as exc:
             logger.error("config/patch unreachable: %s", exc)
+            return {"success": False, "error": f"provision-api unreachable: {exc}"}
+        try:
+            result = resp.json()
+        except Exception:  # noqa: BLE001
+            return {
+                "success": False,
+                "error": f"non-json response from provision-api (status={resp.status_code})",
+            }
+        if resp.status_code >= 400 and "success" not in result:
+            result["success"] = False
+        return result
+
+    def get_agent_model(self, agent_id: str) -> dict[str, Any]:
+        """GET /config/model?agent_id=X — authoritative live read.
+
+        Used by the admin panel for drift detection: compares the live
+        value against `agents.model` in the DB and surfaces a warning if
+        they disagree (e.g. someone SSHed to the VM and hand-edited
+        openclaw.json). Callers should treat a `success=False` response
+        the same way as an unreachable daemon — surface, don't crash.
+        """
+        logger.info("VmHttpProvisioner: get_agent_model agent=%s", agent_id)
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.get(
+                    f"{self.base_url}/config/model",
+                    params={"agent_id": agent_id},
+                    headers={"Authorization": f"Bearer {self.token}"},
+                )
+        except httpx.HTTPError as exc:
+            logger.error("config/model GET unreachable: %s", exc)
+            return {"success": False, "error": f"provision-api unreachable: {exc}"}
+        try:
+            result = resp.json()
+        except Exception:  # noqa: BLE001
+            return {
+                "success": False,
+                "error": f"non-json response from provision-api (status={resp.status_code})",
+            }
+        if resp.status_code >= 400 and "success" not in result:
+            result["success"] = False
+        return result
+
+    def set_agent_model(self, agent_id: str, model: str) -> dict[str, Any]:
+        """POST /config/model on the VM daemon — flip an agent's chat model.
+
+        Used by the superadmin admin panel to switch an individual agent
+        between `google/gemini-3-flash-preview` (default) and
+        `google/gemma-4-31b-it`. The daemon rewrites `agents.defaults.model`
+        in the live openclaw.json via an atomic tmpfile + rename; OpenClaw's
+        chokidar watcher hot-reloads within ~300ms, no container restart
+        needed. The sticky-path rule in reconcile-agent.py ensures the
+        per-agent choice survives future template reconciles.
+
+        Returns the daemon's response dict, including `previous_model` so
+        callers can log the transition. On unreachable daemon or non-2xx
+        response, `success=False` + `error` / `detail` populated — surface
+        these to the admin UI verbatim so "agent_not_found" /
+        "model_not_allowed" / "config_write_failed" are distinguishable
+        from a generic "couldn't switch."
+        """
+        logger.info(
+            "VmHttpProvisioner: set_agent_model agent=%s model=%s", agent_id, model
+        )
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.post(
+                    f"{self.base_url}/config/model",
+                    json={"agent_id": agent_id, "model": model},
+                    headers={"Authorization": f"Bearer {self.token}"},
+                )
+        except httpx.HTTPError as exc:
+            logger.error("config/model unreachable: %s", exc)
             return {"success": False, "error": f"provision-api unreachable: {exc}"}
         try:
             result = resp.json()

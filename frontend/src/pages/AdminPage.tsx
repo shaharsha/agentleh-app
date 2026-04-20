@@ -26,11 +26,14 @@ import {
   getAdminOverview,
   getAdminAgentDetail,
   getAdminVmStats,
+  deleteAgent,
   rotateMeterKey,
+  setAgentModel,
   setUserRole,
   type AdminCouponRedemptionRow,
   type AdminCouponRow,
   type AdminTenantRow,
+  type AgentModel,
 } from '../lib/api'
 import type {
   AdminOverview,
@@ -41,6 +44,8 @@ import type {
 } from '../lib/types'
 import { useI18n } from '../lib/i18n'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
+import { DeleteAgentModal } from '../components/DeleteAgentModal'
+import { SwitchModelModal } from '../components/SwitchModelModal'
 
 type AdminTab = 'agents' | 'users' | 'plans' | 'coupons' | 'tenants' | 'stats'
 const VALID_TABS: readonly AdminTab[] = ['agents', 'users', 'plans', 'coupons', 'tenants', 'stats']
@@ -68,6 +73,32 @@ function fmtDate(s: string | null | undefined): string {
   return new Date(s).toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem' })
 }
 
+// Chat model choices for the admin dropdown. Keep in lockstep with the
+// four other places the allowlist lives:
+//   app/api/routes/admin.py             _ALLOWED_MODELS
+//   agent-config/ops/create-agent.sh    --model case/esac
+//   agent-config/ops/provision-api.py   ALLOWED_MODELS
+//   agent-config/openclaw/openclaw.json agents.defaults.models + providers catalog
+// A divergence at any one point creates silent drift bugs.
+const MODEL_OPTIONS: ReadonlyArray<{ value: AgentModel; label: string; hint?: string }> = [
+  {
+    value: 'google/gemini-3-flash-preview',
+    label: 'Gemini 3 Flash',
+    hint: 'default, proven on Nylas 2-phase flow',
+  },
+  {
+    value: 'google/gemma-4-31b-it',
+    label: 'Gemma 4 31B',
+    hint: 'cheaper, pilot only',
+  },
+]
+
+function fmtModel(model: string | null | undefined): string {
+  if (!model) return 'Flash (default)'
+  const opt = MODEL_OPTIONS.find((o) => o.value === model)
+  return opt ? opt.label : model
+}
+
 export default function AdminPage() {
   const { t } = useI18n()
   useDocumentTitle(t({ he: 'ניהול', en: 'Admin' }))
@@ -77,6 +108,28 @@ export default function AdminPage() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [agentDetail, setAgentDetail] = useState<AdminAgentDetail | null>(null)
   const [tab, setTab] = useState<AdminTab>(readTabFromUrl)
+  // Delete-agent modal state. Superadmin-scoped: a single agent at a time,
+  // confirmed via the shared DeleteAgentModal (same UX tenant admins see on
+  // their own /tenants/{id} page).
+  const [deletingAgent, setDeletingAgent] = useState<{
+    agent_id: string
+    agent_name: string | null
+    tenant_id: number
+  } | null>(null)
+  const [deleteInProgress, setDeleteInProgress] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  // Model-switch modal state. Intentionally separate from delete state so
+  // a stale modal close doesn't cross-talk. The dropdown's onChange sets
+  // this; the modal's Confirm button runs the API call.
+  const [switchingModel, setSwitchingModel] = useState<{
+    agent_id: string
+    agent_name: string | null
+    from: string | null
+    to: AgentModel
+  } | null>(null)
+  const [switchInProgress, setSwitchInProgress] = useState(false)
+  const [switchError, setSwitchError] = useState<string | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -127,6 +180,86 @@ export default function AdminPage() {
       )
     } catch (e) {
       alert(`Failed: ${(e as Error).message}`)
+    }
+  }
+
+  // Two-step delete: click button → open modal (this handler). The modal's
+  // Confirm button calls handleConfirmDeleteAgent below. This keeps the
+  // single-responsibility shape of the tenant-side flow and avoids the
+  // native prompt()/alert() chrome in the admin panel.
+  //
+  // Reuses DELETE /api/tenants/{tid}/agents/{aid} via the superadmin
+  // role-hierarchy bypass in get_active_tenant_member — no dedicated
+  // admin endpoint needed.
+  function handleDeleteAgent(
+    agentId: string,
+    tenantId: number | null,
+    agentName: string | null,
+  ) {
+    if (tenantId == null) {
+      // Legacy rows predating the tenants migration — no clean delete
+      // path from the admin panel. Inline alert is acceptable here since
+      // the modal would be misleading (would suggest we can delete when
+      // we can't).
+      alert(
+        `Cannot delete "${agentId}" from the admin panel — this agent has ` +
+          `no tenant_id (legacy row). SSH to the VM and run ` +
+          `/opt/agentleh/delete-agent.sh manually.`,
+      )
+      return
+    }
+    setDeletingAgent({ agent_id: agentId, agent_name: agentName, tenant_id: tenantId })
+    setDeleteError(null)
+  }
+
+  async function handleConfirmDeleteAgent() {
+    if (!deletingAgent) return
+    setDeleteInProgress(true)
+    setDeleteError(null)
+    try {
+      await deleteAgent(deletingAgent.tenant_id, deletingAgent.agent_id)
+      setDeletingAgent(null)
+      await reload()
+    } catch (e) {
+      setDeleteError((e as Error).message)
+    } finally {
+      setDeleteInProgress(false)
+    }
+  }
+
+  // Two-step switch: dropdown onChange → open modal (this handler). The
+  // modal's Confirm button calls handleConfirmSwitchModel below. Same
+  // pattern as delete; keeps the native chrome out of the admin panel.
+  function handleSwitchModel(
+    agentId: string,
+    currentModel: string | null,
+    newModel: AgentModel,
+  ) {
+    if ((currentModel ?? 'google/gemini-3-flash-preview') === newModel) {
+      return // no-op — already there
+    }
+    const agent = overview?.agents.find((a) => a.agent_id === agentId) ?? null
+    setSwitchingModel({
+      agent_id: agentId,
+      agent_name: agent?.agent_name ?? null,
+      from: currentModel,
+      to: newModel,
+    })
+    setSwitchError(null)
+  }
+
+  async function handleConfirmSwitchModel() {
+    if (!switchingModel) return
+    setSwitchInProgress(true)
+    setSwitchError(null)
+    try {
+      await setAgentModel(switchingModel.agent_id, switchingModel.to)
+      setSwitchingModel(null)
+      await reload()
+    } catch (e) {
+      setSwitchError((e as Error).message)
+    } finally {
+      setSwitchInProgress(false)
     }
   }
 
@@ -245,6 +378,8 @@ export default function AdminPage() {
           plans={overview.plans}
           onSelect={setSelectedAgentId}
           onRotateKey={handleRotateKey}
+          onSwitchModel={handleSwitchModel}
+          onDelete={handleDeleteAgent}
           onGranted={reload}
         />
       )}
@@ -267,6 +402,42 @@ export default function AdminPage() {
           onClose={() => setSelectedAgentId(null)}
         />
       )}
+
+      {switchingModel && (
+        <SwitchModelModal
+          agentId={switchingModel.agent_id}
+          agentName={switchingModel.agent_name || switchingModel.agent_id}
+          fromLabel={fmtModel(switchingModel.from)}
+          toLabel={fmtModel(switchingModel.to)}
+          inProgress={switchInProgress}
+          error={switchError}
+          onConfirm={handleConfirmSwitchModel}
+          onCancel={() => {
+            setSwitchingModel(null)
+            setSwitchError(null)
+          }}
+        />
+      )}
+
+      {deletingAgent && (
+        <DeleteAgentModal
+          agentId={deletingAgent.agent_id}
+          agentName={deletingAgent.agent_name || deletingAgent.agent_id}
+          inProgress={deleteInProgress}
+          error={deleteError}
+          onConfirm={handleConfirmDeleteAgent}
+          onCancel={() => {
+            setDeletingAgent(null)
+            setDeleteError(null)
+          }}
+          // Superadmin-specific banner — emphasize this is a cross-tenant
+          // action so the operator doesn't delete by muscle memory.
+          extraWarning={{
+            he: 'פעולת סופר־אדמין: הסוכן שייך ללקוח אחר. וודא שזה המכוון.',
+            en: 'Superadmin action: this agent belongs to a customer tenant. Confirm this is intentional.',
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -276,12 +447,16 @@ function AgentsTab({
   plans,
   onSelect,
   onRotateKey,
+  onSwitchModel,
+  onDelete,
   onGranted,
 }: {
   agents: AdminAgentRow[]
   plans: AdminOverview['plans']
   onSelect: (id: string) => void
   onRotateKey: (id: string) => void
+  onSwitchModel: (id: string, current: string | null, next: AgentModel) => void
+  onDelete: (id: string, tenantId: number | null, agentName: string | null) => void
   onGranted: () => void
 }) {
   const [grantTenantId, setGrantTenantId] = useState<number | null>(null)
@@ -343,6 +518,23 @@ function AgentsTab({
                 <div className="text-end tabular-nums">
                   {pct(a.used_micros, cap || null)}
                 </div>
+                <div className="text-text-muted">Model</div>
+                <div className="text-end">
+                  <select
+                    value={a.model ?? 'google/gemini-3-flash-preview'}
+                    onChange={(e) =>
+                      onSwitchModel(a.agent_id, a.model, e.target.value as AgentModel)
+                    }
+                    className="text-xs bg-surface border border-border rounded px-2 py-1 w-full max-w-[160px]"
+                    aria-label={`Chat model for ${a.agent_id}`}
+                  >
+                    {MODEL_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {cap > 0 && (
@@ -377,6 +569,22 @@ function AgentsTab({
                     Grant plan
                   </button>
                 )}
+                {/* Danger action last, visually distinct. Disabled when
+                    tenant_id is null (legacy rows) — the confirm handler
+                    rejects them anyway but graying out avoids a misleading
+                    click. */}
+                <button
+                  onClick={() => onDelete(a.agent_id, a.tenant_id, a.agent_name)}
+                  disabled={a.tenant_id == null}
+                  className="btn-sm flex-1 min-w-[100px] text-danger border border-danger/30 rounded-lg hover:bg-danger-light disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={
+                    a.tenant_id == null
+                      ? 'Legacy row without tenant_id — delete via VM CLI'
+                      : 'Delete agent'
+                  }
+                >
+                  Delete
+                </button>
               </div>
             </li>
           )
@@ -396,6 +604,7 @@ function AgentsTab({
               <th className="text-left p-3">Tenant owner</th>
               <th className="text-left p-3">Created by</th>
               <th className="text-left p-3">Plan</th>
+              <th className="text-left p-3">Model</th>
               <th className="text-right p-3">Used</th>
               <th className="text-right p-3">Cap</th>
               <th className="text-right p-3">%</th>
@@ -422,6 +631,25 @@ function AgentsTab({
                   </td>
                   <td className="p-3">
                     {a.plan_name_he || <span className="text-text-muted">—</span>}
+                  </td>
+                  <td className="p-3">
+                    <select
+                      value={a.model ?? 'google/gemini-3-flash-preview'}
+                      onChange={(e) =>
+                        onSwitchModel(a.agent_id, a.model, e.target.value as AgentModel)
+                      }
+                      className="text-xs bg-surface border border-border rounded px-2 py-1"
+                      aria-label={`Chat model for ${a.agent_id}`}
+                    >
+                      {MODEL_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    {a.model == null && (
+                      <div className="text-[10px] text-text-muted mt-0.5">inherits default</div>
+                    )}
                   </td>
                   <td className="p-3 text-right font-mono">{fmtUsd(a.used_micros)}</td>
                   <td className="p-3 text-right font-mono">{fmtUsd(cap || null)}</td>
@@ -460,6 +688,18 @@ function AgentsTab({
                         Grant plan
                       </button>
                     )}
+                    <button
+                      onClick={() => onDelete(a.agent_id, a.tenant_id, a.agent_name)}
+                      disabled={a.tenant_id == null}
+                      className="btn-sm text-danger border border-danger/30 rounded hover:bg-danger-light disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={
+                        a.tenant_id == null
+                          ? 'Legacy row without tenant_id — delete via VM CLI'
+                          : 'Delete agent'
+                      }
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               )

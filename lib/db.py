@@ -575,6 +575,7 @@ class AppDatabase:
                 a.tenant_id,
                 a.agent_name,
                 a.bot_gender                            AS agent_gender,
+                a.model                                 AS model,
                 CASE WHEN a.deleted_at IS NULL
                      THEN 'active' ELSE 'deleted' END   AS link_status,
                 u.id        AS user_id,
@@ -624,6 +625,7 @@ class AppDatabase:
                 a.agent_id, a.gateway_url, a.session_scope, a.tenant_id,
                 a.agent_name,
                 a.bot_gender                            AS agent_gender,
+                a.model                                 AS model,
                 CASE WHEN a.deleted_at IS NULL
                      THEN 'active' ELSE 'deleted' END   AS link_status,
                 u.id AS user_id, u.email AS user_email,
@@ -638,6 +640,24 @@ class AppDatabase:
             WHERE a.agent_id = %s AND a.deleted_at IS NULL
             """,
             (agent_id,),
+        )
+
+    def set_agent_model(self, agent_id: str, model: str | None) -> dict[str, Any] | None:
+        """Update `agents.model` for the display mirror. Called AFTER the VM
+        set-model succeeds so the DB never disagrees with the VM except
+        during the small window between the two.
+
+        Pass `model=None` to reset to "inherit system default."
+        Returns the updated row dict (agent_id + model) or None if the
+        agent doesn't exist / is deleted."""
+        return self._fetch_one(
+            """
+            UPDATE agents
+               SET model = %s
+             WHERE agent_id = %s AND deleted_at IS NULL
+         RETURNING agent_id, model
+            """,
+            (model, agent_id),
         )
 
     def set_agent_creator(self, agent_id: str, user_id: int) -> None:

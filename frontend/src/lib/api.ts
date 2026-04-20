@@ -325,6 +325,55 @@ export async function setUserRole(userId: number, role: 'user' | 'superadmin') {
   return res.json()
 }
 
+// Chat model switcher — superadmin-only for now. Future tenant self-serve
+// + in-chat skill edits will route through different endpoints but the
+// underlying VM call is the same, so drift is only a risk if an edit path
+// bypasses the app entirely. See admin.py admin_set_agent_model for the
+// write-ordering contract (VM first, then DB).
+export type AgentModel = 'google/gemini-3-flash-preview' | 'google/gemma-4-31b-it'
+
+export async function setAgentModel(agentId: string, model: AgentModel | null) {
+  const res = await authFetch(
+    `/api/admin/agents/${encodeURIComponent(agentId)}/model`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ model }),
+    },
+  )
+  if (!res.ok) {
+    // Pass through the structured error body so the UI can show a real
+    // diagnostic ("model_not_allowed" vs "vm_set_model_failed" vs "agent_not_found").
+    const body = await res.json().catch(() => ({}))
+    const detail = typeof body.detail === 'object' ? JSON.stringify(body.detail) : body.detail
+    throw new Error(detail || `Model switch failed (${res.status})`)
+  }
+  return res.json()
+}
+
+export async function getLiveAgentModel(agentId: string) {
+  const res = await authFetch(
+    `/api/admin/agents/${encodeURIComponent(agentId)}/model/live`,
+  )
+  if (!res.ok) throw new Error('Live model fetch failed')
+  return res.json() as Promise<{
+    agent_id: string
+    db_model: string | null
+    live_model: string | null
+    drift: boolean
+    live_reachable: boolean
+    error?: string
+  }>
+}
+
+export async function resyncAgentModelFromVm(agentId: string) {
+  const res = await authFetch(
+    `/api/admin/agents/${encodeURIComponent(agentId)}/model/resync`,
+    { method: 'POST' },
+  )
+  if (!res.ok) throw new Error('Resync failed')
+  return res.json()
+}
+
 // ─── Tenants ──────────────────────────────────────────────────────────
 
 export async function getMyTenants() {
