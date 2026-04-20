@@ -26,6 +26,7 @@ import {
   getAdminOverview,
   getAdminAgentDetail,
   getAdminVmStats,
+  deleteAgent,
   rotateMeterKey,
   setAgentModel,
   setUserRole,
@@ -153,6 +154,41 @@ export default function AdminPage() {
           `Save this now — it will not be shown again. ` +
           `You must update /opt/agentleh/.env on the VM and restart the container.`,
       )
+    } catch (e) {
+      alert(`Failed: ${(e as Error).message}`)
+    }
+  }
+
+  async function handleDeleteAgent(agentId: string, tenantId: number | null, agentName: string | null) {
+    // The tenant-scoped DELETE /api/tenants/{tid}/agents/{aid} endpoint
+    // already accepts superadmins via the role-hierarchy bypass in
+    // get_active_tenant_member. Reusing it here keeps a single delete
+    // code path (VM deprovision + DB soft-delete + audit log) and means
+    // any future change to delete semantics only has to be made once.
+    if (tenantId == null) {
+      alert(
+        `Cannot delete "${agentId}" from the admin panel — this agent has ` +
+          `no tenant_id (legacy row predating the tenants migration). SSH to ` +
+          `the VM and run /opt/agentleh/delete-agent.sh manually.`,
+      )
+      return
+    }
+    const display = agentName ? `${agentName} (${agentId})` : agentId
+    const typed = prompt(
+      `⚠️  DELETE ${display}?\n\n` +
+        `This tears down the container, revokes the meter key, clears phone_routes, ` +
+        `deletes OAuth credentials, and soft-deletes the agents row. A 90-day GCS ` +
+        `backup is taken so the data isn't immediately lost.\n\n` +
+        `Type the agent_id exactly to confirm:`,
+    )
+    if (typed == null) return // cancel
+    if (typed.trim() !== agentId) {
+      alert(`Agent ID mismatch — delete cancelled.`)
+      return
+    }
+    try {
+      await deleteAgent(tenantId, agentId)
+      await reload()
     } catch (e) {
       alert(`Failed: ${(e as Error).message}`)
     }
@@ -295,6 +331,7 @@ export default function AdminPage() {
           onSelect={setSelectedAgentId}
           onRotateKey={handleRotateKey}
           onSwitchModel={handleSwitchModel}
+          onDelete={handleDeleteAgent}
           onGranted={reload}
         />
       )}
@@ -327,6 +364,7 @@ function AgentsTab({
   onSelect,
   onRotateKey,
   onSwitchModel,
+  onDelete,
   onGranted,
 }: {
   agents: AdminAgentRow[]
@@ -334,6 +372,7 @@ function AgentsTab({
   onSelect: (id: string) => void
   onRotateKey: (id: string) => void
   onSwitchModel: (id: string, current: string | null, next: AgentModel) => void
+  onDelete: (id: string, tenantId: number | null, agentName: string | null) => void
   onGranted: () => void
 }) {
   const [grantTenantId, setGrantTenantId] = useState<number | null>(null)
@@ -446,6 +485,22 @@ function AgentsTab({
                     Grant plan
                   </button>
                 )}
+                {/* Danger action last, visually distinct. Disabled when
+                    tenant_id is null (legacy rows) — the confirm handler
+                    rejects them anyway but graying out avoids a misleading
+                    click. */}
+                <button
+                  onClick={() => onDelete(a.agent_id, a.tenant_id, a.agent_name)}
+                  disabled={a.tenant_id == null}
+                  className="btn-sm flex-1 min-w-[100px] text-danger border border-danger/30 rounded-lg hover:bg-danger-light disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={
+                    a.tenant_id == null
+                      ? 'Legacy row without tenant_id — delete via VM CLI'
+                      : 'Delete agent'
+                  }
+                >
+                  Delete
+                </button>
               </div>
             </li>
           )
@@ -549,6 +604,18 @@ function AgentsTab({
                         Grant plan
                       </button>
                     )}
+                    <button
+                      onClick={() => onDelete(a.agent_id, a.tenant_id, a.agent_name)}
+                      disabled={a.tenant_id == null}
+                      className="btn-sm text-danger border border-danger/30 rounded hover:bg-danger-light disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={
+                        a.tenant_id == null
+                          ? 'Legacy row without tenant_id — delete via VM CLI'
+                          : 'Delete agent'
+                      }
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               )
