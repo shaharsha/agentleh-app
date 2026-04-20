@@ -87,9 +87,14 @@ const MODEL_OPTIONS: ReadonlyArray<{ value: AgentModel; label: string; hint?: st
     hint: 'default, proven on Nylas 2-phase flow',
   },
   {
+    value: 'metered-openrouter/google/gemma-4-31b-it',
+    label: 'Gemma 4 31B (OpenRouter)',
+    hint: 'cheaper, production quotas via OpenRouter → DeepInfra',
+  },
+  {
     value: 'google/gemma-4-31b-it',
-    label: 'Gemma 4 31B',
-    hint: 'cheaper, pilot only',
+    label: 'Gemma 4 31B (AI Studio)',
+    hint: '30 RPM cap on AI Studio free tier — unusable for prod',
   },
 ]
 

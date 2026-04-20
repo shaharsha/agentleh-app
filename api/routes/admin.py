@@ -209,6 +209,11 @@ _ALLOWED_MODELS: frozenset[str] = frozenset(
     {
         "google/gemini-3-flash-preview",
         "google/gemma-4-31b-it",
+        # Gemma 4 31B routed through OpenRouter. AI Studio's direct variant
+        # (above) caps at 30 RPM / 16K TPM even on paid keys; OpenRouter
+        # routes through DeepInfra/Novita/etc. with production quotas.
+        # Same underlying Gemma weights, different upstream + billing row.
+        "metered-openrouter/google/gemma-4-31b-it",
     }
 )
 
