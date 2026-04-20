@@ -153,6 +153,30 @@ class TestAllowlist:
         assert body["model"] == "google/gemma-4-31b-it"
         assert body["previous_model"] == "google/gemini-3-flash-preview"
 
+    def test_accepts_openrouter_gemma(self, superadmin_client):
+        """OpenRouter-routed Gemma is allowlisted — same allowlist at app +
+        VM + create-agent.sh. If this test regresses, the cross-repo
+        allowlist documented in _ALLOWED_MODELS (admin.py) has drifted."""
+        app.state.db.get_agent_details = MagicMock(
+            return_value={"agent_id": "a", "model": "google/gemini-3-flash-preview"}
+        )
+        app.state.provisioner.set_agent_model = MagicMock(
+            return_value={
+                "success": True,
+                "previous_model": "google/gemini-3-flash-preview",
+                "model": "openrouter/google/gemma-4-31b-it",
+            }
+        )
+        app.state.db.set_agent_model = MagicMock(
+            return_value={"agent_id": "a", "model": "openrouter/google/gemma-4-31b-it"}
+        )
+        resp = superadmin_client.patch(
+            "/api/admin/agents/a/model",
+            json={"model": "openrouter/google/gemma-4-31b-it"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["model"] == "openrouter/google/gemma-4-31b-it"
+
 
 # ─── Write ordering: VM first, then DB ─────────────────────────────────
 

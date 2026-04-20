@@ -330,7 +330,12 @@ export async function setUserRole(userId: number, role: 'user' | 'superadmin') {
 // underlying VM call is the same, so drift is only a risk if an edit path
 // bypasses the app entirely. See admin.py admin_set_agent_model for the
 // write-ordering contract (VM first, then DB).
-export type AgentModel = 'google/gemini-3-flash-preview' | 'google/gemma-4-31b-it'
+export type AgentModel =
+  | 'google/gemini-3-flash-preview'
+  | 'google/gemma-4-31b-it'
+  // Same Gemma 4 31B weights, routed through OpenRouter (→ DeepInfra/
+  // Novita/etc.) because AI Studio caps the direct variant too low.
+  | 'openrouter/google/gemma-4-31b-it'
 
 export async function setAgentModel(agentId: string, model: AgentModel | null) {
   const res = await authFetch(
