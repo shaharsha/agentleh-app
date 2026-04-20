@@ -164,18 +164,18 @@ class TestAllowlist:
             return_value={
                 "success": True,
                 "previous_model": "google/gemini-3-flash-preview",
-                "model": "openrouter/google/gemma-4-31b-it",
+                "model": "metered-openrouter/google/gemma-4-31b-it",
             }
         )
         app.state.db.set_agent_model = MagicMock(
-            return_value={"agent_id": "a", "model": "openrouter/google/gemma-4-31b-it"}
+            return_value={"agent_id": "a", "model": "metered-openrouter/google/gemma-4-31b-it"}
         )
         resp = superadmin_client.patch(
             "/api/admin/agents/a/model",
-            json={"model": "openrouter/google/gemma-4-31b-it"},
+            json={"model": "metered-openrouter/google/gemma-4-31b-it"},
         )
         assert resp.status_code == 200
-        assert resp.json()["model"] == "openrouter/google/gemma-4-31b-it"
+        assert resp.json()["model"] == "metered-openrouter/google/gemma-4-31b-it"
 
 
 # ─── Write ordering: VM first, then DB ─────────────────────────────────

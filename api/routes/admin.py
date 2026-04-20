@@ -213,7 +213,7 @@ _ALLOWED_MODELS: frozenset[str] = frozenset(
         # (above) caps at 30 RPM / 16K TPM even on paid keys; OpenRouter
         # routes through DeepInfra/Novita/etc. with production quotas.
         # Same underlying Gemma weights, different upstream + billing row.
-        "openrouter/google/gemma-4-31b-it",
+        "metered-openrouter/google/gemma-4-31b-it",
     }
 )
 

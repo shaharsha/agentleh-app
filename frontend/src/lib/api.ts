@@ -335,7 +335,7 @@ export type AgentModel =
   | 'google/gemma-4-31b-it'
   // Same Gemma 4 31B weights, routed through OpenRouter (→ DeepInfra/
   // Novita/etc.) because AI Studio caps the direct variant too low.
-  | 'openrouter/google/gemma-4-31b-it'
+  | 'metered-openrouter/google/gemma-4-31b-it'
 
 export async function setAgentModel(agentId: string, model: AgentModel | null) {
   const res = await authFetch(

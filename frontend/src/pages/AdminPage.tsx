@@ -87,7 +87,7 @@ const MODEL_OPTIONS: ReadonlyArray<{ value: AgentModel; label: string; hint?: st
     hint: 'default, proven on Nylas 2-phase flow',
   },
   {
-    value: 'openrouter/google/gemma-4-31b-it',
+    value: 'metered-openrouter/google/gemma-4-31b-it',
     label: 'Gemma 4 31B (OpenRouter)',
     hint: 'cheaper, production quotas via OpenRouter → DeepInfra',
   },
