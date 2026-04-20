@@ -301,6 +301,63 @@ export async function getAdminVmStats() {
   return res.json()
 }
 
+// LLM analytics (migration 029) — aggregated over last `windowDays` (1..90).
+// Backs the Stats tab's analytics cards. Pure SQL over usage_events; sub-
+// second at current scale.
+
+export interface AdminLlmAnalytics {
+  window_days: number
+  cost_per_model: Array<{
+    upstream: string
+    model: string
+    events: number
+    cost_micros: number
+    input_tokens: number
+    output_tokens: number
+    cached_tokens: number
+    avg_latency_ms: number
+  }>
+  thinking_burn: Array<{
+    model: string
+    events: number
+    avg_thoughts: number | null
+    avg_output: number | null
+    thoughts_share_pct: number | null
+  }>
+  truncation_rate: Array<{
+    model: string
+    total: number
+    truncated: number
+    pct: number | null
+  }>
+  tool_frequency: Array<{
+    tool_name: string
+    calls: number
+    distinct_agents: number
+    distinct_models: number
+  }>
+  error_rate: Array<{
+    upstream: string
+    model: string
+    total: number
+    errors: number
+    pct: number | null
+  }>
+  conversation_shape: {
+    turns_measured: number
+    p50_messages: number | null
+    p95_messages: number | null
+    p99_messages: number | null
+    max_messages: number | null
+  }
+}
+
+export async function getAdminLlmAnalytics(windowDays = 7): Promise<AdminLlmAnalytics> {
+  const res = await authFetch(`/api/admin/analytics/llm?window_days=${windowDays}`)
+  if (!res.ok) throw new Error('LLM analytics failed')
+  return res.json()
+}
+
 export async function getAdminAgentDetail(agentId: string) {
   const res = await authFetch(`/api/admin/agents/${encodeURIComponent(agentId)}`)
   if (!res.ok) throw new Error('Agent detail failed')

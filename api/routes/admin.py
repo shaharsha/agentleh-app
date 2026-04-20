@@ -832,6 +832,194 @@ async def admin_vm_stats(
     }
 
 
+# ─── LLM analytics (migration 029 metadata) ─────────────────────────────
+#
+# Everything here reads ONLY aggregate metadata — never conversation content.
+# Conversation text stays on the VM's sessions/*.jsonl. We surface what SQL
+# can already answer now that usage_events carries the per-turn shape.
+
+
+@router.get("/analytics/llm")
+async def admin_analytics_llm(
+    request: Request,
+    window_days: int = 7,
+    _: dict = Depends(require_superadmin),
+) -> dict[str, Any]:
+    """LLM usage analytics over the last `window_days` (default 7, max 90).
+
+    Aggregates across all tenants. Backs the Stats tab's LLM cards. Pure SQL
+    over usage_events — sub-second at current scale because the partial
+    indexes from migration 029 cover the common filters (finish_reason='length',
+    response_has_tool_call, thoughts_tokens>0)."""
+    if window_days <= 0 or window_days > 90:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_window", "hint": "window_days must be 1..90"},
+        )
+    db = request.app.state.db
+
+    # Card 1: Cost + throughput per (upstream, model). The comparison card
+    # for "is Gemma via OpenRouter actually cheaper than Flash in practice?"
+    cost_per_model = db._fetch_all(
+        """
+        SELECT
+            upstream,
+            model,
+            COUNT(*)                                            AS events,
+            COALESCE(SUM(cost_micros), 0)::bigint               AS cost_micros,
+            COALESCE(SUM(input_tokens), 0)::bigint              AS input_tokens,
+            COALESCE(SUM(output_tokens), 0)::bigint             AS output_tokens,
+            COALESCE(SUM(cached_tokens), 0)::bigint             AS cached_tokens,
+            ROUND(AVG(latency_ms)::numeric, 0)::int             AS avg_latency_ms
+        FROM usage_events
+        WHERE ts > now() - (%s::int || ' days')::interval
+          AND kind = 'llm'
+        GROUP BY upstream, model
+        ORDER BY cost_micros DESC
+        """,
+        (window_days,),
+    )
+
+    # Card 2: Thinking-token burn by model. Gemma's MINIMAL should ideally
+    # be near-zero; HIGH should dominate output; Flash won't appear (null
+    # filtered out). `thoughts_share_pct` is the fraction of candidate tokens
+    # that are hidden reasoning — an operational-cost signal.
+    thinking_burn = db._fetch_all(
+        """
+        SELECT
+            model,
+            COUNT(*)                                            AS events,
+            ROUND(AVG(thoughts_tokens)::numeric, 1)             AS avg_thoughts,
+            ROUND(AVG(output_tokens)::numeric, 1)               AS avg_output,
+            CASE
+                WHEN SUM(thoughts_tokens + output_tokens) = 0 THEN 0
+                ELSE ROUND(
+                    100.0 * SUM(thoughts_tokens)::numeric /
+                    NULLIF(SUM(thoughts_tokens + output_tokens), 0),
+                    1
+                )
+            END                                                  AS thoughts_share_pct
+        FROM usage_events
+        WHERE ts > now() - (%s::int || ' days')::interval
+          AND kind = 'llm'
+          AND thoughts_tokens IS NOT NULL
+        GROUP BY model
+        ORDER BY avg_thoughts DESC NULLS LAST
+        """,
+        (window_days,),
+    )
+
+    # Card 3: Truncation rate. finish_reason='length' means the model hit
+    # max_tokens — reply is cut off and quality suffers. Grouped by model
+    # because this is a model-quality signal.
+    truncation_rate = db._fetch_all(
+        """
+        SELECT
+            model,
+            COUNT(*)                                            AS total,
+            SUM(CASE WHEN finish_reason = 'length' THEN 1 ELSE 0 END) AS truncated,
+            ROUND(
+                100.0 * SUM(CASE WHEN finish_reason = 'length' THEN 1 ELSE 0 END)::numeric /
+                NULLIF(COUNT(*), 0),
+                2
+            )                                                    AS pct
+        FROM usage_events
+        WHERE ts > now() - (%s::int || ' days')::interval
+          AND kind = 'llm'
+          AND finish_reason IS NOT NULL
+        GROUP BY model
+        HAVING COUNT(*) >= 5
+        ORDER BY pct DESC NULLS LAST
+        """,
+        (window_days,),
+    )
+
+    # Card 4: Top tools called. Which tools are actually hit the most?
+    # Useful for: Nylas rollout health, Gemma pilot ("does Gemma still call
+    # nylas_send_email as often as Flash did?"). Top 20 globally.
+    tool_frequency = db._fetch_all(
+        """
+        SELECT
+            tool_name,
+            COUNT(*)                    AS calls,
+            COUNT(DISTINCT agent_id)    AS distinct_agents,
+            COUNT(DISTINCT model)       AS distinct_models
+        FROM usage_events,
+             LATERAL jsonb_array_elements(tools_called) elt,
+             LATERAL (SELECT elt->>'name' AS tool_name) t
+        WHERE ts > now() - (%s::int || ' days')::interval
+          AND kind = 'llm'
+          AND tools_called IS NOT NULL
+          AND jsonb_array_length(tools_called) > 0
+          AND t.tool_name IS NOT NULL
+        GROUP BY tool_name
+        ORDER BY calls DESC
+        LIMIT 20
+        """,
+        (window_days,),
+    )
+
+    # Card 5: Error rate by (upstream, model). Non-2xx / total. Informal
+    # SLO tracking — if Gemma via OpenRouter starts returning 5xx, this
+    # is where you see it first.
+    error_rate = db._fetch_all(
+        """
+        SELECT
+            upstream,
+            model,
+            COUNT(*)                                            AS total,
+            SUM(CASE WHEN upstream_status >= 400 THEN 1 ELSE 0 END) AS errors,
+            ROUND(
+                100.0 * SUM(CASE WHEN upstream_status >= 400 THEN 1 ELSE 0 END)::numeric /
+                NULLIF(COUNT(*), 0),
+                2
+            )                                                    AS pct
+        FROM usage_events
+        WHERE ts > now() - (%s::int || ' days')::interval
+          AND kind = 'llm'
+        GROUP BY upstream, model
+        HAVING COUNT(*) >= 5
+        ORDER BY pct DESC, total DESC
+        """,
+        (window_days,),
+    )
+
+    # Card 6: Conversation length distribution. Long contexts = expensive +
+    # potentially useless (model loses the plot at N turns). p95 is a
+    # better signal than avg because a few runaway sessions skew the mean.
+    conversation_shape = db._fetch_one(
+        """
+        SELECT
+            COUNT(*) FILTER (WHERE message_count IS NOT NULL) AS turns_measured,
+            percentile_cont(0.5)  WITHIN GROUP (ORDER BY message_count)::int AS p50_messages,
+            percentile_cont(0.95) WITHIN GROUP (ORDER BY message_count)::int AS p95_messages,
+            percentile_cont(0.99) WITHIN GROUP (ORDER BY message_count)::int AS p99_messages,
+            MAX(message_count)                                               AS max_messages
+        FROM usage_events
+        WHERE ts > now() - (%s::int || ' days')::interval
+          AND kind = 'llm'
+          AND message_count IS NOT NULL
+        """,
+        (window_days,),
+    )
+
+    return {
+        "window_days": window_days,
+        "cost_per_model": cost_per_model,
+        "thinking_burn": thinking_burn,
+        "truncation_rate": truncation_rate,
+        "tool_frequency": tool_frequency,
+        "error_rate": error_rate,
+        "conversation_shape": conversation_shape or {
+            "turns_measured": 0,
+            "p50_messages": None,
+            "p95_messages": None,
+            "p99_messages": None,
+            "max_messages": None,
+        },
+    }
+
+
 # ─── Coupons (superadmin CRUD) ──────────────────────────────────────────
 # Codes are 12-char base32 by default; the admin can override on create.
 # Plan + duration are immutable once a coupon exists — changing them

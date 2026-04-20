@@ -25,7 +25,9 @@ import {
   adminSetCouponDisabled,
   getAdminOverview,
   getAdminAgentDetail,
+  getAdminLlmAnalytics,
   getAdminVmStats,
+  type AdminLlmAnalytics,
   deleteAgent,
   rotateMeterKey,
   setAgentModel,
@@ -1444,6 +1446,12 @@ interface VmStatsResponse {
 function StatsTab() {
   const [data, setData] = useState<VmStatsResponse | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  // LLM analytics load independently so VM-side errors don't block them
+  // and vice versa. Window defaults to 7 days to match the existing
+  // model_breakdown_7d card.
+  const [llmWindow, setLlmWindow] = useState<7 | 30 | 90>(7)
+  const [llm, setLlm] = useState<AdminLlmAnalytics | null>(null)
+  const [llmErr, setLlmErr] = useState<string | null>(null)
 
   async function load() {
     try {
@@ -1455,11 +1463,30 @@ function StatsTab() {
     }
   }
 
+  async function loadLlm() {
+    try {
+      const r = await getAdminLlmAnalytics(llmWindow)
+      setLlm(r)
+      setLlmErr(null)
+    } catch (e) {
+      setLlmErr((e as Error).message)
+    }
+  }
+
   useEffect(() => {
     load()
     const id = setInterval(load, 10_000) // auto-refresh every 10s
     return () => clearInterval(id)
   }, [])
+
+  // LLM analytics is heavier (aggregates across usage_events). Reload when
+  // window changes + every 60s.
+  useEffect(() => {
+    loadLlm()
+    const id = setInterval(loadLlm, 60_000)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [llmWindow])
 
   if (err) return <div className="p-6 text-danger">Error: {err}</div>
   if (!data) return <div className="p-6 text-text-muted">Loading…</div>
@@ -1479,7 +1506,256 @@ function StatsTab() {
         <TopAgentsCard agents={data.top_agents} />
       </div>
       <ModelBreakdownCard rows={data.model_breakdown_7d} />
+
+      {/* ── LLM analytics (migration 029) ─────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-text-primary">LLM analytics</h2>
+        <div className="flex gap-1 text-xs">
+          {([7, 30, 90] as const).map((w) => (
+            <button
+              key={w}
+              onClick={() => setLlmWindow(w)}
+              className={
+                llmWindow === w
+                  ? 'px-2 py-1 rounded bg-brand text-white'
+                  : 'px-2 py-1 rounded bg-surface-soft text-text-secondary hover:bg-surface'
+              }
+            >
+              {w}d
+            </button>
+          ))}
+        </div>
+      </div>
+      {llmErr && (
+        <div className="glass-card p-4 text-sm text-danger">Analytics error: {llmErr}</div>
+      )}
+      {llm ? (
+        <div className="space-y-4">
+          <CostPerModelCard rows={llm.cost_per_model} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <ThinkingBurnCard rows={llm.thinking_burn} />
+            <TruncationRateCard rows={llm.truncation_rate} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <ToolFrequencyCard rows={llm.tool_frequency} />
+            <ErrorRateCard rows={llm.error_rate} />
+          </div>
+          <ConversationShapeCard shape={llm.conversation_shape} />
+        </div>
+      ) : (
+        !llmErr && <div className="glass-card p-4 text-sm text-text-muted">Loading analytics…</div>
+      )}
+
       <ContainersCard containers={data.live?.docker?.containers || []} />
+    </div>
+  )
+}
+
+// ─── LLM analytics cards ───────────────────────────────────────────────
+
+function CostPerModelCard({ rows }: { rows: AdminLlmAnalytics['cost_per_model'] }) {
+  if (!rows.length) return <EmptyCard title="Cost per model" />
+  return (
+    <div className="glass-card p-4">
+      <h3 className="text-sm font-semibold text-text-primary mb-2">Cost per model</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-surface-soft text-text-secondary">
+            <tr>
+              <th className="text-left p-2">Upstream</th>
+              <th className="text-left p-2">Model</th>
+              <th className="text-right p-2">Calls</th>
+              <th className="text-right p-2">Input tok</th>
+              <th className="text-right p-2">Output tok</th>
+              <th className="text-right p-2">Cached tok</th>
+              <th className="text-right p-2">Avg latency</th>
+              <th className="text-right p-2">$ spent</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-t tabular-nums">
+                <td className="p-2">{r.upstream}</td>
+                <td className="p-2 font-mono text-[11px]">{r.model}</td>
+                <td className="p-2 text-right">{r.events}</td>
+                <td className="p-2 text-right">{r.input_tokens.toLocaleString()}</td>
+                <td className="p-2 text-right">{r.output_tokens.toLocaleString()}</td>
+                <td className="p-2 text-right text-text-muted">{r.cached_tokens.toLocaleString()}</td>
+                <td className="p-2 text-right">{r.avg_latency_ms}ms</td>
+                <td className="p-2 text-right font-medium">{fmtUsd(r.cost_micros)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function ThinkingBurnCard({ rows }: { rows: AdminLlmAnalytics['thinking_burn'] }) {
+  if (!rows.length) return <EmptyCard title="Thinking-token burn" hint="no thinking-enabled calls yet" />
+  return (
+    <div className="glass-card p-4">
+      <h3 className="text-sm font-semibold text-text-primary mb-2">Thinking-token burn</h3>
+      <p className="text-[11px] text-text-muted mb-2">
+        Share of output that's hidden reasoning (Gemini thoughts / OpenAI reasoning_tokens).
+      </p>
+      <table className="w-full text-xs">
+        <thead className="bg-surface-soft text-text-secondary">
+          <tr>
+            <th className="text-left p-2">Model</th>
+            <th className="text-right p-2">Calls</th>
+            <th className="text-right p-2">Avg thoughts</th>
+            <th className="text-right p-2">Avg output</th>
+            <th className="text-right p-2">% thoughts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t tabular-nums">
+              <td className="p-2 font-mono text-[11px]">{r.model}</td>
+              <td className="p-2 text-right">{r.events}</td>
+              <td className="p-2 text-right">{r.avg_thoughts ?? '—'}</td>
+              <td className="p-2 text-right">{r.avg_output ?? '—'}</td>
+              <td className="p-2 text-right font-medium">
+                {r.thoughts_share_pct != null ? `${r.thoughts_share_pct}%` : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function TruncationRateCard({ rows }: { rows: AdminLlmAnalytics['truncation_rate'] }) {
+  if (!rows.length) return <EmptyCard title="Truncation rate" hint="no finish_reason data yet" />
+  return (
+    <div className="glass-card p-4">
+      <h3 className="text-sm font-semibold text-text-primary mb-2">Truncation rate (finish=length)</h3>
+      <p className="text-[11px] text-text-muted mb-2">
+        Replies cut off by max_tokens. High % → consider bumping the model's maxTokens.
+      </p>
+      <table className="w-full text-xs">
+        <thead className="bg-surface-soft text-text-secondary">
+          <tr>
+            <th className="text-left p-2">Model</th>
+            <th className="text-right p-2">Total</th>
+            <th className="text-right p-2">Truncated</th>
+            <th className="text-right p-2">%</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t tabular-nums">
+              <td className="p-2 font-mono text-[11px]">{r.model}</td>
+              <td className="p-2 text-right">{r.total}</td>
+              <td className="p-2 text-right">{r.truncated}</td>
+              <td className={`p-2 text-right font-medium ${r.pct != null && r.pct > 10 ? 'text-danger' : ''}`}>
+                {r.pct != null ? `${r.pct}%` : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function ToolFrequencyCard({ rows }: { rows: AdminLlmAnalytics['tool_frequency'] }) {
+  if (!rows.length) return <EmptyCard title="Tool calls" hint="no tool calls in window" />
+  return (
+    <div className="glass-card p-4">
+      <h3 className="text-sm font-semibold text-text-primary mb-2">Top tools called</h3>
+      <table className="w-full text-xs">
+        <thead className="bg-surface-soft text-text-secondary">
+          <tr>
+            <th className="text-left p-2">Tool</th>
+            <th className="text-right p-2">Calls</th>
+            <th className="text-right p-2">Agents</th>
+            <th className="text-right p-2">Models</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t tabular-nums">
+              <td className="p-2 font-mono text-[11px]">{r.tool_name}</td>
+              <td className="p-2 text-right font-medium">{r.calls}</td>
+              <td className="p-2 text-right">{r.distinct_agents}</td>
+              <td className="p-2 text-right">{r.distinct_models}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function ErrorRateCard({ rows }: { rows: AdminLlmAnalytics['error_rate'] }) {
+  if (!rows.length) return <EmptyCard title="Error rate" hint="no LLM traffic in window" />
+  return (
+    <div className="glass-card p-4">
+      <h3 className="text-sm font-semibold text-text-primary mb-2">Error rate (HTTP ≥ 400)</h3>
+      <table className="w-full text-xs">
+        <thead className="bg-surface-soft text-text-secondary">
+          <tr>
+            <th className="text-left p-2">Upstream</th>
+            <th className="text-left p-2">Model</th>
+            <th className="text-right p-2">Total</th>
+            <th className="text-right p-2">Errors</th>
+            <th className="text-right p-2">%</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t tabular-nums">
+              <td className="p-2">{r.upstream}</td>
+              <td className="p-2 font-mono text-[11px]">{r.model}</td>
+              <td className="p-2 text-right">{r.total}</td>
+              <td className="p-2 text-right">{r.errors}</td>
+              <td className={`p-2 text-right font-medium ${r.pct != null && r.pct > 1 ? 'text-danger' : ''}`}>
+                {r.pct != null ? `${r.pct}%` : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function ConversationShapeCard({ shape }: { shape: AdminLlmAnalytics['conversation_shape'] }) {
+  return (
+    <div className="glass-card p-4">
+      <h3 className="text-sm font-semibold text-text-primary mb-2">Conversation length</h3>
+      <p className="text-[11px] text-text-muted mb-3">
+        Message count per turn (includes history). Runaway p99 = expensive context that may be hurting quality.
+      </p>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm tabular-nums">
+        <Metric label="Turns measured" value={shape.turns_measured.toLocaleString()} />
+        <Metric label="p50" value={shape.p50_messages ?? '—'} />
+        <Metric label="p95" value={shape.p95_messages ?? '—'} />
+        <Metric label="p99" value={shape.p99_messages ?? '—'} />
+        <Metric label="Max" value={shape.max_messages ?? '—'} />
+      </div>
+    </div>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-text-muted">{label}</div>
+      <div className="text-lg font-semibold text-text-primary">{value}</div>
+    </div>
+  )
+}
+
+function EmptyCard({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <div className="glass-card p-4">
+      <h3 className="text-sm font-semibold text-text-primary mb-2">{title}</h3>
+      <div className="text-xs text-text-muted">{hint ?? 'No data in window.'}</div>
     </div>
   )
 }
