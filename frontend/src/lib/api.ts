@@ -1091,3 +1091,73 @@ export async function disconnectGoogle(
   if (!res.ok) throw new Error('Failed to disconnect Google')
   return res.json()
 }
+
+
+// ── Scheduled reminders (OpenClaw cron jobs) ──────────────────────────────
+
+export interface TenantReminder {
+  job_id: string
+  agent_id: string
+  agent_name: string
+  schedule: {
+    kind?: 'at' | 'every' | 'cron'
+    at?: string       // ISO-8601 for kind=at
+    everyMs?: number  // ms interval for kind=every
+    expr?: string     // cron expression for kind=cron
+    tz?: string
+  }
+  payload: {
+    kind?: 'systemEvent' | 'agentTurn'
+    text?: string     // systemEvent
+    message?: string  // agentTurn
+    toolsAllow?: string[]
+  }
+  delivery: {
+    mode?: 'announce' | 'webhook' | 'none'
+    channel?: string
+    accountId?: string
+    to?: string
+  }
+  session_target?: string
+  wake_mode?: string
+  delete_after_run?: boolean
+  raw: Record<string, unknown>
+}
+
+export interface TenantRemindersResponse {
+  tenant_id: number
+  reminders: TenantReminder[]
+  errors: Array<{
+    agent_id: string
+    agent_name: string
+    error: string
+    detail?: string
+  }>
+}
+
+export async function listTenantReminders(
+  tenantId: number,
+): Promise<TenantRemindersResponse> {
+  const res = await authFetch(`/api/tenants/${tenantId}/reminders`)
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText)
+    throw new Error(`Failed to list reminders (${res.status}): ${detail}`)
+  }
+  return res.json()
+}
+
+export async function cancelTenantReminder(
+  tenantId: number,
+  agentId: string,
+  jobId: string,
+): Promise<{ success: true; agent_id: string; job_id: string; remaining: number }> {
+  const res = await authFetch(
+    `/api/tenants/${tenantId}/reminders/${encodeURIComponent(agentId)}/${encodeURIComponent(jobId)}/cancel`,
+    { method: 'POST' },
+  )
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText)
+    throw new Error(`Failed to cancel reminder (${res.status}): ${detail}`)
+  }
+  return res.json()
+}
