@@ -82,6 +82,8 @@ class AgentProvisioner(Protocol):
     def check_health(self, agent_id: str) -> bool: ...
     def set_agent_model(self, agent_id: str, model: str) -> dict[str, Any]: ...
     def get_agent_model(self, agent_id: str) -> dict[str, Any]: ...
+    def list_reminders(self, agent_id: str) -> dict[str, Any]: ...
+    def cancel_reminder(self, agent_id: str, job_id: str) -> dict[str, Any]: ...
 
 
 class MockProvisioner:
@@ -102,6 +104,7 @@ class MockProvisioner:
         # set_agent_model call within the same process — useful for
         # manual dev + test drift-detection scenarios.
         self._mock_models: dict[str, str] = {}
+        self._mock_reminders: dict[str, list[dict[str, Any]]] = {}
 
     def provision(
         self,
@@ -288,6 +291,30 @@ class MockProvisioner:
             "success": True,
             "agent_id": agent_id,
             "model": self._mock_models.get(agent_id),
+        }
+
+    def list_reminders(self, agent_id: str) -> dict[str, Any]:
+        """Mock: return whatever the mock has stashed for this agent."""
+        logger.info("MOCK: list_reminders agent=%s", agent_id)
+        return {
+            "success": True,
+            "agent_id": agent_id,
+            "jobs": self._mock_reminders.get(agent_id, []),
+        }
+
+    def cancel_reminder(self, agent_id: str, job_id: str) -> dict[str, Any]:
+        """Mock: filter the agent's in-memory reminder list."""
+        logger.info("MOCK: cancel_reminder agent=%s job=%s", agent_id, job_id)
+        jobs = self._mock_reminders.get(agent_id, [])
+        filtered = [j for j in jobs if j.get("id") != job_id]
+        if len(filtered) == len(jobs):
+            return {"success": False, "error": "job_not_found", "job_id": job_id}
+        self._mock_reminders[agent_id] = filtered
+        return {
+            "success": True,
+            "agent_id": agent_id,
+            "job_id": job_id,
+            "remaining": len(filtered),
         }
 
 
@@ -654,6 +681,64 @@ class VmHttpProvisioner:
                 )
         except httpx.HTTPError as exc:
             logger.error("config/model unreachable: %s", exc)
+            return {"success": False, "error": f"provision-api unreachable: {exc}"}
+        try:
+            result = resp.json()
+        except Exception:  # noqa: BLE001
+            return {
+                "success": False,
+                "error": f"non-json response from provision-api (status={resp.status_code})",
+            }
+        if resp.status_code >= 400 and "success" not in result:
+            result["success"] = False
+        return result
+
+    def list_reminders(self, agent_id: str) -> dict[str, Any]:
+        """GET /agents/{agent_id}/reminders — read-through to the agent's
+        OpenClaw cron jobs.json. Returns ``{success, jobs}`` on 2xx, or
+        ``{success: false, error, detail?}`` on failure / unreachable
+        daemon. Callers (reminders dashboard) surface the error verbatim.
+        """
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.get(
+                    f"{self.base_url}/agents/{agent_id}/reminders",
+                    headers={"Authorization": f"Bearer {self.token}"},
+                )
+        except httpx.HTTPError as exc:
+            logger.error("reminders GET unreachable: %s", exc)
+            return {"success": False, "error": f"provision-api unreachable: {exc}"}
+        try:
+            result = resp.json()
+        except Exception:  # noqa: BLE001
+            return {
+                "success": False,
+                "error": f"non-json response from provision-api (status={resp.status_code})",
+            }
+        if resp.status_code >= 400 and "success" not in result:
+            result["success"] = False
+        return result
+
+    def cancel_reminder(self, agent_id: str, job_id: str) -> dict[str, Any]:
+        """POST /agents/{agent_id}/reminders/{job_id}/cancel — atomic remove.
+
+        Serialized on the daemon side under its _PROVISION_LOCK; we wait up
+        to 30s (the daemon's own provision timeout is 120s, so 30s is
+        enough for the cancel to squeeze in between long-running provisions
+        but short enough not to hang the dashboard).
+        """
+        logger.info(
+            "VmHttpProvisioner: cancel_reminder agent=%s job=%s", agent_id, job_id
+        )
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.post(
+                    f"{self.base_url}/agents/{agent_id}/reminders/{job_id}/cancel",
+                    json={},  # path carries identity; body ignored by daemon
+                    headers={"Authorization": f"Bearer {self.token}"},
+                )
+        except httpx.HTTPError as exc:
+            logger.error("reminders cancel unreachable: %s", exc)
             return {"success": False, "error": f"provision-api unreachable: {exc}"}
         try:
             result = resp.json()

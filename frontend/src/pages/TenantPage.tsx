@@ -28,6 +28,7 @@ import BridgesPanel from '../components/BridgesPanel'
 import ChatPane from '../components/ChatPane'
 import UsageTab from '../components/UsageTab'
 import AuditTab from '../components/AuditTab'
+import RemindersTab from '../components/RemindersTab'
 import ProvisionProgressBar from '../components/ProvisionProgressBar'
 import VoicePicker from '../components/VoicePicker'
 import { DeleteAgentModal } from '../components/DeleteAgentModal'
@@ -35,12 +36,12 @@ import { microsToUsd } from '../lib/format'
 
 interface Props {
   tenantId: number
-  subpage: 'dashboard' | 'members' | 'settings' | 'usage' | 'audit'
+  subpage: 'dashboard' | 'members' | 'settings' | 'usage' | 'audit' | 'reminders'
   onNavigate: (path: string) => void
   onTenantsChanged: () => void
 }
 
-type Tab = 'dashboard' | 'members' | 'settings' | 'usage' | 'audit'
+type Tab = 'dashboard' | 'members' | 'settings' | 'usage' | 'audit' | 'reminders'
 
 /**
  * Unified tenant page with three tabs. Fully bilingual via useI18n:
@@ -140,7 +141,9 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
           ? { he: 'שימוש', en: 'Usage' }
           : tab === 'audit'
             ? { he: 'יומן אירועים', en: 'Audit log' }
-            : { he: 'הגדרות', en: 'Settings' }
+            : tab === 'reminders'
+              ? { he: 'תזכורות', en: 'Reminders' }
+              : { he: 'הגדרות', en: 'Settings' }
 
   const tenantDisplayName = detail?.tenant.name?.trim() || ''
   const activeTabLabel = t(tabLabel(activeTab))
@@ -220,6 +223,7 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
       <div className="border-b border-border-light mb-6 flex gap-1 sm:gap-2 overflow-x-auto snap-x snap-mandatory scrollbar-hide -mx-4 sm:mx-0 px-4 sm:px-0">
         {tabButton('dashboard')}
         {tabButton('members')}
+        {tabButton('reminders')}
         {tabButton('usage')}
         {isAdminOrOwner && tabButton('audit')}
         {tabButton('settings')}
@@ -247,6 +251,9 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
         />
       )}
       {activeTab === 'usage' && <UsageTab tenantId={tenantId} />}
+      {activeTab === 'reminders' && (
+        <RemindersTab tenantId={tenantId} canCancel={isAdminOrOwner} />
+      )}
       {activeTab === 'audit' && isAdminOrOwner && <AuditTab tenantId={tenantId} />}
       {activeTab === 'settings' && (
         <SettingsTab

@@ -875,3 +875,142 @@ async def delete_agent(
         ctx.user_id,
         result.backup_path,
     )
+
+
+
+# ── Reminders (cron jobs scheduled by the agent) ──────────────────────────
+
+
+@router.get("/{tenant_id}/reminders")
+async def list_tenant_reminders(
+    tenant_id: int,
+    request: Request,
+    ctx: TenantContext = Depends(get_active_tenant_member),
+) -> dict[str, Any]:
+    """Aggregate OpenClaw cron jobs across all of a tenant's agents.
+
+    Each agent's jobs live in its container workspace (`/data/agents/<id>/
+    .openclaw/cron/jobs.json`). We fetch per-agent via the VM provision-api
+    and merge — one network round-trip per agent, all in parallel on
+    `asyncio.gather` so a tenant with 5 agents pays the max single-call
+    latency, not the sum. Member role is enough to read; cancel requires
+    admin+ (see next route).
+
+    Best-effort: one agent's fetch failing doesn't nuke the response. Failed
+    agents surface as `{agent_id, error}` in a sibling `errors` list so the
+    UI can annotate which agent's state is stale without blocking the rest.
+    """
+    import asyncio
+
+    db = request.app.state.db
+    provisioner = request.app.state.provisioner
+    agents = db.list_tenant_agents(tenant_id)
+
+    async def fetch_one(agent: dict[str, Any]) -> dict[str, Any]:
+        # The provisioner methods are sync HTTP; run them in the default
+        # executor so concurrent agents don't serialize.
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, provisioner.list_reminders, agent["agent_id"]
+        )
+
+    results = await asyncio.gather(*(fetch_one(a) for a in agents))
+
+    reminders: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    agent_by_id = {a["agent_id"]: a for a in agents}
+
+    for result in results:
+        agent_id = result.get("agent_id", "")
+        agent = agent_by_id.get(agent_id, {})
+        agent_name = agent.get("agent_name", agent_id)
+        if not result.get("success"):
+            errors.append(
+                {
+                    "agent_id": agent_id,
+                    "agent_name": agent_name,
+                    "error": result.get("error", "unknown"),
+                    "detail": result.get("detail"),
+                }
+            )
+            continue
+        for job in result.get("jobs", []):
+            if not isinstance(job, dict):
+                continue
+            reminders.append(
+                {
+                    "job_id": job.get("id", ""),
+                    "agent_id": agent_id,
+                    "agent_name": agent_name,
+                    "schedule": job.get("schedule") or {},
+                    "payload": job.get("payload") or {},
+                    "delivery": job.get("delivery") or {},
+                    "session_target": job.get("sessionTarget"),
+                    "wake_mode": job.get("wakeMode"),
+                    "delete_after_run": job.get("deleteAfterRun", False),
+                    "raw": job,
+                }
+            )
+
+    # Sort by fire time where present; unknown / malformed at the end.
+    def sort_key(r: dict[str, Any]) -> str:
+        sched = r.get("schedule") or {}
+        # `at` for kind=at; `expr` is recurring (no single fire time); push
+        # recurring to end by returning a sentinel. Timestamps are ISO-8601
+        # with offsets so lexicographic sort == chronological.
+        return sched.get("at") or ("~~~" + (sched.get("expr") or ""))
+
+    reminders.sort(key=sort_key)
+
+    return {
+        "tenant_id": tenant_id,
+        "reminders": reminders,
+        "errors": errors,
+    }
+
+
+@router.post("/{tenant_id}/reminders/{agent_id}/{job_id}/cancel")
+async def cancel_tenant_reminder(
+    tenant_id: int,
+    agent_id: str,
+    job_id: str,
+    request: Request,
+    ctx: TenantContext = Depends(require_tenant_role("admin")),
+) -> dict[str, Any]:
+    """Admin+ cancels a scheduled cron job on one of the tenant's agents.
+
+    POST (not DELETE) so the app's authFetch passes a body cleanly through
+    Cloud Run's HTTP/1.1 proxy, and mirrors the provision-api's
+    POST-with-verb-suffix pattern (/cancel).
+    """
+    import asyncio
+
+    db = request.app.state.db
+    agent = db.get_agent(agent_id)
+    if not agent or agent.get("tenant_id") != tenant_id:
+        raise HTTPException(status_code=404, detail="agent_not_found")
+
+    provisioner = request.app.state.provisioner
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        None, provisioner.cancel_reminder, agent_id, job_id
+    )
+    if not result.get("success"):
+        # Map common daemon errors onto HTTP statuses so the UI can branch
+        # ("was already cancelled" vs "agent offline").
+        err = result.get("error", "")
+        if err == "job_not_found":
+            raise HTTPException(status_code=404, detail=result)
+        if err == "agent_not_found":
+            raise HTTPException(status_code=404, detail=result)
+        raise HTTPException(status_code=502, detail=result)
+
+    db.log_audit(
+        tenant_id=tenant_id,
+        actor_user_id=ctx.user_id,
+        action="reminder.cancel",
+        target_type="reminder",
+        target_id=job_id,
+        metadata={"agent_id": agent_id},
+    )
+    return result
