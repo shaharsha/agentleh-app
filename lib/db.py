@@ -648,6 +648,22 @@ class AppDatabase:
             (agent_id,),
         )
 
+    def get_telegram_status(self, agent_id: str) -> dict[str, Any] | None:
+        """Return {agent_id, linked_count} — how many Telegram users have
+        sent /start to this agent and are stored in transport_routes."""
+        return self._fetch_one(
+            """
+            SELECT
+                %s AS agent_id,
+                COUNT(*) AS linked_count
+            FROM transport_routes
+            WHERE transport = 'telegram'
+              AND agent_id  = %s
+            GROUP BY agent_id
+            """,
+            (agent_id, agent_id),
+        )
+
     def set_agent_model(self, agent_id: str, model: str | None) -> dict[str, Any] | None:
         """Update `agents.model` for the display mirror. Called AFTER the VM
         set-model succeeds so the DB never disagrees with the VM except

@@ -68,6 +68,34 @@ def _assert_agent_in_tenant(db, *, tenant_id: int, agent_id: str) -> None:
         )
 
 
+_TELEGRAM_BOT_USERNAME = os.environ.get("APP_TELEGRAM_BOT_USERNAME", "")
+
+
+def _build_telegram_entry(row: dict[str, Any] | None) -> dict[str, Any]:
+    """Build the Telegram integration status block for the integrations panel.
+
+    ``row`` is {agent_id, linked_count} from db.get_telegram_status(), or
+    None if the query failed. ``linked_count`` is the number of Telegram
+    users that have sent /start to this agent.
+    """
+    bot_configured = bool(_TELEGRAM_BOT_USERNAME)
+    linked_count = int((row or {}).get("linked_count", 0))
+    return {
+        "name": "Telegram",
+        "configured": bot_configured,
+        "linked_count": linked_count,
+        # Deep-link the user can share: clicking opens Telegram and sends
+        # /start {agent_id} to the bot, which the bridge intercepts to
+        # register the (telegram, chat_id) → agent route.
+        "deeplink": (
+            f"https://t.me/{_TELEGRAM_BOT_USERNAME}?start={{agent_id}}"
+            if bot_configured
+            else None
+        ),
+        "bot_username": _TELEGRAM_BOT_USERNAME or None,
+    }
+
+
 def _build_google_entry(row: dict[str, Any] | None) -> dict[str, Any]:
     if row is None:
         return {
@@ -124,11 +152,13 @@ async def list_integrations(
     _assert_agent_in_tenant(db, tenant_id=tenant_id, agent_id=agent_id)
 
     google_row = google_oauth.fetch_credentials(db, agent_id=agent_id)
+    telegram_row = db.get_telegram_status(agent_id=agent_id)
     return {
         "agent_id": agent_id,
         "tenant_id": tenant_id,
         "integrations": {
             "google": _build_google_entry(google_row),
+            "telegram": _build_telegram_entry(telegram_row),
         },
     }
 
