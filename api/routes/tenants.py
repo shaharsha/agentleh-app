@@ -16,7 +16,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -885,9 +885,13 @@ async def delete_agent(
 async def list_tenant_reminders(
     tenant_id: int,
     request: Request,
+    agent_id: str | None = Query(default=None),
     ctx: TenantContext = Depends(get_active_tenant_member),
 ) -> dict[str, Any]:
     """Aggregate OpenClaw cron jobs across all of a tenant's agents.
+
+    Pass ``?agent_id=<id>`` to filter to a single agent — the UI uses this
+    when rendering per-agent scheduled-tasks sections in the dashboard.
 
     Each agent's jobs live in its container workspace (`/data/agents/<id>/
     .openclaw/cron/jobs.json`). We fetch per-agent via the VM provision-api
@@ -904,7 +908,9 @@ async def list_tenant_reminders(
 
     db = request.app.state.db
     provisioner = request.app.state.provisioner
-    agents = db.list_tenant_agents(tenant_id)
+    all_agents = db.list_tenant_agents(tenant_id)
+    # Filter to a single agent when ?agent_id= is supplied (per-agent panel).
+    agents = [a for a in all_agents if a["agent_id"] == agent_id] if agent_id else all_agents
 
     async def fetch_one(agent: dict[str, Any]) -> dict[str, Any]:
         # The provisioner methods are sync HTTP; run them in the default

@@ -28,11 +28,11 @@ function markHasAccountCookie() {
 function parseRoute(pathname: string): {
   kind: 'invite-accept' | 'admin' | 'tenant' | 'root'
   tenantId?: number
-  subpage?: 'dashboard' | 'members' | 'settings' | 'usage' | 'audit' | 'reminders'
+  subpage?: 'dashboard' | 'members' | 'settings' | 'usage' | 'audit' | 'integrations'
 } {
   if (pathname.startsWith('/invites/accept')) return { kind: 'invite-accept' }
   if (pathname.startsWith('/admin')) return { kind: 'admin' }
-  const m = pathname.match(/^\/tenants\/(\d+)(?:\/(dashboard|members|settings|usage|audit|reminders))?/)
+  const m = pathname.match(/^\/tenants\/(\d+)(?:\/(dashboard|members|settings|usage|audit|integrations))?/)
   if (m) {
     return {
       kind: 'tenant',
