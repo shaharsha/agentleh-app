@@ -28,7 +28,7 @@ import BridgesPanel from '../components/BridgesPanel'
 import ChatPane from '../components/ChatPane'
 import UsageTab from '../components/UsageTab'
 import AuditTab from '../components/AuditTab'
-import RemindersTab from '../components/RemindersTab'
+import AgentScheduledTasksPanel from '../components/AgentScheduledTasksPanel'
 import IntegrationsTab from '../components/IntegrationsTab'
 import ProvisionProgressBar from '../components/ProvisionProgressBar'
 import VoicePicker from '../components/VoicePicker'
@@ -38,12 +38,12 @@ import { microsToUsd } from '../lib/format'
 
 interface Props {
   tenantId: number
-  subpage: 'dashboard' | 'members' | 'settings' | 'usage' | 'audit' | 'reminders' | 'integrations'
+  subpage: 'dashboard' | 'members' | 'settings' | 'usage' | 'audit' | 'integrations'
   onNavigate: (path: string) => void
   onTenantsChanged: () => void
 }
 
-type Tab = 'dashboard' | 'members' | 'settings' | 'usage' | 'audit' | 'reminders' | 'integrations'
+type Tab = 'dashboard' | 'members' | 'settings' | 'usage' | 'audit' | 'integrations'
 
 /**
  * Unified tenant page with three tabs. Fully bilingual via useI18n:
@@ -145,9 +145,7 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
             ? { he: 'יומן אירועים', en: 'Audit log' }
             : tab === 'integrations'
             ? { he: 'חיבורים', en: 'Integrations' }
-            : tab === 'reminders'
-              ? { he: 'תזכורות', en: 'Reminders' }
-              : { he: 'הגדרות', en: 'Settings' }
+            : { he: 'הגדרות', en: 'Settings' }
 
   const tenantDisplayName = detail?.tenant.name?.trim() || ''
   const activeTabLabel = t(tabLabel(activeTab))
@@ -228,7 +226,6 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
         {tabButton('dashboard')}
         {tabButton('members')}
         {tabButton('integrations')}
-        {tabButton('reminders')}
         {tabButton('usage')}
         {isAdminOrOwner && tabButton('audit')}
         {tabButton('settings')}
@@ -256,9 +253,6 @@ export default function TenantPage({ tenantId, subpage, onNavigate, onTenantsCha
         />
       )}
       {activeTab === 'usage' && <UsageTab tenantId={tenantId} />}
-      {activeTab === 'reminders' && (
-        <RemindersTab tenantId={tenantId} canCancel={isAdminOrOwner} />
-      )}
       {activeTab === 'integrations' && (
         <IntegrationsTab
           tenantId={tenantId}
@@ -883,6 +877,11 @@ function DashboardTab({
                   agentId={a.agent_id}
                   canEdit={isAdminOrOwner}
                   onOpenChat={() => setChatAgent({ agent_id: a.agent_id, agent_name: a.agent_name })}
+                />
+                <AgentScheduledTasksPanel
+                  tenantId={tenantId}
+                  agentId={a.agent_id}
+                  canCancel={isAdminOrOwner}
                 />
               </div>
             ))}

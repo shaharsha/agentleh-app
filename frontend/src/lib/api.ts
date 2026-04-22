@@ -1115,6 +1115,7 @@ export interface TenantReminder {
   job_id: string
   agent_id: string
   agent_name: string
+  job_name?: string   // optional human label set at cron.add time
   schedule: {
     kind?: 'at' | 'every' | 'cron'
     at?: string       // ISO-8601 for kind=at
@@ -1153,8 +1154,10 @@ export interface TenantRemindersResponse {
 
 export async function listTenantReminders(
   tenantId: number,
+  agentId?: string,
 ): Promise<TenantRemindersResponse> {
-  const res = await authFetch(`/api/tenants/${tenantId}/reminders`)
+  const params = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : ''
+  const res = await authFetch(`/api/tenants/${tenantId}/reminders${params}`)
   if (!res.ok) {
     const detail = await res.text().catch(() => res.statusText)
     throw new Error(`Failed to list reminders (${res.status}): ${detail}`)
