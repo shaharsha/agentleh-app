@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Area,
   AreaChart,
@@ -739,34 +740,65 @@ function RowActionsMenu({
   onGrantPlan: () => void
   onDelete: (id: string, tenantId: number | null, agentName: string | null) => void
 }) {
+  const { dir } = useI18n()
   const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; left?: number; right?: number } | null>(null)
 
-  // Outside-click + Escape dismiss. Same pattern as ProfileMenu:
-  // mousedown on window beats a fixed backdrop on iOS Safari.
+  // The menu renders through a portal to document.body so it can escape
+  // the table's `overflow-x: auto` clipping. Position is computed from
+  // the trigger's bounding rect on open, then pinned via `position: fixed`.
+  // Scroll / resize close it — a floating menu that drifts away from its
+  // anchor is worse than one that closes.
+  useLayoutEffect(() => {
+    if (!open) return
+    const btn = buttonRef.current
+    if (!btn) return
+    const rect = btn.getBoundingClientRect()
+    setPos({
+      top: rect.bottom + 4,
+      ...(dir === 'rtl'
+        ? { left: rect.left }
+        : { right: window.innerWidth - rect.right }),
+    })
+  }, [open, dir])
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
     const onClick = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
+      const target = e.target as Node
+      if (
+        buttonRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
+        return
       }
+      setOpen(false)
     }
+    const onScrollOrResize = () => setOpen(false)
     window.addEventListener('keydown', onKey)
     window.addEventListener('mousedown', onClick)
+    // Capture phase: catches scroll inside the table wrap too.
+    window.addEventListener('scroll', onScrollOrResize, true)
+    window.addEventListener('resize', onScrollOrResize)
     return () => {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('mousedown', onClick)
+      window.removeEventListener('scroll', onScrollOrResize, true)
+      window.removeEventListener('resize', onScrollOrResize)
     }
   }, [open])
 
   const deletable = agent.tenant_id != null
 
   return (
-    <div ref={containerRef} className="relative">
+    <>
       <button
+        ref={buttonRef}
         onClick={() => setOpen((v) => !v)}
         className="w-8 h-8 inline-flex items-center justify-center rounded-full text-text-secondary hover:bg-surface-soft hover:text-text-primary cursor-pointer"
         aria-label={`Actions for ${agent.agent_id}`}
@@ -776,56 +808,60 @@ function RowActionsMenu({
         <MoreVerticalIcon className="w-[18px] h-[18px]" />
       </button>
 
-      {open && (
-        <div
-          className="absolute end-0 mt-1 w-44 bg-surface rounded-lg shadow-[0_8px_32px_rgb(14_19_32/0.18)] border border-border z-20 overflow-hidden"
-          role="menu"
-        >
-          <MenuItem
-            onClick={() => {
-              setOpen(false)
-              onSelect(agent.agent_id)
-            }}
+      {open && pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="fixed w-44 bg-surface rounded-lg shadow-[0_8px_32px_rgb(14_19_32/0.18)] border border-border z-50 overflow-hidden"
+            style={pos}
+            role="menu"
           >
-            Details
-          </MenuItem>
-          <MenuItem
-            onClick={() => {
-              setOpen(false)
-              onRotateKey(agent.agent_id)
-            }}
-          >
-            Rotate key
-          </MenuItem>
-          {agent.tenant_id != null && (
             <MenuItem
               onClick={() => {
                 setOpen(false)
-                onGrantPlan()
+                onSelect(agent.agent_id)
               }}
             >
-              Grant plan
+              Details
             </MenuItem>
-          )}
-          <div className="border-t border-border-light" />
-          <MenuItem
-            onClick={() => {
-              setOpen(false)
-              onDelete(agent.agent_id, agent.tenant_id, agent.agent_name)
-            }}
-            disabled={!deletable}
-            danger
-            title={
-              deletable
-                ? undefined
-                : 'Legacy row without tenant_id — delete via VM CLI'
-            }
-          >
-            Delete
-          </MenuItem>
-        </div>
-      )}
-    </div>
+            <MenuItem
+              onClick={() => {
+                setOpen(false)
+                onRotateKey(agent.agent_id)
+              }}
+            >
+              Rotate key
+            </MenuItem>
+            {agent.tenant_id != null && (
+              <MenuItem
+                onClick={() => {
+                  setOpen(false)
+                  onGrantPlan()
+                }}
+              >
+                Grant plan
+              </MenuItem>
+            )}
+            <div className="border-t border-border-light" />
+            <MenuItem
+              onClick={() => {
+                setOpen(false)
+                onDelete(agent.agent_id, agent.tenant_id, agent.agent_name)
+              }}
+              disabled={!deletable}
+              danger
+              title={
+                deletable
+                  ? undefined
+                  : 'Legacy row without tenant_id — delete via VM CLI'
+              }
+            >
+              Delete
+            </MenuItem>
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }
 
