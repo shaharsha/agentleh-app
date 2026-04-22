@@ -477,8 +477,8 @@ function AgentsTab({
         {agents.map((a) => {
           const cap = (a.base_allowance_micros || 0) + (a.overage_cap_micros || 0)
           const pctNum =
-            a.used_micros != null && cap > 0
-              ? Math.min(100, (a.used_micros / cap) * 100)
+            a.agent_used_micros != null && cap > 0
+              ? Math.min(100, (a.agent_used_micros / cap) * 100)
               : 0
           return (
             <li key={a.agent_id} className="p-4 space-y-3">
@@ -519,11 +519,11 @@ function AgentsTab({
                 </div>
                 <div className="text-text-muted">Used / cap</div>
                 <div className="text-end font-mono tabular-nums">
-                  {fmtUsd(a.used_micros)} / {fmtUsd(cap || null)}
+                  {fmtUsd(a.agent_used_micros)} / {fmtUsd(cap || null)}
                 </div>
                 <div className="text-text-muted">Usage</div>
                 <div className="text-end tabular-nums">
-                  {pct(a.used_micros, cap || null)}
+                  {pct(a.agent_used_micros, cap || null)}
                 </div>
                 <div className="text-text-muted">Model</div>
                 <div className="text-end">
@@ -658,9 +658,9 @@ function AgentsTab({
                       <div className="text-[10px] text-text-muted mt-0.5">inherits default</div>
                     )}
                   </td>
-                  <td className="p-3 text-right font-mono">{fmtUsd(a.used_micros)}</td>
+                  <td className="p-3 text-right font-mono">{fmtUsd(a.agent_used_micros)}</td>
                   <td className="p-3 text-right font-mono">{fmtUsd(cap || null)}</td>
-                  <td className="p-3 text-right">{pct(a.used_micros, cap || null)}</td>
+                  <td className="p-3 text-right">{pct(a.agent_used_micros, cap || null)}</td>
                   <td className="p-3">
                     <span
                       className={

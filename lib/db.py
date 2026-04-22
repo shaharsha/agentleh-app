@@ -596,6 +596,12 @@ class AppDatabase:
                 s.overage_cap_micros,
                 s.overage_used_micros,
                 s.wallet_balance_micros,
+                COALESCE((
+                    SELECT SUM(e.cost_micros)
+                    FROM usage_events e
+                    WHERE e.agent_id = a.agent_id
+                      AND e.subscription_id = s.id
+                ), 0)                    AS agent_used_micros,
                 p.name_he                AS plan_name_he,
                 p.billing_mode,
                 p.price_ils_cents
