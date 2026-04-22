@@ -660,12 +660,28 @@ export interface WhatsappBridge {
   phone: string | null
   actions: Array<'connect' | 'edit_phone' | 'disconnect'>
 }
+export interface TelegramBridgeStats {
+  // Whether OpenClaw's Telegram polling loop entered on the container's
+  // current run. Null when the VM probe failed (stats block still
+  // renders with a degraded "status unknown" message).
+  ready: boolean
+  // Latest Telegram update_id grammy dispatched through the handler
+  // pipeline. Null when no update has ever been processed — that's
+  // important info on its own (freshly-connected bot with no traffic
+  // yet looks identical to a bot that's silently broken, except for
+  // this signal).
+  last_update_id: number | null
+  // mtime of OpenClaw's persisted offset file — close proxy for
+  // "when did the bot last successfully process a message". ISO-8601.
+  last_update_at: string | null
+}
 export interface TelegramBridge {
   enabled: boolean
   status: 'connected' | 'disconnected'
   bot_username?: string
   bot_display_name?: string
   actions: Array<'connect' | 'test' | 'update_token' | 'disconnect'>
+  stats?: TelegramBridgeStats | null
 }
 export interface WebBridge {
   enabled: true
