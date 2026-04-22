@@ -1709,39 +1709,80 @@ function PlansTab({ plans }: { plans: AdminOverview['plans'] }) {
   return (
     <div className="glass-card admin-table-wrap">
       <table className="w-full text-sm">
-        <thead className="bg-surface-soft">
+        <thead className="bg-surface-soft text-xs uppercase tracking-wide text-text-muted">
           <tr>
-            <th className="text-left p-3">Plan</th>
-            <th className="text-left p-3">Hebrew</th>
-            <th className="text-right p-3">Price (₪)</th>
-            <th className="text-left p-3">Mode</th>
-            <th className="text-right p-3">Base</th>
-            <th className="text-right p-3">Overage cap</th>
-            <th className="text-right p-3">RPM</th>
+            <th className="text-start px-4 py-3 font-medium">Plan</th>
+            <th className="text-end px-4 py-3 font-medium">Price</th>
+            <th className="text-start px-4 py-3 font-medium">Mode</th>
+            <th className="text-end px-4 py-3 font-medium">Base allowance</th>
+            <th className="text-end px-4 py-3 font-medium">Overage cap</th>
+            <th className="text-end px-4 py-3 font-medium">RPM</th>
           </tr>
         </thead>
         <tbody>
           {plans.map((p) => (
-            <tr key={p.plan_id} className="border-t">
-              <td className="p-3 font-mono">{p.plan_id}</td>
-              <td className="p-3">{p.name_he}</td>
-              <td className="p-3 text-right">
-                {(p.price_ils_cents / 100).toFixed(0)}
+            <tr
+              key={p.plan_id}
+              className="border-t border-border-light hover:bg-surface-soft/60 align-middle"
+            >
+              <td className="px-4 py-3">
+                <div className="font-medium text-text-primary">
+                  <bdi>{p.name_he}</bdi>
+                </div>
+                <code className="text-xs text-text-muted font-mono">
+                  {p.plan_id}
+                </code>
               </td>
-              <td className="p-3">{p.billing_mode}</td>
-              <td className="p-3 text-right font-mono">
+              <td className="px-4 py-3 text-end tabular-nums">
+                <span className="font-mono text-xs">
+                  ₪{(p.price_ils_cents / 100).toFixed(0)}
+                </span>
+              </td>
+              <td className="px-4 py-3">
+                <TonedPill
+                  label={billingModeLabel(p.billing_mode)}
+                  tone={billingModeTone(p.billing_mode)}
+                  title={p.billing_mode}
+                />
+              </td>
+              <td className="px-4 py-3 text-end font-mono text-xs tabular-nums">
                 {fmtUsd(p.base_allowance_micros)}
               </td>
-              <td className="p-3 text-right font-mono">
-                {fmtUsd(p.default_overage_cap_micros)}
+              <td className="px-4 py-3 text-end font-mono text-xs tabular-nums">
+                {p.default_overage_cap_micros && p.default_overage_cap_micros > 0
+                  ? fmtUsd(p.default_overage_cap_micros)
+                  : <span className="text-text-muted">—</span>}
               </td>
-              <td className="p-3 text-right">{p.rate_limit_rpm}</td>
+              <td className="px-4 py-3 text-end font-mono text-xs tabular-nums">
+                {p.rate_limit_rpm}
+              </td>
             </tr>
           ))}
+          {plans.length === 0 && (
+            <tr>
+              <td colSpan={6} className="px-4 py-6 text-center text-text-muted">
+                No plans configured.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
   )
+}
+
+function billingModeLabel(mode: string): string {
+  if (mode === 'plan_hardblock') return 'hard block'
+  if (mode === 'plan_overage') return 'overage'
+  if (mode === 'wallet') return 'wallet'
+  return mode
+}
+
+function billingModeTone(mode: string): Tone {
+  if (mode === 'plan_hardblock') return 'warning'
+  if (mode === 'plan_overage') return 'success'
+  if (mode === 'wallet') return 'info'
+  return 'muted'
 }
 
 // ─── Stats tab (VM capacity + nerd metrics) ────────────────────────
@@ -3319,34 +3360,42 @@ function TenantsTab() {
         </span>
       </div>
 
-      <div className="admin-table-wrap rounded-xl border border-border-light">
+      <div className="glass-card admin-table-wrap">
         <table className="min-w-full text-sm">
-          <thead className="bg-surface-soft">
+          <thead className="bg-surface-soft text-xs uppercase tracking-wide text-text-muted">
             <tr>
-              <th className="text-start p-3 font-medium text-text-primary">{t({ he: 'שם', en: 'Name' })}</th>
-              <th className="text-start p-3 font-medium text-text-primary">{t({ he: 'בעלים', en: 'Owner' })}</th>
-              <th className="text-start p-3 font-medium text-text-primary">{t({ he: 'תוכנית', en: 'Plan' })}</th>
-              <th className="text-end p-3 font-medium text-text-primary">{t({ he: 'חברים', en: 'Members' })}</th>
-              <th className="text-end p-3 font-medium text-text-primary">{t({ he: 'סוכנים', en: 'Agents' })}</th>
-              <th className="text-start p-3 font-medium text-text-primary">{t({ he: 'מצב חבילה', en: 'Sub status' })}</th>
-              <th className="text-start p-3 font-medium text-text-primary">{t({ he: 'תוקף עד', en: 'Period end' })}</th>
-              <th className="text-end p-3 font-medium text-text-primary"></th>
+              <th className="text-start px-4 py-3 font-medium">{t({ he: 'שם', en: 'Name' })}</th>
+              <th className="text-start px-4 py-3 font-medium">{t({ he: 'בעלים', en: 'Owner' })}</th>
+              <th className="text-start px-4 py-3 font-medium">{t({ he: 'תוכנית', en: 'Plan' })}</th>
+              <th className="text-end px-4 py-3 font-medium">{t({ he: 'חברים', en: 'Members' })}</th>
+              <th className="text-end px-4 py-3 font-medium">{t({ he: 'סוכנים', en: 'Agents' })}</th>
+              <th className="text-start px-4 py-3 font-medium">{t({ he: 'מצב', en: 'Status' })}</th>
+              <th className="text-start px-4 py-3 font-medium">{t({ he: 'תוקף עד', en: 'Period end' })}</th>
+              <th className="w-10 px-2 py-3" aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
             {visible.map((r) => (
-              <tr key={r.id} className="border-t border-gray-100 hover:bg-surface-soft">
-                <td className="p-3">
-                  <div className="font-medium text-text-primary">{r.name}</div>
-                  <code className="text-xs text-text-muted font-mono">{r.slug}</code>
+              <tr key={r.id} className="border-t border-border-light hover:bg-surface-soft/60 align-middle">
+                <td className="px-4 py-3 min-w-0">
+                  <div className="font-medium text-text-primary truncate max-w-[220px]" title={r.name}>
+                    <bdi>{r.name}</bdi>
+                  </div>
+                  <code className="text-xs text-text-muted font-mono truncate max-w-[220px] block">
+                    {r.slug}
+                  </code>
                 </td>
-                <td className="p-3">
-                  <div className="text-text-primary">{r.owner_full_name || r.owner_email || `#${r.owner_user_id}`}</div>
+                <td className="px-4 py-3 min-w-0">
+                  <div className="text-sm text-text-primary truncate max-w-[220px]" title={r.owner_full_name || r.owner_email || ''}>
+                    <bdi>{r.owner_full_name || r.owner_email || `#${r.owner_user_id}`}</bdi>
+                  </div>
                   {r.owner_full_name && r.owner_email && (
-                    <div className="text-xs text-text-muted">{r.owner_email}</div>
+                    <div className="text-xs text-text-muted truncate max-w-[220px]" title={r.owner_email}>
+                      <bdi>{r.owner_email}</bdi>
+                    </div>
                   )}
                 </td>
-                <td className="p-3 text-text-primary">
+                <td className="px-4 py-3">
                   {r.plan_id ? (
                     <TonedPill
                       label={r.plan_name_he || r.plan_id}
@@ -3359,9 +3408,13 @@ function TenantsTab() {
                     </span>
                   )}
                 </td>
-                <td className="p-3 text-end tabular-nums">{r.member_count}</td>
-                <td className="p-3 text-end tabular-nums">{r.agent_count}</td>
-                <td className="p-3">
+                <td className="px-4 py-3 text-end tabular-nums font-mono text-xs">
+                  {r.member_count}
+                </td>
+                <td className="px-4 py-3 text-end tabular-nums font-mono text-xs">
+                  {r.agent_count}
+                </td>
+                <td className="px-4 py-3">
                   {r.subscription_status ? (
                     <StatusPill
                       label={r.subscription_status}
@@ -3371,22 +3424,36 @@ function TenantsTab() {
                     <span className="text-text-muted">—</span>
                   )}
                 </td>
-                <td className="p-3 text-text-primary tabular-nums" dir="ltr">
+                <td className="px-4 py-3 text-xs text-text-muted tabular-nums" dir="ltr">
                   {fmtDate(r.subscription_period_end)}
                 </td>
-                <td className="p-3 text-end">
+                <td className="px-2 py-3 text-end">
                   <a
                     href={`/tenants/${r.id}`}
-                    className="text-info hover:underline text-sm"
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-full text-text-secondary hover:bg-surface-soft hover:text-brand transition-colors"
+                    title={t({ he: 'פתח סביבה', en: 'Open workspace' })}
+                    aria-label={t({ he: 'פתח סביבה', en: 'Open workspace' })}
                   >
-                    {t({ he: 'פתח/י', en: 'Open' })}
+                    <svg
+                      className="w-[18px] h-[18px] rtl:-scale-x-100"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={1.75}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M5 12h14" />
+                      <path d="M13 5l7 7-7 7" />
+                    </svg>
                   </a>
                 </td>
               </tr>
             ))}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={8} className="p-6 text-center text-text-muted">
+                <td colSpan={8} className="px-4 py-6 text-center text-text-muted">
                   {t({ he: 'אין סביבות תואמות', en: 'No matching tenants' })}
                 </td>
               </tr>
