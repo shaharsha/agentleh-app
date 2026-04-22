@@ -18,6 +18,14 @@ logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
 )
 
+# httpx logs every outbound request at INFO as
+# "HTTP Request: POST https://api.telegram.org/bot<TOKEN>/getMe ...",
+# which leaks the Telegram bot token into Cloud Logging (both the
+# manager bot's and any user-pasted per-agent token). We still want
+# to see httpx WARNINGs (connection failures, etc.) — just not the
+# request URL line.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 import psycopg
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware

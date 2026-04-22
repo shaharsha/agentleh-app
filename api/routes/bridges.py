@@ -284,6 +284,21 @@ async def connect_telegram_bridge(
             },
         )
 
+    # 4b. Wait until OpenClaw's Telegram polling actually starts before
+    #     we tell the user "connected". /config/patch returns as soon as
+    #     docker recreates the container, but OpenClaw takes another
+    #     ~60–90s to load plugins and enter the polling loop — a window
+    #     where a user's first /start can be silently swallowed (see the
+    #     Bino-bot incident, 2026-04-22). Continuing on timeout is
+    #     intentional: surfacing "still warming up" is better UX than
+    #     a hard 502 when the container will almost certainly come up.
+    ready = await _asyncio.to_thread(provisioner.wait_telegram_ready, agent_id)
+    if not ready:
+        logger.warning(
+            "telegram polling did not start within budget for agent=%s",
+            agent_id,
+        )
+
     db.log_audit(
         tenant_id=tenant_id,
         actor_user_id=ctx.user_id,

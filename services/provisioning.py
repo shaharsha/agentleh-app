@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import secrets
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -84,6 +85,7 @@ class AgentProvisioner(Protocol):
     def get_agent_model(self, agent_id: str) -> dict[str, Any]: ...
     def list_reminders(self, agent_id: str) -> dict[str, Any]: ...
     def cancel_reminder(self, agent_id: str, job_id: str) -> dict[str, Any]: ...
+    def wait_telegram_ready(self, agent_id: str, *, timeout_s: float = 90.0) -> bool: ...
 
 
 class MockProvisioner:
@@ -316,6 +318,11 @@ class MockProvisioner:
             "job_id": job_id,
             "remaining": len(filtered),
         }
+
+    def wait_telegram_ready(self, agent_id: str, *, timeout_s: float = 90.0) -> bool:
+        """Mock: the mock provisioner has no container; assume ready."""
+        logger.info("MOCK: wait_telegram_ready agent=%s → True", agent_id)
+        return True
 
 
 class VmHttpProvisioner:
@@ -619,6 +626,47 @@ class VmHttpProvisioner:
         if resp.status_code >= 400 and "success" not in result:
             result["success"] = False
         return result
+
+    def wait_telegram_ready(self, agent_id: str, *, timeout_s: float = 90.0) -> bool:
+        """Block until the agent's OpenClaw container has logged that the
+        Telegram polling loop started, or the timeout elapses.
+
+        Context: after /config/patch (restart=True) returns, the container
+        has been recreated but OpenClaw still needs ~60–90 s to load every
+        plugin before it wires channels. In the Bino-bot incident
+        (2026-04-22) the app confirmed "bot connected" the moment the
+        restart returned, but the user's first `/start` and `שלום` went
+        missing because polling hadn't started yet. Waiting for the actual
+        "starting provider (@bot)" log line closes that race.
+
+        Returns True once the provision-api reports `ready=True`; False on
+        timeout. Probe-level errors (docker missing, agent dir gone) are
+        treated as "not ready yet" so the caller's timeout governs flow
+        instead of raising — the caller has better context to decide
+        whether a stalled probe should block the UI.
+        """
+        deadline = time.monotonic() + max(0.0, timeout_s)
+        delay = 1.5
+        while time.monotonic() < deadline:
+            try:
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.get(
+                        f"{self.base_url}/telegram/ready",
+                        params={"agent_id": agent_id},
+                        headers={"Authorization": f"Bearer {self.token}"},
+                    )
+                if resp.status_code == 200:
+                    body = resp.json()
+                    if body.get("ready"):
+                        return True
+            except (httpx.HTTPError, ValueError):
+                pass
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(delay, remaining))
+            delay = min(delay * 1.3, 5.0)
+        return False
 
     def get_agent_model(self, agent_id: str) -> dict[str, Any]:
         """GET /config/model?agent_id=X — authoritative live read.
