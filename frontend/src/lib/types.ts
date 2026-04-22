@@ -295,11 +295,20 @@ export type IntegrationEntry =
       last_refreshed_at: string | null
     }
 
+export interface TelegramIntegrationEntry {
+  name: string
+  configured: boolean
+  linked_count: number
+  deeplink: string | null      // "https://t.me/{bot}?start={agent_id}" template
+  bot_username: string | null
+}
+
 export interface IntegrationsResponse {
   agent_id: string
   tenant_id: number
   integrations: {
     google: IntegrationEntry
+    telegram: TelegramIntegrationEntry
   }
 }
 
