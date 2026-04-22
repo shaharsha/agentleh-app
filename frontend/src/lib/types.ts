@@ -128,6 +128,7 @@ export interface AdminAgentRow {
   subscription_status: string | null
   base_allowance_micros: number | null
   used_micros: number | null
+  agent_used_micros: number | null
   overage_enabled: boolean | null
   overage_cap_micros: number | null
   overage_used_micros: number | null
