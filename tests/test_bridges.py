@@ -83,6 +83,20 @@ def client():
     app.dependency_overrides[get_active_tenant_member] = lambda: _build_ctx("admin")
 
     app.state.db = MagicMock()
+    # Stats fetch is a VM round-trip in prod; mock it to a neutral
+    # "not-ready" shape so tests that don't care about stats aren't
+    # forced to set it up. Tests that DO care about stats (e.g.
+    # test_get_bridges_telegram_stats_surfaced) override this.
+    provisioner = MagicMock()
+    provisioner.get_telegram_stats = MagicMock(return_value={
+        "success": True,
+        "agent_id": "",
+        "enabled": False,
+        "ready": False,
+        "last_update_id": None,
+        "last_update_at": None,
+    })
+    app.state.provisioner = provisioner
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -181,6 +195,48 @@ def test_get_bridges_telegram_connected(client):
     assert tg["enabled"] is True
     assert tg["status"] == "connected"
     assert tg["bot_username"] == "shuli_agent_bot"
+    # Stats block is always present when the bridge is enabled so the
+    # frontend can render a single "last activity" slot instead of two
+    # branches. Mock provisioner returns ready=False by default.
+    assert "stats" in tg
+    assert tg["stats"]["ready"] is False
+
+
+def test_get_bridges_telegram_stats_surfaced(client):
+    """When the VM reports a lastUpdateId/mtime, the bridges panel
+    must expose both so the frontend can show "last activity 3m ago"
+    instead of the silent "connected" we had during the Bino-bot
+    incident."""
+    db = app.state.db
+    db.get_agent_tenant_id = MagicMock(return_value=10)
+    db.get_agent_bridges = MagicMock(return_value=[
+        {
+            "agent_id": "agent-a",
+            "bridge_type": "telegram",
+            "enabled": True,
+            "config": {"bot_username": "x", "bot_display_name": "X", "secret_name": "s"},
+            "connected_at": None,
+            "updated_at": None,
+        }
+    ])
+    db.get_phone_for_agent = MagicMock(return_value=None)
+    app.state.provisioner.get_telegram_stats = MagicMock(return_value={
+        "success": True,
+        "agent_id": "agent-a",
+        "enabled": True,
+        "ready": True,
+        "last_update_id": 7,
+        "last_update_at": "2026-04-22T15:30:00Z",
+    })
+
+    resp = client.get("/api/tenants/10/agents/agent-a/bridges")
+    assert resp.status_code == 200
+    tg_stats = resp.json()["bridges"]["telegram"]["stats"]
+    assert tg_stats == {
+        "ready": True,
+        "last_update_id": 7,
+        "last_update_at": "2026-04-22T15:30:00Z",
+    }
 
 
 def test_get_bridges_cross_tenant_404(client):

@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import secrets
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -84,6 +85,8 @@ class AgentProvisioner(Protocol):
     def get_agent_model(self, agent_id: str) -> dict[str, Any]: ...
     def list_reminders(self, agent_id: str) -> dict[str, Any]: ...
     def cancel_reminder(self, agent_id: str, job_id: str) -> dict[str, Any]: ...
+    def wait_telegram_ready(self, agent_id: str, *, timeout_s: float = 90.0) -> bool: ...
+    def get_telegram_stats(self, agent_id: str) -> dict[str, Any]: ...
 
 
 class MockProvisioner:
@@ -315,6 +318,24 @@ class MockProvisioner:
             "agent_id": agent_id,
             "job_id": job_id,
             "remaining": len(filtered),
+        }
+
+    def wait_telegram_ready(self, agent_id: str, *, timeout_s: float = 90.0) -> bool:
+        """Mock: the mock provisioner has no container; assume ready."""
+        logger.info("MOCK: wait_telegram_ready agent=%s → True", agent_id)
+        return True
+
+    def get_telegram_stats(self, agent_id: str) -> dict[str, Any]:
+        """Mock: no container, no offset file — surface enabled=False so
+        the UI renders a neutral "not configured" state locally."""
+        logger.info("MOCK: get_telegram_stats agent=%s", agent_id)
+        return {
+            "success": True,
+            "agent_id": agent_id,
+            "enabled": False,
+            "ready": False,
+            "last_update_id": None,
+            "last_update_at": None,
         }
 
 
@@ -619,6 +640,80 @@ class VmHttpProvisioner:
         if resp.status_code >= 400 and "success" not in result:
             result["success"] = False
         return result
+
+    def wait_telegram_ready(self, agent_id: str, *, timeout_s: float = 90.0) -> bool:
+        """Block until the agent's OpenClaw container has logged that the
+        Telegram polling loop started, or the timeout elapses.
+
+        Context: after /config/patch (restart=True) returns, the container
+        has been recreated but OpenClaw still needs ~60–90 s to load every
+        plugin before it wires channels. In the Bino-bot incident
+        (2026-04-22) the app confirmed "bot connected" the moment the
+        restart returned, but the user's first `/start` and `שלום` went
+        missing because polling hadn't started yet. Waiting for the actual
+        "starting provider (@bot)" log line closes that race.
+
+        Returns True once the provision-api reports `ready=True`; False on
+        timeout. Probe-level errors (docker missing, agent dir gone) are
+        treated as "not ready yet" so the caller's timeout governs flow
+        instead of raising — the caller has better context to decide
+        whether a stalled probe should block the UI.
+        """
+        deadline = time.monotonic() + max(0.0, timeout_s)
+        delay = 1.5
+        while time.monotonic() < deadline:
+            try:
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.get(
+                        f"{self.base_url}/telegram/ready",
+                        params={"agent_id": agent_id},
+                        headers={"Authorization": f"Bearer {self.token}"},
+                    )
+                if resp.status_code == 200:
+                    body = resp.json()
+                    if body.get("ready"):
+                        return True
+            except (httpx.HTTPError, ValueError):
+                pass
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(delay, remaining))
+            delay = min(delay * 1.3, 5.0)
+        return False
+
+    def get_telegram_stats(self, agent_id: str) -> dict[str, Any]:
+        """GET /telegram/stats?agent_id=X — expose OpenClaw's persisted
+        Telegram polling state (enabled, ready, lastUpdateId, mtime) so
+        the Bridges panel can surface "last activity" without an admin
+        needing to SSH. Mirrors the provision-api endpoint's shape; on
+        probe failure, returns `{success: False, enabled: False, ready:
+        False, ...}` so the caller can render a neutral state instead
+        of a crashed page."""
+        default: dict[str, Any] = {
+            "success": False,
+            "agent_id": agent_id,
+            "enabled": False,
+            "ready": False,
+            "last_update_id": None,
+            "last_update_at": None,
+        }
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.get(
+                    f"{self.base_url}/telegram/stats",
+                    params={"agent_id": agent_id},
+                    headers={"Authorization": f"Bearer {self.token}"},
+                )
+        except httpx.HTTPError as exc:
+            logger.warning("telegram/stats unreachable agent=%s: %s", agent_id, exc)
+            return {**default, "error": f"provision-api unreachable: {exc}"}
+        if resp.status_code >= 400:
+            return {**default, "error": f"provision-api status={resp.status_code}"}
+        try:
+            return resp.json()
+        except ValueError:
+            return {**default, "error": "non-json response"}
 
     def get_agent_model(self, agent_id: str) -> dict[str, Any]:
         """GET /config/model?agent_id=X — authoritative live read.

@@ -140,6 +140,26 @@ async def get_bridges(
     # Expand the web chat URL placeholder now that we know the tenant.
     web = payload["bridges"]["web"]
     web["chat_url"] = web["chat_url"].replace("%TENANT%", str(tenant_id))
+    # Enrich Telegram with live polling stats so the panel can show the
+    # last-activity timestamp alongside "connected". Only worth the VM
+    # round-trip when the bridge row reports connected — otherwise the
+    # offset file wouldn't exist anyway.
+    tg = payload["bridges"]["telegram"]
+    if tg.get("enabled"):
+        import asyncio as _asyncio
+        provisioner = request.app.state.provisioner
+        try:
+            stats = await _asyncio.to_thread(
+                provisioner.get_telegram_stats, agent_id
+            )
+            tg["stats"] = {
+                "ready": stats.get("ready", False),
+                "last_update_id": stats.get("last_update_id"),
+                "last_update_at": stats.get("last_update_at"),
+            }
+        except Exception:  # noqa: BLE001
+            logger.exception("telegram stats fetch failed for agent=%s", agent_id)
+            tg["stats"] = None
     return payload
 
 
@@ -282,6 +302,21 @@ async def connect_telegram_bridge(
                 "stdout": patch_result.get("stdout", "")[-400:],
                 "stderr": patch_result.get("stderr", "")[-400:],
             },
+        )
+
+    # 4b. Wait until OpenClaw's Telegram polling actually starts before
+    #     we tell the user "connected". /config/patch returns as soon as
+    #     docker recreates the container, but OpenClaw takes another
+    #     ~60–90s to load plugins and enter the polling loop — a window
+    #     where a user's first /start can be silently swallowed (see the
+    #     Bino-bot incident, 2026-04-22). Continuing on timeout is
+    #     intentional: surfacing "still warming up" is better UX than
+    #     a hard 502 when the container will almost certainly come up.
+    ready = await _asyncio.to_thread(provisioner.wait_telegram_ready, agent_id)
+    if not ready:
+        logger.warning(
+            "telegram polling did not start within budget for agent=%s",
+            agent_id,
         )
 
     db.log_audit(

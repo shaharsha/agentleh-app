@@ -224,6 +224,21 @@ async def _handle_managed_bot_update(request: Request, update: dict[str, Any]) -
         _fail_attempt(db, agent_id=agent_id, reason=f"config_patch_failed: {exc}")
         return
 
+    # 4b. Wait for OpenClaw's Telegram polling loop to actually start.
+    #     /config/patch returns as soon as docker recreates the container,
+    #     but OpenClaw takes ~60–90s after that to load plugins and enter
+    #     the polling loop. If we flip the attempt to "complete" before
+    #     then, the confirmation DM in step 6 lands in the user's chat
+    #     seconds before the bot can actually receive a reply — their
+    #     very first /start gets eaten (Bino-bot / Eyal, 2026-04-22).
+    ready = await asyncio.to_thread(provisioner.wait_telegram_ready, agent_id)
+    if not ready:
+        logger.warning(
+            "telegram polling did not start within budget for agent=%s; "
+            "completing the attempt anyway so the user isn't blocked",
+            agent_id,
+        )
+
     # 5. Audit log + mark the attempt complete so the polling endpoint
     #    flips the web UI to "connected".
     db.log_audit(

@@ -10,6 +10,7 @@ import {
   startTelegramManagedConnect,
   testTelegramBridge,
   type BridgesResponse,
+  type TelegramBridgeStats,
   type TelegramManagedStart,
 } from '../lib/api'
 import { useI18n } from '../lib/i18n'
@@ -84,6 +85,50 @@ function ChatIcon() {
       </svg>
     </span>
   )
+}
+
+// Human-readable "last activity" label for the Telegram row. Keeps the
+// distinction between "never received a message" (fresh connection,
+// expected for a brand-new bot) and "received N but polling stalled
+// since X" — which is the actually-concerning state that Bino-bot was
+// in before we had any visibility into it.
+function renderTelegramActivityLabel(
+  stats: TelegramBridgeStats,
+  t: (s: { he: string; en: string }) => string,
+): string {
+  if (!stats.ready) {
+    return t({ he: 'מתחבר…', en: 'Connecting…' })
+  }
+  if (stats.last_update_at == null) {
+    return t({
+      he: 'מחובר. עדיין לא התקבלו הודעות.',
+      en: 'Connected. No messages received yet.',
+    })
+  }
+  const mins = Math.floor(
+    (Date.now() - new Date(stats.last_update_at).getTime()) / 60000,
+  )
+  if (mins < 1) {
+    return t({ he: 'פעילות אחרונה: עכשיו', en: 'Last activity: just now' })
+  }
+  if (mins < 60) {
+    return t({
+      he: `פעילות אחרונה: לפני ${mins} דק'`,
+      en: `Last activity: ${mins}m ago`,
+    })
+  }
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) {
+    return t({
+      he: `פעילות אחרונה: לפני ${hrs} שעות`,
+      en: `Last activity: ${hrs}h ago`,
+    })
+  }
+  const days = Math.floor(hrs / 24)
+  return t({
+    he: `פעילות אחרונה: לפני ${days} ימים`,
+    en: `Last activity: ${days}d ago`,
+  })
 }
 
 /**
@@ -475,6 +520,11 @@ export default function BridgesPanel({
                     )}
                     {tgTestResult && (
                       <div className="mt-0.5 text-[11px] text-text-primary">{tgTestResult}</div>
+                    )}
+                    {tg.enabled && tg.stats !== undefined && tg.stats !== null && (
+                      <div className="mt-0.5 text-[11px] text-text-muted">
+                        {renderTelegramActivityLabel(tg.stats, t)}
+                      </div>
                     )}
                   </div>
                 </div>
