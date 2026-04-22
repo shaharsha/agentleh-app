@@ -483,7 +483,7 @@ function AgentsTab({
               <div className="flex items-start justify-between gap-2">
                 <AgentIdentity agentId={a.agent_id} agentName={a.agent_name} />
                 <div className="flex items-center gap-1 shrink-0">
-                  <StatusPill status={a.subscription_status} />
+                  <StatusPill label={a.subscription_status || 'none'} tone={subscriptionTone(a.subscription_status)} />
                   <RowActionsMenu
                     agent={a}
                     onSelect={onSelect}
@@ -571,7 +571,7 @@ function AgentsTab({
                     <UsageCell used={a.agent_used_micros} cap={cap} />
                   </td>
                   <td className="px-4 py-3">
-                    <StatusPill status={a.subscription_status} />
+                    <StatusPill label={a.subscription_status || 'none'} tone={subscriptionTone(a.subscription_status)} />
                   </td>
                   <td className="px-2 py-3">
                     <RowActionsMenu
@@ -645,20 +645,84 @@ function PlanPill({ name }: { name: string | null }) {
   )
 }
 
-function StatusPill({ status }: { status: string | null }) {
-  const s = status || 'none'
-  const { dotClass, textClass } = (() => {
-    if (s === 'active') return { dotClass: 'bg-success', textClass: 'text-success' }
-    if (s === 'exhausted') return { dotClass: 'bg-danger', textClass: 'text-danger' }
-    if (s === 'paused') return { dotClass: 'bg-warning', textClass: 'text-warning' }
-    return { dotClass: 'bg-text-muted', textClass: 'text-text-muted' }
-  })()
+type Tone = 'success' | 'danger' | 'warning' | 'info' | 'neutral' | 'muted'
+
+function tonedClasses(tone: Tone): { dot: string; text: string; bg: string } {
+  switch (tone) {
+    case 'success':
+      return { dot: 'bg-success', text: 'text-success', bg: 'bg-success/10' }
+    case 'danger':
+      return { dot: 'bg-danger', text: 'text-danger', bg: 'bg-danger/10' }
+    case 'warning':
+      return { dot: 'bg-warning', text: 'text-warning', bg: 'bg-warning/10' }
+    case 'info':
+      return { dot: 'bg-info', text: 'text-info', bg: 'bg-info/10' }
+    case 'neutral':
+      return { dot: 'bg-text-secondary', text: 'text-text-secondary', bg: 'bg-text-secondary/10' }
+    case 'muted':
+    default:
+      return { dot: 'bg-text-muted', text: 'text-text-muted', bg: 'bg-surface-soft' }
+  }
+}
+
+/** Dot + label. For state ("active", "expired", "complete"…). */
+function StatusPill({ label, tone }: { label: string; tone: Tone }) {
+  const c = tonedClasses(tone)
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap">
-      <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} aria-hidden="true" />
-      <span className={textClass}>{s}</span>
+      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} aria-hidden="true" />
+      <span className={c.text}>{label}</span>
     </span>
   )
+}
+
+/** Solid tinted pill. For categorical values ("business plan", "admin role"). */
+function TonedPill({
+  label,
+  tone,
+  title,
+}: {
+  label: string
+  tone: Tone
+  title?: string
+}) {
+  const c = tonedClasses(tone)
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${c.bg} ${c.text}`}
+      title={title}
+    >
+      <bdi>{label}</bdi>
+    </span>
+  )
+}
+
+function subscriptionTone(s: string | null): Tone {
+  if (s === 'active') return 'success'
+  if (s === 'exhausted') return 'danger'
+  if (s === 'paused') return 'warning'
+  return 'muted'
+}
+
+function couponStatusTone(s: string): Tone {
+  if (s === 'active') return 'success'
+  if (s === 'expired') return 'danger'
+  if (s === 'exhausted') return 'warning'
+  if (s === 'pending') return 'info'
+  return 'muted'
+}
+
+function onboardingTone(s: string): Tone {
+  if (s === 'complete') return 'success'
+  if (s === 'plan_active') return 'info'
+  if (s === 'pending') return 'warning'
+  return 'muted'
+}
+
+function roleTone(r: string): Tone {
+  if (r === 'superadmin') return 'info'
+  if (r === 'admin') return 'neutral'
+  return 'muted'
 }
 
 function ModelSelect({
@@ -1031,55 +1095,43 @@ function CouponsTab({ plans }: { plans: AdminOverview['plans'] }) {
       {error && <div className="p-3 bg-danger-light text-danger dark:text-red-300 rounded-lg text-sm">{error}</div>}
 
       <div className="glass-card">
-        {/* Mobile: stacked cards */}
+        {/* Mobile: stacked cards, mirrors desktop row shape. */}
         <ul className="md:hidden divide-y divide-border-light">
           {coupons.map((c) => {
             const status = couponStatus(c)
             return (
               <li key={c.id} className="p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <code className="font-mono text-sm break-all">{c.code}</code>
-                  <span className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded bg-black/5 dark:bg-white/10 ${statusColor(status)}`}>
-                    {status}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                  <div className="text-text-muted">Plan</div>
-                  <div className="text-end truncate">
-                    {c.plan_name_he} <span className="text-text-muted">({c.plan_id})</span>
-                  </div>
-                  <div className="text-text-muted">Days</div>
-                  <div className="text-end tabular-nums">{c.duration_days}</div>
-                  <div className="text-text-muted">Used / cap</div>
-                  <div className="text-end tabular-nums">
-                    {c.redemption_count}/{c.max_redemptions ?? '∞'}
-                  </div>
-                  <div className="text-text-muted">Valid until</div>
-                  <div className="text-end text-text-secondary">
-                    {c.valid_until ? new Date(c.valid_until).toLocaleDateString('en-GB') : '—'}
-                  </div>
-                  {c.notes && (
-                    <>
-                      <div className="text-text-muted">Notes</div>
-                      <div className="text-end text-text-secondary truncate" title={c.notes}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <code className="font-mono text-sm text-text-primary break-all">{c.code}</code>
+                    {c.notes && (
+                      <div className="text-xs text-text-muted mt-0.5 truncate" title={c.notes}>
                         {c.notes}
                       </div>
-                    </>
-                  )}
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <StatusPill label={status} tone={couponStatusTone(status)} />
+                    <CouponRowActionsMenu
+                      coupon={c}
+                      onOpenRedemptions={() => setOpenRedemptionsFor(c)}
+                      onToggle={() => handleToggle(c)}
+                    />
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => setOpenRedemptionsFor(c)}
-                    className="btn-secondary btn-sm flex-1 min-w-[120px]"
-                  >
-                    Redemptions
-                  </button>
-                  <button
-                    onClick={() => handleToggle(c)}
-                    className="btn-secondary btn-sm flex-1 min-w-[120px]"
-                  >
-                    {c.disabled_at ? 'Enable' : 'Disable'}
-                  </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <TonedPill
+                    label={c.plan_name_he || c.plan_id}
+                    tone="info"
+                    title={c.plan_id}
+                  />
+                  <span className="text-xs text-text-muted">
+                    {c.duration_days} days · {c.redemption_count}/{c.max_redemptions ?? '∞'} used
+                  </span>
+                </div>
+                <div className="text-xs text-text-muted" dir="ltr">
+                  Valid until{' '}
+                  {c.valid_until ? new Date(c.valid_until).toLocaleDateString('en-GB') : '—'}
                 </div>
               </li>
             )
@@ -1091,58 +1143,69 @@ function CouponsTab({ plans }: { plans: AdminOverview['plans'] }) {
           )}
         </ul>
 
-        {/* Desktop: table */}
+        {/* Desktop: 7-column table. Was 8 (Notes merged into Code cell). */}
         <div className="hidden md:block admin-table-wrap">
           <table className="w-full text-sm">
-            <thead className="bg-surface-soft">
+            <thead className="bg-surface-soft text-xs uppercase tracking-wide text-text-muted">
               <tr>
-                <th className="text-left p-3">Code</th>
-                <th className="text-left p-3">Plan</th>
-                <th className="text-right p-3">Days</th>
-                <th className="text-right p-3">Used / Cap</th>
-                <th className="text-left p-3">Status</th>
-                <th className="text-left p-3">Valid until</th>
-                <th className="text-left p-3">Notes</th>
-                <th className="text-right p-3">Actions</th>
+                <th className="text-start px-4 py-3 font-medium">Code</th>
+                <th className="text-start px-4 py-3 font-medium">Plan</th>
+                <th className="text-end px-4 py-3 font-medium">Days</th>
+                <th className="text-end px-4 py-3 font-medium">Used / Cap</th>
+                <th className="text-start px-4 py-3 font-medium">Status</th>
+                <th className="text-start px-4 py-3 font-medium">Valid until</th>
+                <th className="w-10 px-2 py-3" aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
               {coupons.map((c) => {
                 const status = couponStatus(c)
                 return (
-                  <tr key={c.id} className="border-t hover:bg-surface-soft">
-                    <td className="p-3 font-mono text-xs">{c.code}</td>
-                    <td className="p-3">{c.plan_name_he} <span className="text-text-muted">({c.plan_id})</span></td>
-                    <td className="p-3 text-right">{c.duration_days}</td>
-                    <td className="p-3 text-right">
-                      {c.redemption_count}/{c.max_redemptions ?? '∞'}
+                  <tr key={c.id} className="border-t border-border-light hover:bg-surface-soft/60 align-middle">
+                    <td className="px-4 py-3 min-w-0">
+                      <code className="font-mono text-xs text-text-primary">{c.code}</code>
+                      {c.notes && (
+                        <div
+                          className="text-xs text-text-muted truncate max-w-[240px] mt-0.5"
+                          title={c.notes}
+                        >
+                          {c.notes}
+                        </div>
+                      )}
                     </td>
-                    <td className="p-3">
-                      <span className={statusColor(status)}>{status}</span>
+                    <td className="px-4 py-3">
+                      <TonedPill
+                        label={c.plan_name_he || c.plan_id}
+                        tone="info"
+                        title={c.plan_id}
+                      />
                     </td>
-                    <td className="p-3 text-xs text-text-muted">
+                    <td className="px-4 py-3 text-end tabular-nums font-mono text-xs">
+                      {c.duration_days}
+                    </td>
+                    <td className="px-4 py-3 text-end tabular-nums font-mono text-xs">
+                      {c.redemption_count}
+                      <span className="text-text-muted">/{c.max_redemptions ?? '∞'}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusPill label={status} tone={couponStatusTone(status)} />
+                    </td>
+                    <td className="px-4 py-3 text-xs text-text-muted tabular-nums" dir="ltr">
                       {c.valid_until ? new Date(c.valid_until).toLocaleDateString('en-GB') : '—'}
                     </td>
-                    <td className="p-3 text-xs text-text-muted max-w-xs truncate" title={c.notes}>
-                      {c.notes || '—'}
-                    </td>
-                    <td className="p-3 text-right space-x-2">
-                      <button
-                        onClick={() => setOpenRedemptionsFor(c)}
-                        className="btn-secondary btn-sm"
-                      >
-                        Redemptions
-                      </button>
-                      <button onClick={() => handleToggle(c)} className="btn-secondary btn-sm">
-                        {c.disabled_at ? 'Enable' : 'Disable'}
-                      </button>
+                    <td className="px-2 py-3">
+                      <CouponRowActionsMenu
+                        coupon={c}
+                        onOpenRedemptions={() => setOpenRedemptionsFor(c)}
+                        onToggle={() => handleToggle(c)}
+                      />
                     </td>
                   </tr>
                 )
               })}
               {coupons.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-text-muted">
+                  <td colSpan={7} className="px-4 py-6 text-center text-text-muted">
                     No coupons yet — click "New coupon" to mint one.
                   </td>
                 </tr>
@@ -1171,15 +1234,103 @@ function couponStatus(c: AdminCouponRow): 'active' | 'disabled' | 'expired' | 'e
   return 'active'
 }
 
-function statusColor(s: string): string {
-  switch (s) {
-    case 'active': return 'text-success font-semibold'
-    case 'disabled': return 'text-text-muted'
-    case 'expired': return 'text-danger'
-    case 'exhausted': return 'text-warning'
-    case 'pending': return 'text-info'
-    default: return 'text-text-muted'
-  }
+function CouponRowActionsMenu({
+  coupon,
+  onOpenRedemptions,
+  onToggle,
+}: {
+  coupon: AdminCouponRow
+  onOpenRedemptions: () => void
+  onToggle: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const { dir } = useI18n()
+  const [pos, setPos] = useState<{ top: number; left?: number; right?: number } | null>(null)
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const btn = buttonRef.current
+    if (!btn) return
+    const rect = btn.getBoundingClientRect()
+    setPos({
+      top: rect.bottom + 4,
+      ...(dir === 'rtl'
+        ? { left: rect.left }
+        : { right: window.innerWidth - rect.right }),
+    })
+  }, [open, dir])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (buttonRef.current?.contains(t) || menuRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    const onScrollOrResize = () => setOpen(false)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onClick)
+    window.addEventListener('scroll', onScrollOrResize, true)
+    window.addEventListener('resize', onScrollOrResize)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onClick)
+      window.removeEventListener('scroll', onScrollOrResize, true)
+      window.removeEventListener('resize', onScrollOrResize)
+    }
+  }, [open])
+
+  const isDisabled = !!coupon.disabled_at
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        onClick={() => setOpen((v) => !v)}
+        className="w-8 h-8 inline-flex items-center justify-center rounded-full text-text-secondary hover:bg-surface-soft hover:text-text-primary cursor-pointer"
+        aria-label={`Actions for coupon ${coupon.code}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <MoreVerticalIcon className="w-[18px] h-[18px]" />
+      </button>
+
+      {open && pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="fixed w-44 bg-surface rounded-lg shadow-[0_8px_32px_rgb(14_19_32/0.18)] border border-border z-50 overflow-hidden"
+            style={pos}
+            role="menu"
+          >
+            <MenuItem
+              onClick={() => {
+                setOpen(false)
+                onOpenRedemptions()
+              }}
+            >
+              View redemptions
+            </MenuItem>
+            <div className="border-t border-border-light" />
+            <MenuItem
+              onClick={() => {
+                setOpen(false)
+                onToggle()
+              }}
+              danger={!isDisabled}
+            >
+              {isDisabled ? 'Re-enable' : 'Disable'}
+            </MenuItem>
+          </div>,
+          document.body,
+        )}
+    </>
+  )
 }
 
 function CouponCreateForm({
@@ -1413,48 +1564,144 @@ function UsersTab({
   return (
     <div className="glass-card admin-table-wrap">
       <table className="w-full text-sm">
-        <thead className="bg-surface-soft">
+        <thead className="bg-surface-soft text-xs uppercase tracking-wide text-text-muted">
           <tr>
-            <th className="text-left p-3">Email</th>
-            <th className="text-left p-3">Name</th>
-            <th className="text-left p-3">Phone</th>
-            <th className="text-left p-3">Role</th>
-            <th className="text-left p-3">Status</th>
-            <th className="text-right p-3">Agents</th>
-            <th className="text-left p-3">Joined</th>
-            <th className="text-right p-3">Actions</th>
+            <th className="text-start px-4 py-3 font-medium">User</th>
+            <th className="text-start px-4 py-3 font-medium">Role</th>
+            <th className="text-start px-4 py-3 font-medium">Status</th>
+            <th className="text-end px-4 py-3 font-medium">Agents</th>
+            <th className="text-start px-4 py-3 font-medium">Joined</th>
+            <th className="w-10 px-2 py-3" aria-label="Actions" />
           </tr>
         </thead>
         <tbody>
           {users.map((u) => (
-            <tr key={u.id} className="border-t hover:bg-surface-soft">
-              <td className="p-3">{u.email}</td>
-              <td className="p-3">{u.full_name || '—'}</td>
-              <td className="p-3 font-mono text-xs">{u.phone || '—'}</td>
-              <td className="p-3">
-                <span
-                  className={
-                    u.role === 'superadmin'
-                      ? 'text-purple-600 font-semibold'
-                      : 'text-text-secondary'
-                  }
-                >
-                  {u.role}
-                </span>
+            <tr key={u.id} className="border-t border-border-light hover:bg-surface-soft/60 align-middle">
+              <td className="px-4 py-3 min-w-0">
+                <div className="font-medium text-text-primary truncate max-w-[260px]" title={u.full_name || u.email}>
+                  {u.full_name || u.email}
+                </div>
+                {u.full_name && (
+                  <div className="text-xs text-text-muted truncate max-w-[260px]" title={u.email}>
+                    {u.email}
+                  </div>
+                )}
               </td>
-              <td className="p-3">{u.onboarding_status}</td>
-              <td className="p-3 text-right">{u.agent_count}</td>
-              <td className="p-3 text-xs text-text-muted">{fmtDate(u.created_at)}</td>
-              <td className="p-3 text-right">
-                <button onClick={() => onPromote(u)} className="btn-secondary btn-sm">
-                  {u.role === 'superadmin' ? 'Demote' : 'Promote'}
-                </button>
+              <td className="px-4 py-3">
+                <TonedPill label={u.role} tone={roleTone(u.role)} />
+              </td>
+              <td className="px-4 py-3">
+                <StatusPill label={u.onboarding_status} tone={onboardingTone(u.onboarding_status)} />
+              </td>
+              <td className="px-4 py-3 text-end tabular-nums font-mono text-xs">
+                {u.agent_count}
+              </td>
+              <td className="px-4 py-3 text-xs text-text-muted tabular-nums" dir="ltr">
+                {fmtDate(u.created_at)}
+              </td>
+              <td className="px-2 py-3">
+                <UserRowActionsMenu user={u} onPromote={onPromote} />
               </td>
             </tr>
           ))}
+          {users.length === 0 && (
+            <tr>
+              <td colSpan={6} className="px-4 py-6 text-center text-text-muted">
+                No users yet.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
+  )
+}
+
+function UserRowActionsMenu({
+  user,
+  onPromote,
+}: {
+  user: AdminUserRow
+  onPromote: (user: AdminUserRow) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const { dir } = useI18n()
+  const [pos, setPos] = useState<{ top: number; left?: number; right?: number } | null>(null)
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const btn = buttonRef.current
+    if (!btn) return
+    const rect = btn.getBoundingClientRect()
+    setPos({
+      top: rect.bottom + 4,
+      ...(dir === 'rtl'
+        ? { left: rect.left }
+        : { right: window.innerWidth - rect.right }),
+    })
+  }, [open, dir])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (buttonRef.current?.contains(t) || menuRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    const onScrollOrResize = () => setOpen(false)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onClick)
+    window.addEventListener('scroll', onScrollOrResize, true)
+    window.addEventListener('resize', onScrollOrResize)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onClick)
+      window.removeEventListener('scroll', onScrollOrResize, true)
+      window.removeEventListener('resize', onScrollOrResize)
+    }
+  }, [open])
+
+  const isSuperadmin = user.role === 'superadmin'
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        onClick={() => setOpen((v) => !v)}
+        className="w-8 h-8 inline-flex items-center justify-center rounded-full text-text-secondary hover:bg-surface-soft hover:text-text-primary cursor-pointer"
+        aria-label={`Actions for ${user.email}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <MoreVerticalIcon className="w-[18px] h-[18px]" />
+      </button>
+
+      {open && pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="fixed w-44 bg-surface rounded-lg shadow-[0_8px_32px_rgb(14_19_32/0.18)] border border-border z-50 overflow-hidden"
+            style={pos}
+            role="menu"
+          >
+            <MenuItem
+              onClick={() => {
+                setOpen(false)
+                onPromote(user)
+              }}
+              danger={isSuperadmin}
+            >
+              {isSuperadmin ? 'Demote to user' : 'Promote to superadmin'}
+            </MenuItem>
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }
 
@@ -3101,17 +3348,28 @@ function TenantsTab() {
                 </td>
                 <td className="p-3 text-text-primary">
                   {r.plan_id ? (
-                    <span>{r.plan_name_he || r.plan_id}</span>
+                    <TonedPill
+                      label={r.plan_name_he || r.plan_id}
+                      tone="info"
+                      title={r.plan_id}
+                    />
                   ) : (
-                    <span className="text-text-muted italic">
+                    <span className="text-text-muted italic text-xs">
                       {t({ he: 'אין תוכנית פעילה', en: 'No active plan' })}
                     </span>
                   )}
                 </td>
                 <td className="p-3 text-end tabular-nums">{r.member_count}</td>
                 <td className="p-3 text-end tabular-nums">{r.agent_count}</td>
-                <td className="p-3 text-text-primary">
-                  {r.subscription_status || '—'}
+                <td className="p-3">
+                  {r.subscription_status ? (
+                    <StatusPill
+                      label={r.subscription_status}
+                      tone={subscriptionTone(r.subscription_status)}
+                    />
+                  ) : (
+                    <span className="text-text-muted">—</span>
+                  )}
                 </td>
                 <td className="p-3 text-text-primary tabular-nums" dir="ltr">
                   {fmtDate(r.subscription_period_end)}
