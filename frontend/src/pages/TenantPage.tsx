@@ -31,6 +31,7 @@ import AuditTab from '../components/AuditTab'
 import RemindersTab from '../components/RemindersTab'
 import ProvisionProgressBar from '../components/ProvisionProgressBar'
 import VoicePicker from '../components/VoicePicker'
+import { RequiredMark } from '../components/RequiredMark'
 import { DeleteAgentModal } from '../components/DeleteAgentModal'
 import { microsToUsd } from '../lib/format'
 
@@ -640,7 +641,7 @@ function DashboardTab({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-text-secondary mb-1">
-                        {t({ he: 'שם המשתמש', en: 'User name' })}
+                        {t({ he: 'שם המשתמש — לא חובה', en: 'User name — optional' })}
                       </label>
                       <input
                         type="text"
@@ -654,7 +655,7 @@ function DashboardTab({
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-text-secondary mb-1">
-                        {t({ he: 'מגדר המשתמש', en: 'User gender' })}
+                        {t({ he: 'מגדר המשתמש — לא חובה', en: 'User gender — optional' })}
                       </label>
                       <select
                         value={newAgentUserGender}
@@ -753,6 +754,7 @@ function DashboardTab({
                   <div>
                     <label className="block text-xs font-medium text-text-secondary mb-1">
                       {t({ he: 'שם הסוכן', en: 'Agent name' })}
+                      <RequiredMark />
                     </label>
                     <input
                       type="text"
@@ -761,6 +763,8 @@ function DashboardTab({
                       placeholder={t({ he: 'שולי', en: 'e.g. Shuli' })}
                       dir={dir}
                       autoComplete="off"
+                      required
+                      aria-required="true"
                       className="input-glass w-full px-3 py-2.5 text-sm"
                     />
                   </div>
@@ -785,7 +789,7 @@ function DashboardTab({
                     even though we surface it as a default-selected choice. */}
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1">
-                    {t({ he: 'הקול של הסוכן', en: "Agent's voice" })}
+                    {t({ he: 'הקול של הסוכן — לא חובה', en: "Agent's voice — optional" })}
                   </label>
                   <p className="text-[11px] text-text-muted mb-2">
                     {t({
