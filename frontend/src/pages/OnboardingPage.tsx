@@ -4,6 +4,7 @@ import { submitOnboarding, type ProvisionProgress } from '../lib/api'
 import ProvisionProgressBar from '../components/ProvisionProgressBar'
 import StepIndicator from '../components/StepIndicator'
 import VoicePicker from '../components/VoicePicker'
+import { RequiredMark } from '../components/RequiredMark'
 import { useI18n } from '../lib/i18n'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import type { AppUser } from '../lib/types'
@@ -154,6 +155,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
           <div>
             <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
               {t({ he: 'שם מלא', en: 'Full name' })}
+              <RequiredMark />
             </label>
             <input
               value={form.full_name}
@@ -207,6 +209,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
           <div>
             <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
               {t({ he: 'מגדר', en: 'Gender' })}
+              <RequiredMark />
             </label>
             <TogglePair
               value={form.gender}
@@ -232,6 +235,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
           <div>
             <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
               {t({ he: 'שם הסוכן', en: 'Agent name' })}
+              <RequiredMark />
             </label>
             <input
               value={form.agent_name}
@@ -247,6 +251,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
           <div>
             <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
               {t({ he: 'מגדר הסוכן', en: 'Agent gender' })}
+              <RequiredMark />
             </label>
             <TogglePair
               value={form.agent_gender}
@@ -258,6 +263,7 @@ export default function OnboardingPage({ user, onComplete }: OnboardingPageProps
           <div>
             <label className="block text-[13px] font-medium text-text-secondary mb-1.5">
               {t({ he: 'הקול של הסוכן בהודעות קוליות', en: "Agent's voice for voice messages" })}
+              <RequiredMark />
             </label>
             <p className="text-[12px] text-text-secondary mb-2">
               {t({
