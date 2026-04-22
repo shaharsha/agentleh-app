@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Area,
   AreaChart,
@@ -48,6 +49,7 @@ import { useI18n } from '../lib/i18n'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import { DeleteAgentModal } from '../components/DeleteAgentModal'
 import { SwitchModelModal } from '../components/SwitchModelModal'
+import { MoreVerticalIcon } from '../components/icons'
 
 type AdminTab = 'agents' | 'users' | 'plans' | 'coupons' | 'tenants' | 'stats'
 const VALID_TABS: readonly AdminTab[] = ['agents', 'users', 'plans', 'coupons', 'tenants', 'stats']
@@ -470,129 +472,47 @@ function AgentsTab({
 
   return (
     <div className="glass-card">
-      {/* Mobile: stacked cards. Each agent renders as a self-contained
-          card with the key columns stacked, usage bar, and full-width
-          action buttons. */}
+      {/* Mobile: stacked cards, one per agent. Matches the desktop
+          information hierarchy (identity → owner → plan/model → usage
+          → status → actions) but stacks vertically for touch targets. */}
       <ul className="md:hidden divide-y divide-border-light">
         {agents.map((a) => {
           const cap = (a.base_allowance_micros || 0) + (a.overage_cap_micros || 0)
-          const pctNum =
-            a.agent_used_micros != null && cap > 0
-              ? Math.min(100, (a.agent_used_micros / cap) * 100)
-              : 0
           return (
             <li key={a.agent_id} className="p-4 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-mono text-xs break-all">{a.agent_id}</div>
-                  {a.agent_name && (
-                    <div className="text-xs text-text-muted mt-0.5 truncate">
-                      {a.agent_name}
-                    </div>
-                  )}
-                </div>
-                <span
-                  className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded ${
-                    a.subscription_status === 'active'
-                      ? 'bg-success-light text-success dark:text-green-300'
-                      : a.subscription_status === 'exhausted'
-                        ? 'bg-danger-light text-danger dark:text-red-300'
-                        : 'bg-surface-soft text-text-secondary dark:text-gray-300'
-                  }`}
-                >
-                  {a.subscription_status || 'none'}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                <div className="text-text-muted">Tenant owner</div>
-                <div className="text-end truncate">
-                  {a.user_email || '—'}
-                </div>
-                <div className="text-text-muted">Created by</div>
-                <div className="text-end truncate">
-                  {a.created_by_email || <span className="text-text-muted">—</span>}
-                </div>
-                <div className="text-text-muted">Plan</div>
-                <div className="text-end truncate">
-                  {a.plan_name_he || '—'}
-                </div>
-                <div className="text-text-muted">Used / cap</div>
-                <div className="text-end font-mono tabular-nums">
-                  {fmtUsd(a.agent_used_micros)} / {fmtUsd(cap || null)}
-                </div>
-                <div className="text-text-muted">Usage</div>
-                <div className="text-end tabular-nums">
-                  {pct(a.agent_used_micros, cap || null)}
-                </div>
-                <div className="text-text-muted">Model</div>
-                <div className="text-end">
-                  <select
-                    value={a.model ?? 'google/gemini-3-flash-preview'}
-                    onChange={(e) =>
-                      onSwitchModel(a.agent_id, a.model, e.target.value as AgentModel)
-                    }
-                    className="text-xs bg-surface border border-border rounded px-2 py-1 w-full max-w-[160px]"
-                    aria-label={`Chat model for ${a.agent_id}`}
-                  >
-                    {MODEL_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {cap > 0 && (
-                <div className="h-1.5 rounded-full bg-surface-soft dark:bg-white/10 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${
-                      pctNum >= 90 ? 'bg-danger' : pctNum >= 70 ? 'bg-warning' : 'bg-brand'
-                    }`}
-                    style={{ width: `${pctNum}%` }}
+              <div className="flex items-start justify-between gap-2">
+                <AgentIdentity agentId={a.agent_id} agentName={a.agent_name} />
+                <div className="flex items-center gap-1 shrink-0">
+                  <StatusPill status={a.subscription_status} />
+                  <RowActionsMenu
+                    agent={a}
+                    onSelect={onSelect}
+                    onRotateKey={onRotateKey}
+                    onGrantPlan={() => a.tenant_id != null && setGrantTenantId(a.tenant_id)}
+                    onDelete={onDelete}
                   />
                 </div>
-              )}
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => onSelect(a.agent_id)}
-                  className="btn-secondary btn-sm flex-1 min-w-[100px]"
-                >
-                  Details
-                </button>
-                <button
-                  onClick={() => onRotateKey(a.agent_id)}
-                  className="btn-secondary btn-sm flex-1 min-w-[100px]"
-                >
-                  Rotate key
-                </button>
-                {a.tenant_id != null && (
-                  <button
-                    onClick={() => setGrantTenantId(a.tenant_id)}
-                    className="btn-secondary btn-sm flex-1 min-w-[100px]"
-                  >
-                    Grant plan
-                  </button>
-                )}
-                {/* Danger action last, visually distinct. Disabled when
-                    tenant_id is null (legacy rows) — the confirm handler
-                    rejects them anyway but graying out avoids a misleading
-                    click. */}
-                <button
-                  onClick={() => onDelete(a.agent_id, a.tenant_id, a.agent_name)}
-                  disabled={a.tenant_id == null}
-                  className="btn-sm flex-1 min-w-[100px] text-danger border border-danger/30 rounded-lg hover:bg-danger-light disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={
-                    a.tenant_id == null
-                      ? 'Legacy row without tenant_id — delete via VM CLI'
-                      : 'Delete agent'
-                  }
-                >
-                  Delete
-                </button>
               </div>
+
+              <div className="text-xs text-text-secondary truncate">
+                <bdi>{a.user_email || <span className="text-text-muted">—</span>}</bdi>
+                {a.created_by_email && a.created_by_email !== a.user_email && (
+                  <span className="text-text-muted">
+                    {' '}· created by <bdi>{a.created_by_email}</bdi>
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <PlanPill name={a.plan_name_he} />
+                <ModelSelect
+                  agent={a}
+                  onSwitchModel={onSwitchModel}
+                  className="flex-1 min-w-[140px]"
+                />
+              </div>
+
+              <UsageCell used={a.agent_used_micros} cap={cap} />
             </li>
           )
         })}
@@ -601,112 +521,66 @@ function AgentsTab({
         )}
       </ul>
 
-      {/* Desktop: traditional table. Scrolls horizontally on small tablets
-          via admin-table-wrap (up to md, switchover). */}
+      {/* Desktop: 6-column table. Was 10 columns; consolidated:
+          - Tenant owner + Created by → single Owner cell (creator shown
+            only when it differs from the tenant owner)
+          - Used / Cap / % → single Usage cell with inline progress bar
+          - Four stacked action buttons → one kebab menu
+          This fits comfortably on a laptop without horizontal scroll. */}
       <div className="hidden md:block admin-table-wrap">
         <table className="w-full text-sm">
-          <thead className="bg-surface-soft">
+          <thead className="bg-surface-soft text-xs uppercase tracking-wide text-text-muted">
             <tr>
-              <th className="text-left p-3">Agent</th>
-              <th className="text-left p-3">Tenant owner</th>
-              <th className="text-left p-3">Created by</th>
-              <th className="text-left p-3">Plan</th>
-              <th className="text-left p-3">Model</th>
-              <th className="text-right p-3">Used</th>
-              <th className="text-right p-3">Cap</th>
-              <th className="text-right p-3">%</th>
-              <th className="text-left p-3">Status</th>
-              <th className="text-right p-3">Actions</th>
+              <th className="text-start px-4 py-3 font-medium">Agent</th>
+              <th className="text-start px-4 py-3 font-medium">Owner</th>
+              <th className="text-start px-4 py-3 font-medium">Plan</th>
+              <th className="text-start px-4 py-3 font-medium">Model</th>
+              <th className="text-start px-4 py-3 font-medium">Usage</th>
+              <th className="text-start px-4 py-3 font-medium">Status</th>
+              <th className="w-10 px-2 py-3" aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
             {agents.map((a) => {
               const cap = (a.base_allowance_micros || 0) + (a.overage_cap_micros || 0)
               return (
-                <tr key={a.agent_id} className="border-t hover:bg-surface-soft">
-                  <td className="p-3 font-mono text-xs">
-                    <div>{a.agent_id}</div>
-                    {a.agent_name && (
-                      <div className="text-text-muted">({a.agent_name})</div>
-                    )}
+                <tr key={a.agent_id} className="border-t border-border-light hover:bg-surface-soft/60 align-middle">
+                  <td className="px-4 py-3">
+                    <AgentIdentity agentId={a.agent_id} agentName={a.agent_name} />
                   </td>
-                  <td className="p-3">
-                    {a.user_email || <span className="text-text-muted">—</span>}
-                  </td>
-                  <td className="p-3">
-                    {a.created_by_email || <span className="text-text-muted">—</span>}
-                  </td>
-                  <td className="p-3">
-                    {a.plan_name_he || <span className="text-text-muted">—</span>}
-                  </td>
-                  <td className="p-3">
-                    <select
-                      value={a.model ?? 'google/gemini-3-flash-preview'}
-                      onChange={(e) =>
-                        onSwitchModel(a.agent_id, a.model, e.target.value as AgentModel)
-                      }
-                      className="text-xs bg-surface border border-border rounded px-2 py-1"
-                      aria-label={`Chat model for ${a.agent_id}`}
-                    >
-                      {MODEL_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                    {a.model == null && (
-                      <div className="text-[10px] text-text-muted mt-0.5">inherits default</div>
-                    )}
-                  </td>
-                  <td className="p-3 text-right font-mono">{fmtUsd(a.agent_used_micros)}</td>
-                  <td className="p-3 text-right font-mono">{fmtUsd(cap || null)}</td>
-                  <td className="p-3 text-right">{pct(a.agent_used_micros, cap || null)}</td>
-                  <td className="p-3">
-                    <span
-                      className={
-                        a.subscription_status === 'active'
-                          ? 'text-success'
-                          : a.subscription_status === 'exhausted'
-                            ? 'text-danger'
-                            : 'text-text-muted'
-                      }
-                    >
-                      {a.subscription_status || 'none'}
-                    </span>
-                  </td>
-                  <td className="p-3 text-right space-x-2">
-                    <button
-                      onClick={() => onSelect(a.agent_id)}
-                      className="btn-secondary btn-sm"
-                    >
-                      Details
-                    </button>
-                    <button
-                      onClick={() => onRotateKey(a.agent_id)}
-                      className="btn-secondary btn-sm"
-                    >
-                      Rotate key
-                    </button>
-                    {a.tenant_id != null && (
-                      <button
-                        onClick={() => setGrantTenantId(a.tenant_id)}
-                        className="btn-secondary btn-sm"
+                  <td className="px-4 py-3 min-w-0">
+                    <div className="text-sm text-text-primary truncate max-w-[220px]" title={a.user_email || ''}>
+                      <bdi>{a.user_email || <span className="text-text-muted">—</span>}</bdi>
+                    </div>
+                    {a.created_by_email && a.created_by_email !== a.user_email && (
+                      <div
+                        className="text-xs text-text-muted truncate max-w-[220px]"
+                        title={`Provisioned by ${a.created_by_email}`}
                       >
-                        Grant plan
-                      </button>
+                        via <bdi>{a.created_by_email}</bdi>
+                      </div>
                     )}
-                    <button
-                      onClick={() => onDelete(a.agent_id, a.tenant_id, a.agent_name)}
-                      disabled={a.tenant_id == null}
-                      className="btn-sm text-danger border border-danger/30 rounded hover:bg-danger-light disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={
-                        a.tenant_id == null
-                          ? 'Legacy row without tenant_id — delete via VM CLI'
-                          : 'Delete agent'
-                      }
-                    >
-                      Delete
-                    </button>
+                  </td>
+                  <td className="px-4 py-3">
+                    <PlanPill name={a.plan_name_he} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <ModelSelect agent={a} onSwitchModel={onSwitchModel} />
+                  </td>
+                  <td className="px-4 py-3 min-w-[200px]">
+                    <UsageCell used={a.agent_used_micros} cap={cap} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusPill status={a.subscription_status} />
+                  </td>
+                  <td className="px-2 py-3">
+                    <RowActionsMenu
+                      agent={a}
+                      onSelect={onSelect}
+                      onRotateKey={onRotateKey}
+                      onGrantPlan={() => a.tenant_id != null && setGrantTenantId(a.tenant_id)}
+                      onDelete={onDelete}
+                    />
                   </td>
                 </tr>
               )
@@ -727,6 +601,299 @@ function AgentsTab({
         />
       )}
     </div>
+  )
+}
+
+// ─── AgentsTab sub-components ─────────────────────────────────────────
+// These exist only to keep the AgentsTab row shape readable. They carry
+// no state beyond their own menu-open flag (RowActionsMenu), and take
+// plain props so the render logic stays trivial to follow.
+
+function AgentIdentity({
+  agentId,
+  agentName,
+}: {
+  agentId: string
+  agentName: string | null
+}) {
+  return (
+    <div className="min-w-0 max-w-[200px]">
+      <div
+        className="font-mono text-xs text-text-primary truncate"
+        title={agentId}
+      >
+        {agentId}
+      </div>
+      {agentName && (
+        <div
+          className="text-xs text-text-muted truncate mt-0.5"
+          title={agentName}
+        >
+          <bdi>{agentName}</bdi>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PlanPill({ name }: { name: string | null }) {
+  if (!name) return <span className="text-text-muted text-sm">—</span>
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-brand/10 text-brand text-xs font-medium whitespace-nowrap">
+      <bdi>{name}</bdi>
+    </span>
+  )
+}
+
+function StatusPill({ status }: { status: string | null }) {
+  const s = status || 'none'
+  const { dotClass, textClass } = (() => {
+    if (s === 'active') return { dotClass: 'bg-success', textClass: 'text-success' }
+    if (s === 'exhausted') return { dotClass: 'bg-danger', textClass: 'text-danger' }
+    if (s === 'paused') return { dotClass: 'bg-warning', textClass: 'text-warning' }
+    return { dotClass: 'bg-text-muted', textClass: 'text-text-muted' }
+  })()
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap">
+      <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} aria-hidden="true" />
+      <span className={textClass}>{s}</span>
+    </span>
+  )
+}
+
+function ModelSelect({
+  agent,
+  onSwitchModel,
+  className = '',
+}: {
+  agent: AdminAgentRow
+  onSwitchModel: (id: string, current: string | null, next: AgentModel) => void
+  className?: string
+}) {
+  const isDefault = agent.model == null
+  return (
+    <select
+      value={agent.model ?? 'google/gemini-3-flash-preview'}
+      onChange={(e) =>
+        onSwitchModel(agent.agent_id, agent.model, e.target.value as AgentModel)
+      }
+      className={`text-xs bg-surface border border-border rounded-md px-2 py-1 ${
+        isDefault ? 'italic text-text-secondary' : ''
+      } ${className}`}
+      title={isDefault ? 'Inherits system default' : undefined}
+      aria-label={`Chat model for ${agent.agent_id}`}
+    >
+      {MODEL_OPTIONS.map((opt) => (
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function UsageCell({ used, cap }: { used: number | null; cap: number }) {
+  const pctNum =
+    used != null && cap > 0 ? Math.min(100, (used / cap) * 100) : 0
+  const barColor =
+    pctNum >= 90 ? 'bg-danger' : pctNum >= 70 ? 'bg-warning' : 'bg-brand'
+  const pctColor =
+    pctNum >= 90 ? 'text-danger' : pctNum >= 70 ? 'text-warning' : 'text-text-secondary'
+
+  return (
+    <div className="min-w-[160px]">
+      <div className="flex items-baseline justify-between gap-2 tabular-nums">
+        <span className="font-mono text-xs text-text-primary">
+          {fmtUsd(used)}
+          <span className="text-text-muted"> / {fmtUsd(cap || null)}</span>
+        </span>
+        <span className={`text-xs font-medium ${pctColor}`}>
+          {pct(used, cap || null)}
+        </span>
+      </div>
+      {cap > 0 && (
+        <div className="mt-1.5 h-1 rounded-full bg-surface-soft dark:bg-white/10 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${barColor}`}
+            style={{ width: `${pctNum}%` }}
+            role="progressbar"
+            aria-valuenow={Math.round(pctNum)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RowActionsMenu({
+  agent,
+  onSelect,
+  onRotateKey,
+  onGrantPlan,
+  onDelete,
+}: {
+  agent: AdminAgentRow
+  onSelect: (id: string) => void
+  onRotateKey: (id: string) => void
+  onGrantPlan: () => void
+  onDelete: (id: string, tenantId: number | null, agentName: string | null) => void
+}) {
+  const { dir } = useI18n()
+  const [open, setOpen] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; left?: number; right?: number } | null>(null)
+
+  // The menu renders through a portal to document.body so it can escape
+  // the table's `overflow-x: auto` clipping. Position is computed from
+  // the trigger's bounding rect on open, then pinned via `position: fixed`.
+  // Scroll / resize close it — a floating menu that drifts away from its
+  // anchor is worse than one that closes.
+  useLayoutEffect(() => {
+    if (!open) return
+    const btn = buttonRef.current
+    if (!btn) return
+    const rect = btn.getBoundingClientRect()
+    setPos({
+      top: rect.bottom + 4,
+      ...(dir === 'rtl'
+        ? { left: rect.left }
+        : { right: window.innerWidth - rect.right }),
+    })
+  }, [open, dir])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (
+        buttonRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
+        return
+      }
+      setOpen(false)
+    }
+    const onScrollOrResize = () => setOpen(false)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onClick)
+    // Capture phase: catches scroll inside the table wrap too.
+    window.addEventListener('scroll', onScrollOrResize, true)
+    window.addEventListener('resize', onScrollOrResize)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onClick)
+      window.removeEventListener('scroll', onScrollOrResize, true)
+      window.removeEventListener('resize', onScrollOrResize)
+    }
+  }, [open])
+
+  const deletable = agent.tenant_id != null
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        onClick={() => setOpen((v) => !v)}
+        className="w-8 h-8 inline-flex items-center justify-center rounded-full text-text-secondary hover:bg-surface-soft hover:text-text-primary cursor-pointer"
+        aria-label={`Actions for ${agent.agent_id}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <MoreVerticalIcon className="w-[18px] h-[18px]" />
+      </button>
+
+      {open && pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="fixed w-44 bg-surface rounded-lg shadow-[0_8px_32px_rgb(14_19_32/0.18)] border border-border z-50 overflow-hidden"
+            style={pos}
+            role="menu"
+          >
+            <MenuItem
+              onClick={() => {
+                setOpen(false)
+                onSelect(agent.agent_id)
+              }}
+            >
+              Details
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setOpen(false)
+                onRotateKey(agent.agent_id)
+              }}
+            >
+              Rotate key
+            </MenuItem>
+            {agent.tenant_id != null && (
+              <MenuItem
+                onClick={() => {
+                  setOpen(false)
+                  onGrantPlan()
+                }}
+              >
+                Grant plan
+              </MenuItem>
+            )}
+            <div className="border-t border-border-light" />
+            <MenuItem
+              onClick={() => {
+                setOpen(false)
+                onDelete(agent.agent_id, agent.tenant_id, agent.agent_name)
+              }}
+              disabled={!deletable}
+              danger
+              title={
+                deletable
+                  ? undefined
+                  : 'Legacy row without tenant_id — delete via VM CLI'
+              }
+            >
+              Delete
+            </MenuItem>
+          </div>,
+          document.body,
+        )}
+    </>
+  )
+}
+
+function MenuItem({
+  children,
+  onClick,
+  disabled = false,
+  danger = false,
+  title,
+}: {
+  children: React.ReactNode
+  onClick: () => void
+  disabled?: boolean
+  danger?: boolean
+  title?: string
+}) {
+  const base =
+    'w-full text-start px-3 py-2 text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
+  const variant = danger
+    ? 'text-danger hover:bg-danger/10'
+    : 'text-text-primary hover:bg-surface-soft'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      role="menuitem"
+      className={`${base} ${variant}`}
+    >
+      {children}
+    </button>
   )
 }
 

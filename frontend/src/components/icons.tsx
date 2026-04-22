@@ -181,6 +181,17 @@ export function XIcon(props: IconProps) {
   )
 }
 
+/** Three vertical dots — row-level actions menu trigger. */
+export function MoreVerticalIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="5" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="12" cy="19" r="1" />
+    </Icon>
+  )
+}
+
 /** Plus — "add new workspace" affordance inside the mobile drawer. */
 export function PlusIcon(props: IconProps) {
   return (
