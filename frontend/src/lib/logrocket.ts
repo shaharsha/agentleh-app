@@ -20,10 +20,6 @@ export function initLogRocket(): void {
   if (!appId) return
 
   LogRocket.init(appId, {
-    dom: {
-      inputSanitizer: true,
-      textSanitizer: true,
-    },
     network: {
       requestSanitizer: (request) => {
         redactHeader(request.headers, 'Authorization')
