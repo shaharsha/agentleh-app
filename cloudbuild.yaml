@@ -4,7 +4,7 @@ substitutions:
   _VITE_SUPABASE_URL: https://hizznfloknpqtznywwsj.supabase.co
   _VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpenpuZmxva25wcXR6bnl3d3NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDcwOTQsImV4cCI6MjA5MTEyMzA5NH0.WBH7xyzxwjG_YaUhTgoPkxxmRNmmok8QQdO2MrAdvec
   _VITE_LANDING_URL: https://agentiko.io
-  _VITE_LOGROCKET_APP_ID: ntxmkj/agentleh-prod
+  _VITE_LOGROCKET_APP_ID: agentleh/agentleh-prod-habge
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
