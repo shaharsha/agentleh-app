@@ -69,6 +69,7 @@ jobs:
             echo "vite_supabase_url=https://hizznfloknpqtznywwsj.supabase.co" >> "$GITHUB_OUTPUT"
             echo "vite_supabase_anon_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpenpuZmxva25wcXR6bnl3d3NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDcwOTQsImV4cCI6MjA5MTEyMzA5NH0.WBH7xyzxwjG_YaUhTgoPkxxmRNmmok8QQdO2MrAdvec" >> "$GITHUB_OUTPUT"
             echo "vite_landing_url=https://agentiko.io" >> "$GITHUB_OUTPUT"
+            echo "vite_logrocket_app_id=ntxmkj/agentleh-prod" >> "$GITHUB_OUTPUT"
             echo "meter_base_url=https://agentleh-meter-110274053287.europe-west3.run.app" >> "$GITHUB_OUTPUT"
             echo "vm_stats_url=http://10.10.0.2:9100/stats" >> "$GITHUB_OUTPUT"
             echo "google_oauth_redirect_uri=https://app.agentiko.io/api/oauth/google/callback" >> "$GITHUB_OUTPUT"
@@ -89,6 +90,7 @@ jobs:
             echo "vite_supabase_url=https://mnetqtjwcdunznvvfaob.supabase.co" >> "$GITHUB_OUTPUT"
             echo "vite_supabase_anon_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1uZXRxdGp3Y2R1bnpudnZmYW9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDc0NTMsImV4cCI6MjA5MTEyMzQ1M30.QdtX_YczXzokSS6vfqDcMFGQcZFPCmgT4Arspvb8I8c" >> "$GITHUB_OUTPUT"
             echo "vite_landing_url=https://dev.agentiko.io" >> "$GITHUB_OUTPUT"
+            echo "vite_logrocket_app_id=ntxmkj/agentleh-dev" >> "$GITHUB_OUTPUT"
             echo "meter_base_url=https://agentleh-meter-dev-110274053287.europe-west3.run.app" >> "$GITHUB_OUTPUT"
             echo "vm_stats_url=http://10.10.0.3:9100/stats" >> "$GITHUB_OUTPUT"
             echo "google_oauth_redirect_uri=https://app-dev.agentiko.io/api/oauth/google/callback" >> "$GITHUB_OUTPUT"
@@ -147,7 +149,7 @@ jobs:
             --config=cloudbuild.yaml \
             --region=europe-west3 \
             --suppress-logs \
-            --substitutions=_TAG="${{ steps.tag.outputs.tag }}",_SERVICE="${{ steps.env.outputs.service }}",_VITE_SUPABASE_URL="${{ steps.env.outputs.vite_supabase_url }}",_VITE_SUPABASE_ANON_KEY="${{ steps.env.outputs.vite_supabase_anon_key }}",_VITE_LANDING_URL="${{ steps.env.outputs.vite_landing_url }}" \
+            --substitutions=_TAG="${{ steps.tag.outputs.tag }}",_SERVICE="${{ steps.env.outputs.service }}",_VITE_SUPABASE_URL="${{ steps.env.outputs.vite_supabase_url }}",_VITE_SUPABASE_ANON_KEY="${{ steps.env.outputs.vite_supabase_anon_key }}",_VITE_LANDING_URL="${{ steps.env.outputs.vite_landing_url }}",_VITE_LOGROCKET_APP_ID="${{ steps.env.outputs.vite_logrocket_app_id }}" \
             .
 
       - name: Deploy to Cloud Run

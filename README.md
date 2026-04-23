@@ -25,7 +25,7 @@ cd frontend && npm install && cd ..     # Frontend
 uv run dev                              # Backend (8000) + frontend (5173)
 ```
 
-`frontend/.env` needs `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_LANDING_URL`. Backend needs `DATABASE_URL`, `APP_METER_BASE_URL`, `APP_METER_ADMIN_TOKEN`, `RESEND_API_KEY`, and by default `AGENTLEH_PROVISIONER=mock` (use `vm` against a real VM).
+`frontend/.env` needs `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_LANDING_URL`, `VITE_LOGROCKET_APP_ID`. Backend needs `DATABASE_URL`, `APP_METER_BASE_URL`, `APP_METER_ADMIN_TOKEN`, `RESEND_API_KEY`, and by default `AGENTLEH_PROVISIONER=mock` (use `vm` against a real VM).
 
 ## Deploy
 
