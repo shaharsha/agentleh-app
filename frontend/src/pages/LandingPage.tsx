@@ -223,6 +223,7 @@ function EmailForm({ mode }: { mode: 'login' | 'signup' }) {
       <input
         name="password"
         type="password"
+        data-private
         placeholder={t({ he: 'סיסמה', en: 'Password' })}
         required
         minLength={6}
