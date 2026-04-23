@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { getMe } from './lib/api'
 import { useI18n } from './lib/i18n'
+import { identifyUser } from './lib/logrocket'
 import type { AppUser } from './lib/types'
 import type { Session } from '@supabase/supabase-js'
 import LandingPage from './pages/LandingPage'
@@ -87,6 +88,7 @@ export default function App() {
     try {
       const me = await getMe()
       setUser(me)
+      identifyUser(me)
       // First-load tenant resolution: URL wins, then LS, then default.
       const current = parseRoute(window.location.pathname)
       if (current.kind === 'tenant' && current.tenantId) {

@@ -175,7 +175,7 @@ uv run dev                     # Backend (8000) + frontend (5173)
 
 Required env vars when running standalone:
 
-- `frontend/.env`: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_LANDING_URL`
+- `frontend/.env`: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_LANDING_URL`, `VITE_LOGROCKET_APP_ID`
 - Backend: `DATABASE_URL`, `APP_METER_BASE_URL`, `APP_METER_ADMIN_TOKEN`, `APP_VM_STATS_URL` (+ `APP_VM_STATS_TOKEN` if set), `RESEND_API_KEY`, `AGENTLEH_PROVISIONER=mock` (default) or `vm`
 
 Supabase JWT verification is keyless (reads the project's JWKS on startup); no `APP_SUPABASE_JWT_SECRET` needed. Point `VITE_SUPABASE_URL` at a real project and the backend will fetch the matching JWKS on first request.

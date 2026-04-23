@@ -26,6 +26,7 @@ RUN cd frontend && npm ci --production=false 2>/dev/null || cd frontend && npm i
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 ARG VITE_LANDING_URL
+ARG VITE_LOGROCKET_APP_ID
 COPY frontend/ ./frontend/
 RUN cd frontend && npm run build
 
