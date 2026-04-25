@@ -745,13 +745,15 @@ async def admin_vm_stats(
     )
 
     # 24h totals: requests, tokens, search queries, cost — split by kind so the
-    # frontend can show "LLM vs Search" without re-aggregating.
+    # frontend can show "LLM vs Search vs TTS vs STT" without re-aggregating.
     today_totals = db._fetch_one(
         """
         SELECT
             COUNT(*)                                                                AS requests,
             COUNT(*) FILTER (WHERE kind = 'llm')                                    AS llm_requests,
             COUNT(*) FILTER (WHERE kind = 'search')                                 AS search_requests,
+            COUNT(*) FILTER (WHERE kind = 'tts')                                    AS tts_requests,
+            COUNT(*) FILTER (WHERE kind = 'stt')                                    AS stt_requests,
             COUNT(*) FILTER (WHERE kind = 'embedding')                              AS embedding_requests,
             COALESCE(SUM(input_tokens), 0)::bigint                                  AS input_tokens,
             COALESCE(SUM(output_tokens), 0)::bigint                                 AS output_tokens,
@@ -760,6 +762,8 @@ async def admin_vm_stats(
             COALESCE(SUM(cost_micros), 0)::bigint                                   AS cost_micros,
             COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'llm'), 0)::bigint       AS llm_cost_micros,
             COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'search'), 0)::bigint    AS search_cost_micros,
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'tts'), 0)::bigint       AS tts_cost_micros,
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'stt'), 0)::bigint       AS stt_cost_micros,
             COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'embedding'), 0)::bigint AS embedding_cost_micros
         FROM usage_events
         WHERE ts > now() - interval '24 hours'
@@ -773,9 +777,13 @@ async def admin_vm_stats(
             date_trunc('hour', ts) AS hour,
             COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'llm'),       0)::bigint AS llm_cost_micros,
             COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'search'),    0)::bigint AS search_cost_micros,
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'tts'),       0)::bigint AS tts_cost_micros,
+            COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'stt'),       0)::bigint AS stt_cost_micros,
             COALESCE(SUM(cost_micros) FILTER (WHERE kind = 'embedding'), 0)::bigint AS embedding_cost_micros,
             COUNT(*) FILTER (WHERE kind = 'llm')                                    AS llm_events,
             COUNT(*) FILTER (WHERE kind = 'search')                                 AS search_events,
+            COUNT(*) FILTER (WHERE kind = 'tts')                                    AS tts_events,
+            COUNT(*) FILTER (WHERE kind = 'stt')                                    AS stt_events,
             COUNT(*) FILTER (WHERE kind = 'embedding')                              AS embedding_events
         FROM usage_events
         WHERE ts > now() - interval '24 hours'

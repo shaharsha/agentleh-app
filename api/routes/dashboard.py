@@ -240,6 +240,7 @@ async def tenant_usage(
                 "llm_micros": 0,
                 "search_micros": 0,
                 "tts_micros": 0,
+                "stt_micros": 0,
                 "embedding_micros": 0,
                 "event_count": 0,
             }

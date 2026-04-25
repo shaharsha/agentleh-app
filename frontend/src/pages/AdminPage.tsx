@@ -1864,6 +1864,8 @@ interface VmStatsResponse {
     requests: number
     llm_requests: number
     search_requests: number
+    tts_requests: number
+    stt_requests: number
     embedding_requests: number
     input_tokens: number
     output_tokens: number
@@ -1872,15 +1874,21 @@ interface VmStatsResponse {
     cost_micros: number
     llm_cost_micros: number
     search_cost_micros: number
+    tts_cost_micros: number
+    stt_cost_micros: number
     embedding_cost_micros: number
   } | null
   cost_by_kind_per_hour: Array<{
     hour: string
     llm_cost_micros: number
     search_cost_micros: number
+    tts_cost_micros: number
+    stt_cost_micros: number
     embedding_cost_micros: number
     llm_events: number
     search_events: number
+    tts_events: number
+    stt_events: number
     embedding_events: number
   }>
   tokens_per_hour: Array<{
@@ -1891,7 +1899,7 @@ interface VmStatsResponse {
   }>
   model_breakdown_7d: Array<{
     model: string
-    kind: 'llm' | 'search' | 'tts' | 'embedding'
+    kind: 'llm' | 'search' | 'tts' | 'stt' | 'embedding'
     events: number
     cost_micros: number
     total_tokens: number
@@ -2440,7 +2448,8 @@ const CHART_COLORS = {
   containers: '#10b981',  // green  — VM containers
   llm: '#3b82f6',         // blue   — LLM / chat / input tokens
   search: '#10b981',      // green  — grounding search
-  tts: '#f59e0b',         // amber  — voice / TTS
+  tts: '#f59e0b',         // amber  — voice / TTS (outgoing voice)
+  stt: '#14b8a6',         // teal   — transcription / STT (incoming voice)
   embedding: '#ec4899',   // pink   — memory-search embeddings
   output: '#8b5cf6',      // purple — output tokens
   cached: '#f59e0b',      // amber  — cached tokens
@@ -2564,9 +2573,9 @@ function TodayUsageTotals({ totals }: { totals: VmStatsResponse['today_totals'] 
         <UsageTile
           label="Cost"
           value={fmtUsdMicros(totals.cost_micros, 3)}
-          sub={`${fmtUsdMicros(totals.llm_cost_micros, 3)} LLM · ${fmtUsdMicros(totals.search_cost_micros, 3)} search · ${fmtUsdMicros(totals.embedding_cost_micros, 3)} embed · ${llmShare}% LLM`}
+          sub={`${fmtUsdMicros(totals.llm_cost_micros, 3)} LLM · ${fmtUsdMicros(totals.search_cost_micros, 3)} search · ${fmtUsdMicros(totals.tts_cost_micros, 3)} TTS · ${fmtUsdMicros(totals.stt_cost_micros, 3)} STT · ${fmtUsdMicros(totals.embedding_cost_micros, 3)} embed · ${llmShare}% LLM`}
           accent="#ef4444"
-          info="Total cost across all agents in the last 24h, billed by the upstream Google API and recorded by agentleh-meter. Split by kind in the sub-line."
+          info="Total cost across all agents in the last 24h, billed by the upstream (Gemini for LLM/search/embed, Cloud TTS for voice, ElevenLabs for STT) and recorded by agentleh-meter. Split by kind in the sub-line."
         />
       </div>
     </div>
@@ -2585,23 +2594,31 @@ function CostByKindChart({ hours }: { hours: VmStatsResponse['cost_by_kind_per_h
     hour: fmtHourOnly(h.hour),
     llm: Number(h.llm_cost_micros) / 1_000_000,
     search: Number(h.search_cost_micros) / 1_000_000,
+    tts: Number(h.tts_cost_micros) / 1_000_000,
+    stt: Number(h.stt_cost_micros) / 1_000_000,
     embedding: Number(h.embedding_cost_micros) / 1_000_000,
   }))
   const totalLlm = data.reduce((a, b) => a + b.llm, 0)
   const totalSearch = data.reduce((a, b) => a + b.search, 0)
+  const totalTts = data.reduce((a, b) => a + b.tts, 0)
+  const totalStt = data.reduce((a, b) => a + b.stt, 0)
   const totalEmbedding = data.reduce((a, b) => a + b.embedding, 0)
   return (
     <div className="glass-card p-6">
       <div className="flex items-baseline justify-between mb-3">
         <div className="flex items-baseline gap-2">
           <h3 className="text-base font-semibold">Cost by kind — last 24h</h3>
-          <InfoTip text="Per-hour stacked cost split between LLM (chat completions, per-token), grounding search (per-query, ~$14/1k on Gemini 3), and memory-search embeddings (per-token on gemini-embedding-001, ~$0.15/Mtok). Grounding search is usually the biggest cost lever." />
+          <InfoTip text="Per-hour stacked cost split between LLM (chat completions, per-token), grounding search (per-query, ~$14/1k on Gemini 3), TTS (voice synthesis, per-character on Gemini-TTS), STT (voice transcription, per-second on ElevenLabs Scribe v2), and memory-search embeddings. Grounding search is usually the biggest cost lever." />
         </div>
         <div className="text-xs text-text-secondary">
           <span className="font-mono font-semibold" style={{ color: CHART_COLORS.llm }}>${totalLlm.toFixed(4)}</span>
           {' '}LLM ·{' '}
           <span className="font-mono font-semibold" style={{ color: CHART_COLORS.search }}>${totalSearch.toFixed(4)}</span>
           {' '}search ·{' '}
+          <span className="font-mono font-semibold" style={{ color: CHART_COLORS.tts }}>${totalTts.toFixed(4)}</span>
+          {' '}TTS ·{' '}
+          <span className="font-mono font-semibold" style={{ color: CHART_COLORS.stt }}>${totalStt.toFixed(4)}</span>
+          {' '}STT ·{' '}
           <span className="font-mono font-semibold" style={{ color: CHART_COLORS.embedding }}>${totalEmbedding.toFixed(4)}</span>
           {' '}embed
         </div>
@@ -2628,6 +2645,8 @@ function CostByKindChart({ hours }: { hours: VmStatsResponse['cost_by_kind_per_h
           <Legend wrapperStyle={legendStyle} iconType="circle" />
           <Bar dataKey="llm" name="LLM" stackId="cost" fill={CHART_COLORS.llm} maxBarSize={48} isAnimationActive={false} />
           <Bar dataKey="search" name="Search" stackId="cost" fill={CHART_COLORS.search} maxBarSize={48} isAnimationActive={false} />
+          <Bar dataKey="tts" name="TTS" stackId="cost" fill={CHART_COLORS.tts} maxBarSize={48} isAnimationActive={false} />
+          <Bar dataKey="stt" name="STT" stackId="cost" fill={CHART_COLORS.stt} maxBarSize={48} isAnimationActive={false} />
           <Bar dataKey="embedding" name="Embedding" stackId="cost" fill={CHART_COLORS.embedding} radius={[4, 4, 0, 0]} maxBarSize={48} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
@@ -2775,6 +2794,7 @@ function ModelBreakdownCard({ rows }: { rows: VmStatsResponse['model_breakdown_7
                 fill={
                   row.kind === 'search' ? CHART_COLORS.search
                   : row.kind === 'tts' ? CHART_COLORS.tts
+                  : row.kind === 'stt' ? CHART_COLORS.stt
                   : row.kind === 'embedding' ? CHART_COLORS.embedding
                   : CHART_COLORS.llm
                 }
@@ -2808,8 +2828,18 @@ function ModelBreakdownCard({ rows }: { rows: VmStatsResponse['model_breakdown_7
                 <span
                   className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide"
                   style={{
-                    background: m.kind === 'search' ? '#dcfce7' : '#dbeafe',
-                    color: m.kind === 'search' ? '#166534' : '#1e40af',
+                    background:
+                      m.kind === 'search' ? '#dcfce7'
+                      : m.kind === 'tts' ? '#fef3c7'
+                      : m.kind === 'stt' ? '#ccfbf1'
+                      : m.kind === 'embedding' ? '#fce7f3'
+                      : '#dbeafe',
+                    color:
+                      m.kind === 'search' ? '#166534'
+                      : m.kind === 'tts' ? '#92400e'
+                      : m.kind === 'stt' ? '#115e59'
+                      : m.kind === 'embedding' ? '#9d174d'
+                      : '#1e40af',
                   }}
                 >
                   {m.kind}
